@@ -1,0 +1,97 @@
+.md {
+  max-width: 88ch;
+  font-size: 14px;
+  line-height: 1.65;
+  color: var(--ink-2);
+}
+.md > :first-child {
+  margin-top: 0;
+}
+.md h1,
+.md h2,
+.md h3,
+.md h4 {
+  color: var(--ink);
+  line-height: 1.25;
+  letter-spacing: -0.015em;
+  margin: 28px 0 10px;
+}
+.md h1 {
+  font-size: 24px;
+  font-weight: 800;
+}
+.md h2 {
+  font-size: 18px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--line);
+}
+.md h3 {
+  font-size: 15px;
+}
+.md p,
+.md ul,
+.md ol,
+.md blockquote,
+.md .table-wrap,
+.md pre {
+  margin: 0 0 12px;
+}
+.md ul,
+.md ol {
+  padding-left: 22px;
+}
+.md li + li {
+  margin-top: 4px;
+}
+.md strong {
+  color: var(--ink);
+}
+.md a {
+  color: var(--signal);
+}
+.md blockquote {
+  padding: 8px 14px;
+  border-left: 3px solid var(--line-hi);
+  background: var(--surface-2);
+  border-radius: 0 var(--r) var(--r) 0;
+}
+.md .table-wrap {
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+}
+.md .table {
+  font-size: 12.5px;
+}
+.md .table th {
+  text-transform: none;
+  font-family: var(--font-sans);
+  font-size: 12px;
+  letter-spacing: 0;
+  color: var(--ink);
+  background: var(--surface-2);
+}
+.md .table td {
+  vertical-align: top;
+}
+.md-diagram {
+  margin: 0 0 14px;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  background: var(--surface);
+  overflow-x: auto;
+  text-align: center;
+}
+.md-diagram svg {
+  max-width: 100%;
+  height: auto;
+}
+.md-diagram.is-error {
+  text-align: left;
+  border-color: color-mix(in srgb, var(--warn) 40%, transparent);
+}
+.md-diagram figcaption {
+  font-size: 12px;
+  color: var(--warn);
+  margin-bottom: 8px;
+}

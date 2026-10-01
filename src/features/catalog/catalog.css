@@ -1,0 +1,120 @@
+.sources-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px 16px;
+  flex-wrap: wrap;
+  padding: 10px 16px;
+}
+.source {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12.5px;
+}
+.source .mono {
+  font-size: 11.5px;
+}
+.source.is-missing .mono {
+  color: var(--crit);
+  text-decoration: line-through;
+}
+.catalog-card {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  padding: 14px 16px;
+}
+.catalog-desc {
+  margin: 0;
+  flex: 1;
+  font-size: 13px;
+  color: var(--ink-2);
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.badge.dup {
+  height: auto;
+  padding: 3px 7px;
+  line-height: 1.35;
+  white-space: normal;
+  align-self: flex-start;
+}
+.root-row {
+  padding: 6px 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  font-size: 12.5px;
+}
+.agent-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 22px;
+  padding: 0 8px;
+  border-radius: var(--r-sm);
+  border: 1px dashed var(--line-hi);
+  background: transparent;
+  color: var(--muted);
+  font: 600 11px var(--font-mono);
+  cursor: pointer;
+}
+.agent-chip:hover:not(:disabled) {
+  color: var(--ink);
+  border-color: var(--muted);
+}
+.agent-chip:disabled {
+  cursor: default;
+}
+.agent-chip.is-on {
+  border-style: solid;
+  border-color: var(--signal-line);
+  background: var(--signal-soft);
+  color: var(--signal);
+}
+.agent-chip.is-stale {
+  border-style: solid;
+  border-color: color-mix(in srgb, var(--warn) 40%, transparent);
+  background: var(--warn-soft);
+  color: var(--warn);
+}
+.agent-chip.is-elsewhere {
+  border-style: dotted;
+  opacity: 0.6;
+}
+.review-text {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  font-size: 13.5px;
+  line-height: 1.6;
+}
+.review-text p,
+.review-text ul {
+  margin: 0;
+}
+.review-text ul {
+  padding-left: 20px;
+}
+.review .muted svg {
+  vertical-align: -2px;
+}
+.skills-sh-list {
+  display: flex;
+  flex-direction: column;
+  max-height: 420px;
+  overflow-y: auto;
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+}
+.skills-sh-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 12px;
+  border-bottom: 1px solid var(--line);
+}
+.skills-sh-row:last-child {
+  border-bottom: 0;
+}

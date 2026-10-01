@@ -1,0 +1,122 @@
+.obs-columns {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  padding: 16px;
+}
+@media (max-width: 900px) {
+  .obs-columns {
+    grid-template-columns: 1fr;
+  }
+}
+.pick-list {
+  display: flex;
+  flex-direction: column;
+  max-height: 240px;
+  overflow-y: auto;
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+}
+.pick-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 10px;
+  border-bottom: 1px solid var(--line);
+  font-size: 12.5px;
+  cursor: pointer;
+}
+.pick-item:last-child {
+  border-bottom: 0;
+}
+.pick-item:hover {
+  background: var(--surface-2);
+}
+.pick-item.selected {
+  cursor: default;
+}
+.pick-empty {
+  padding: 24px;
+  text-align: center;
+  border: 1px dashed var(--line-hi);
+  border-radius: var(--r);
+  font-size: 12.5px;
+}
+
+.obs-list {
+  display: flex;
+  flex-direction: column;
+}
+.obs-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--line);
+  cursor: pointer;
+}
+.obs-row:last-child {
+  border-bottom: 0;
+}
+.obs-row:hover {
+  background: var(--surface-2);
+}
+.obs-row.is-selected {
+  background: var(--signal-soft);
+  box-shadow: inset 3px 0 0 var(--signal);
+}
+.dot.pulse {
+  animation: pulse 1.6s ease-in-out infinite;
+}
+@keyframes pulse {
+  50% {
+    box-shadow: 0 0 0 4px var(--ok-soft);
+  }
+}
+
+.perf-chart {
+  width: 100%;
+  height: auto;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+}
+.perf-chart .grid-line {
+  stroke: var(--line);
+}
+.perf-chart .axis {
+  fill: var(--muted);
+  font: 10px var(--font-mono);
+}
+.perf-chart .line {
+  fill: none;
+  stroke: var(--signal);
+  stroke-width: 2;
+  stroke-linejoin: round;
+}
+.perf-chart .area {
+  fill: var(--signal-soft);
+}
+.perf-chart .marker-line {
+  stroke: var(--crit);
+  stroke-dasharray: 3 3;
+}
+.perf-chart .marker-dot {
+  fill: var(--crit);
+}
+
+.report-row {
+  padding: 6px 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  flex-wrap: nowrap;
+}
+.perf-report h4 {
+  margin: 4px 0 0;
+  font-size: 13px;
+}
+.perf-report p,
+.perf-report ul {
+  margin: 0;
+  color: var(--ink-2);
+}

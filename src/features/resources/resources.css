@@ -1,0 +1,4 @@
+.table tbody tr.res-selected td {
+  background: var(--signal-soft);
+}
+.res-link { padding: 10px 12px; border: 1px solid var(--line); border-radius: var(--r); font-size: 13px; }

@@ -1,0 +1,37 @@
+import { lazy } from 'react'
+import { Navigate, createBrowserRouter } from 'react-router'
+import { Layout } from './Layout'
+import { RouteError } from './RouteError'
+
+const page = (load: () => Promise<{ default: React.ComponentType }>) => {
+  const Component = lazy(load)
+  return <Component />
+}
+
+export const router = createBrowserRouter([
+  {
+    element: <Layout />,
+    children: [
+      {
+        // Rota sem caminho só para o errorElement: o erro aparece dentro do layout, com o menu.
+        errorElement: <RouteError />,
+        children: [
+          { index: true, element: <Navigate to="/cluster" replace /> },
+          { path: 'maquina', element: page(() => import('@/features/doctor/DoctorPage')) },
+          { path: 'repositorios', element: page(() => import('@/features/repos/ReposPage')) },
+          { path: 'gitlab', element: <Navigate to="/repositorios" replace /> },
+          { path: 'cluster/:aba?', element: page(() => import('@/features/cluster/ClusterPage')) },
+          { path: 'recursos', element: page(() => import('@/features/resources/ResourcesPage')) },
+          { path: 'performance', element: page(() => import('@/features/performance/PerformancePage')) },
+          { path: 'conversores', element: page(() => import('@/features/tools/ToolsPage')) },
+          { path: 'gerador', element: page(() => import('@/features/gerador/GeradorPage')) },
+          { path: 'catalogo', element: page(() => import('@/features/catalog/CatalogPage')) },
+          { path: 'analise', element: page(() => import('@/features/analysis/AnalysisPage')) },
+          { path: 'acervo', element: <Navigate to="/catalogo" replace /> },
+          { path: 'configuracoes/:secao?', element: page(() => import('@/features/settings/SettingsPage')) },
+          { path: '*', element: <Navigate to="/cluster" replace /> },
+        ],
+      },
+    ],
+  },
+])

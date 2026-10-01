@@ -1,0 +1,267 @@
+/* ── Assistente ── */
+.wizard-steps {
+  display: flex;
+  gap: 4px;
+  margin: 0 0 18px;
+  padding: 0;
+  list-style: none;
+  flex-wrap: wrap;
+}
+.wizard-steps button {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px 4px 4px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: none;
+  color: var(--muted);
+  font-size: 12px;
+  cursor: pointer;
+}
+.wizard-steps button:disabled {
+  cursor: default;
+}
+.wizard-steps .is-current button {
+  border-color: var(--signal-line);
+  background: var(--signal-soft);
+  color: var(--ink);
+  font-weight: 600;
+}
+.wizard-steps .is-done button {
+  color: var(--ink-2);
+}
+.wizard-num {
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--surface-3);
+  font: 600 11px/1 var(--font-mono);
+}
+.is-current .wizard-num,
+.is-done .wizard-num {
+  background: var(--signal);
+  color: var(--signal-ink);
+}
+.wizard-why {
+  margin: 0;
+  color: var(--ink-2);
+  font-size: 13.5px;
+}
+.choice {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 14px;
+  border-radius: var(--r-lg);
+  border: 1px solid var(--line-hi);
+  background: var(--surface-2);
+  text-align: left;
+  cursor: pointer;
+}
+.choice b {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.choice small {
+  color: var(--muted);
+  font-size: 12px;
+}
+.choice[aria-pressed='true'] {
+  border-color: var(--signal-line);
+  background: var(--signal-soft);
+  box-shadow: inset 0 0 0 1px var(--signal-line);
+}
+.option {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  cursor: pointer;
+  font-size: 13px;
+}
+.option[aria-checked='true'] {
+  border-color: var(--signal-line);
+  background: var(--signal-soft);
+}
+.option.is-off {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+.option input {
+  margin-top: 3px;
+  accent-color: var(--signal);
+}
+.test-ok,
+.test-fail {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12.5px;
+}
+.test-ok {
+  color: var(--ok);
+}
+.test-fail {
+  color: var(--crit);
+}
+.preview {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 10px 12px;
+  border-radius: var(--r);
+  border: 1px dashed var(--line-hi);
+  font-size: 12px;
+}
+
+/* ── Conexões e navegação ── */
+.repo-sources {
+  --gap: 8px;
+}
+.repo-source {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding-right: 4px;
+  border: 1px solid var(--line-hi);
+  border-radius: var(--r);
+  background: var(--surface);
+}
+.repo-source[aria-pressed='true'] {
+  border-color: var(--signal-line);
+  background: var(--signal-soft);
+}
+.repo-source-main {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 10px;
+  border: 0;
+  background: none;
+  cursor: pointer;
+  font-size: 13px;
+}
+.repo-crumbs {
+  flex-wrap: wrap;
+}
+.repo-crumbs button {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border: 0;
+  background: none;
+  color: var(--ink-2);
+  font: 600 13px var(--font-mono);
+  cursor: pointer;
+  padding: 2px 4px;
+  border-radius: var(--r-sm);
+}
+.repo-crumbs button:hover {
+  background: var(--surface-2);
+  color: var(--ink);
+}
+.repo-list {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  overflow: hidden;
+}
+.repo-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--line);
+  font-size: 13px;
+}
+.repo-row:last-child {
+  border-bottom: 0;
+}
+.repo-row > svg {
+  flex: none;
+  color: var(--muted);
+}
+.repo-row.is-group {
+  cursor: pointer;
+}
+.repo-row.is-group > svg {
+  color: var(--signal);
+}
+.repo-row:hover {
+  background: var(--surface-2);
+}
+.repo-row a {
+  color: var(--ink);
+  text-decoration: none;
+}
+.repo-row a:hover {
+  text-decoration: underline;
+}
+.repo-desc,
+.repo-dest {
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ── Progresso do clone ── */
+.clone-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 0 16px 16px;
+  padding: 12px 14px;
+  border: 1px solid var(--line-hi);
+  border-radius: var(--r);
+  background: var(--surface-2);
+}
+.clone-results {
+  max-height: 260px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.clone-result {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+}
+.clone-result.is-ok svg {
+  color: var(--ok);
+}
+.clone-result.is-warn svg {
+  color: var(--warn);
+}
+.clone-result.is-fail svg {
+  color: var(--crit);
+}
+.clone-result {
+  flex-wrap: wrap;
+}
+.clone-result .mono {
+  word-break: break-all;
+}
+/* Progresso neutro: a barra de uso (Meter) fica vermelha perto de 100%, aqui 100% é o esperado. */
+.clone-progress {
+  height: 5px;
+  border-radius: 999px;
+  background: var(--surface-3);
+  overflow: hidden;
+}
+.clone-progress i {
+  display: block;
+  height: 100%;
+  background: var(--signal);
+  transition: width 0.2s;
+}

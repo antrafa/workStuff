@@ -1,0 +1,73 @@
+/* Console de operação: grafite quente com um único sinal (cor de destaque).
+   --signal e --signal-ink abaixo são o padrão (azul); app/theme.ts sobrescreve com a
+   cor escolhida em Configurações, já ajustada para contraste em cada tema.
+   Cor semântica (ok/atenção/crítico) só aparece quando o dado é um estado. */
+:root,
+:root[data-theme='dark'] {
+  --bg: #111210;
+  --surface: #181917;
+  --surface-2: #20211e;
+  --surface-3: #2a2b27;
+  --line: #2e302b;
+  --line-hi: #3d3f39;
+  --ink: #ecebe4;
+  --ink-2: #b9b8ae;
+  --muted: #86857b;
+
+  --signal: #5b9dff;
+  --signal-ink: #141511;
+
+  --ok: #5fd08a;
+  --ok-soft: rgba(95, 208, 138, 0.13);
+  --warn: #f2b344;
+  --warn-soft: rgba(242, 179, 68, 0.14);
+  --crit: #ff6b5b;
+  --crit-soft: rgba(255, 107, 91, 0.14);
+  --info: #7cb7ff;
+  --info-soft: rgba(124, 183, 255, 0.13);
+
+  --grid-dot: rgba(236, 235, 228, 0.045);
+  --shadow-pop: 0 18px 50px rgba(0, 0, 0, 0.45);
+  color-scheme: dark;
+}
+
+:root[data-theme='light'] {
+  --bg: #f1f0ea;
+  --surface: #fbfaf6;
+  --surface-2: #f4f3ec;
+  --surface-3: #e9e8e0;
+  --line: #deddd3;
+  --line-hi: #c9c8bc;
+  --ink: #1b1c18;
+  --ink-2: #45463f;
+  --muted: #74746a;
+
+  --signal: #4271b8;
+  --signal-ink: #ffffff;
+
+  --ok: #1f7a4d;
+  --ok-soft: rgba(31, 122, 77, 0.1);
+  --warn: #9a5a00;
+  --warn-soft: rgba(154, 90, 0, 0.1);
+  --crit: #b42318;
+  --crit-soft: rgba(180, 35, 24, 0.09);
+  --info: #1d5bb8;
+  --info-soft: rgba(29, 91, 184, 0.09);
+
+  --grid-dot: rgba(27, 28, 24, 0.06);
+  --shadow-pop: 0 18px 50px rgba(40, 38, 30, 0.18);
+  color-scheme: light;
+}
+
+:root {
+  --signal-soft: color-mix(in srgb, var(--signal) 12%, transparent);
+  --signal-line: color-mix(in srgb, var(--signal) 38%, transparent);
+  --signal-console: #5b9dff;
+  --signal-console-ink: #141511;
+  --font-sans: 'Schibsted Grotesk', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, Menlo, monospace;
+  --r-sm: 4px;
+  --r: 6px;
+  --r-lg: 10px;
+  --sidebar-w: 268px;
+}

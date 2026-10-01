@@ -1,0 +1,82 @@
+import { api } from '@/lib/api'
+import { streamPost } from '@/lib/stream'
+
+export type ProviderKind = 'gitlab' | 'github'
+export type Protocol = 'ssh' | 'https'
+export type TokenSource = 'stored' | 'env' | 'gh' | 'none'
+
+export type Source = {
+  id: string
+  provider: ProviderKind
+  url: string
+  label: string
+  protocol: Protocol
+  tokenSource: TokenSource
+  basePath: string
+  workspace: string
+  workspaceLabel: string
+  workspaceExists: boolean
+  token: string | null
+}
+
+export type SourceInput = {
+  provider: ProviderKind
+  url: string
+  label?: string
+  protocol: Protocol
+  tokenSource: TokenSource
+  token?: string
+  basePath: string
+  workspace: string
+}
+
+export type LocalState = 'cloned' | 'occupied' | 'free'
+export type Group = { name: string; fullPath: string; description: string; dest: string | null }
+export type Project = {
+  name: string
+  fullPath: string
+  description: string
+  archived: boolean
+  lastActivity: string | null
+  webUrl: string
+  dest: string | null
+  local: LocalState | null
+}
+export type Listing = { path: string; base: string; webUrl: string | null; dest: string | null; groups: Group[]; projects: Project[] }
+
+export type CloneStatus = 'cloned' | 'exists' | 'skipped' | 'failed'
+export type CloneResult = { fullPath: string; dest: string; status: CloneStatus; detail: string }
+export type CloneEvent =
+  | { type: 'start'; total: number; archivedSkipped: number }
+  | ({ type: 'result' } & CloneResult)
+  | { type: 'done'; summary: Record<CloneStatus, number>; stopped: boolean }
+
+export const fetchSources = () => api.get<Source[]>('/repos/sources')
+export const fetchHints = () => api.get<{ GITLAB_TOKEN: boolean; GITHUB_TOKEN: boolean; gh: boolean }>('/repos/hints')
+export const testConnection = (body: Partial<SourceInput> & { id?: string }) => api.post<{ user: string; groups: number; projects: number }>('/repos/test', body)
+export const sshCheck = (url: string) => api.post<{ ok: boolean; detail: string }>('/repos/ssh-check', { url })
+export const createSource = (body: SourceInput) => api.post<Source>('/repos/sources', body)
+export const updateSource = (id: string, body: SourceInput) => api.put<Source>(`/repos/sources/${id}`, body)
+export const deleteSource = (id: string) => api.delete<{ ok: true }>(`/repos/sources/${id}`)
+export const pickFolder = () => api.post<{ path: string | null }>('/repos/pick-folder')
+export const browse = (id: string, path?: string) => api.get<Listing>(`/repos/sources/${id}/browse${path ? `?path=${encodeURIComponent(path)}` : ''}`)
+export const openProject = (id: string, fullPath: string) => api.post<{ ok: true }>(`/repos/sources/${id}/open`, { fullPath })
+export const cloneRepos = (id: string, body: { fullPath: string; kind: 'project' | 'group'; includeArchived: boolean }, onEvent: (e: CloneEvent) => void, signal: AbortSignal) =>
+  streamPost<CloneEvent>(`/repos/sources/${id}/clone`, onEvent, signal, body)
+
+// Aceita caminho ou URL completa: "https://gitlab.com/a/b/-/tree/x" → "a/b".
+export function pathFromInput(raw: string) {
+  const v = raw.trim()
+  const noHost = /^https?:\/\//.test(v) ? v.replace(/^https?:\/\/[^/]+/, '') : v
+  return noHost.split('/-/')[0].replace(/^\/+|\/+$/g, '').replace(/\.git$/, '')
+}
+
+export const tilde = (p: string | null) => (p ? p.replace(/^\/home\/[^/]+/, '~') : '—')
+
+// Caminho mostrado a partir do workspace da conexão ("~/workspace/produto/…"), mais curto que o absoluto.
+// Só o trecho abaixo do workspace ("produto/backend/api"): nas linhas da lista é o que muda.
+export const belowWorkspace = (s: Pick<Source, 'workspace'>, p: string | null) =>
+  p && p.startsWith(s.workspace) ? p.slice(s.workspace.length).replace(/^\//, '') || '(raiz do workspace)' : tilde(p)
+
+export const inWorkspace = (s: Pick<Source, 'workspace' | 'workspaceLabel'>, p: string | null) =>
+  p && p.startsWith(s.workspace) ? `${s.workspaceLabel}${p.slice(s.workspace.length)}` : tilde(p)
