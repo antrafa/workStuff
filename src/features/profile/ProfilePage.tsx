@@ -55,7 +55,6 @@ export default function ProfilePage() {
 
   return (
     <Page
-      eyebrow="Deploy"
       title="Perfil de equipe"
       hint="Leve a sua configuração para outra pessoa (ou outra máquina): versões e registries do Máquina, conexões de repositório e o que está ativo no Catálogo. Token nunca vai no arquivo."
     >

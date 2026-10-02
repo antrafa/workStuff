@@ -1,73 +1,75 @@
-/* Console de operação: grafite quente com um único sinal (cor de destaque).
+/* Placa de operação: neutros frios e planos, um único sinal (cor de destaque) e o ambiente
+   marcado por moldura (preto, branco e hachura), nunca por cor.
    --signal e --signal-ink abaixo são o padrão (azul); app/theme.ts sobrescreve com a
    cor escolhida em Configurações, já ajustada para contraste em cada tema.
    Cor semântica (ok/atenção/crítico) só aparece quando o dado é um estado. */
 :root,
 :root[data-theme='dark'] {
-  --bg: #111210;
-  --surface: #181917;
-  --surface-2: #20211e;
-  --surface-3: #2a2b27;
-  --line: #2e302b;
-  --line-hi: #3d3f39;
-  --ink: #ecebe4;
-  --ink-2: #b9b8ae;
-  --muted: #86857b;
+  --bg: #0b0b0d;
+  --surface: #131418;
+  --surface-2: #1a1b20;
+  --surface-3: #24262c;
+  --line: #2a2c33;
+  --line-hi: #3e4149;
+  --ink: #f0f1f3;
+  --ink-2: #b8bbc3;
+  --muted: #8b8f98;
+  --frame: #f0f1f3;
 
   --signal: #5b9dff;
-  --signal-ink: #141511;
+  --signal-ink: #0b0b0d;
 
-  --ok: #5fd08a;
-  --ok-soft: rgba(95, 208, 138, 0.13);
-  --warn: #f2b344;
-  --warn-soft: rgba(242, 179, 68, 0.14);
-  --crit: #ff6b5b;
-  --crit-soft: rgba(255, 107, 91, 0.14);
+  --ok: #4fd08a;
+  --ok-soft: rgba(79, 208, 138, 0.13);
+  --warn: #f2c14e;
+  --warn-soft: rgba(242, 193, 78, 0.14);
+  --crit: #ff6b62;
+  --crit-soft: rgba(255, 107, 98, 0.14);
   --info: #7cb7ff;
   --info-soft: rgba(124, 183, 255, 0.13);
 
-  --grid-dot: rgba(236, 235, 228, 0.045);
-  --shadow-pop: 0 18px 50px rgba(0, 0, 0, 0.45);
+  --shadow-pop: 0 18px 50px rgba(0, 0, 0, 0.55);
   color-scheme: dark;
 }
 
 :root[data-theme='light'] {
-  --bg: #f1f0ea;
-  --surface: #fbfaf6;
-  --surface-2: #f4f3ec;
-  --surface-3: #e9e8e0;
-  --line: #deddd3;
-  --line-hi: #c9c8bc;
-  --ink: #1b1c18;
-  --ink-2: #45463f;
-  --muted: #74746a;
+  --bg: #f2f3f5;
+  --surface: #ffffff;
+  --surface-2: #f6f7f9;
+  --surface-3: #eaecf0;
+  --line: #dcdfe5;
+  --line-hi: #c3c7cf;
+  --ink: #101116;
+  --ink-2: #3a3d45;
+  --muted: #60646d;
+  --frame: #101116;
 
-  --signal: #4271b8;
+  --signal: #2f62c9;
   --signal-ink: #ffffff;
 
   --ok: #1f7a4d;
   --ok-soft: rgba(31, 122, 77, 0.1);
-  --warn: #9a5a00;
-  --warn-soft: rgba(154, 90, 0, 0.1);
+  --warn: #8f5a00;
+  --warn-soft: rgba(143, 90, 0, 0.1);
   --crit: #b42318;
   --crit-soft: rgba(180, 35, 24, 0.09);
   --info: #1d5bb8;
   --info-soft: rgba(29, 91, 184, 0.09);
 
-  --grid-dot: rgba(27, 28, 24, 0.06);
-  --shadow-pop: 0 18px 50px rgba(40, 38, 30, 0.18);
+  --shadow-pop: 0 18px 50px rgba(16, 17, 22, 0.18);
   color-scheme: light;
 }
 
 :root {
   --signal-soft: color-mix(in srgb, var(--signal) 12%, transparent);
-  --signal-line: color-mix(in srgb, var(--signal) 38%, transparent);
+  --signal-line: color-mix(in srgb, var(--signal) 45%, transparent);
   --signal-console: #5b9dff;
-  --signal-console-ink: #141511;
-  --font-sans: 'Schibsted Grotesk', system-ui, sans-serif;
-  --font-mono: 'JetBrains Mono', ui-monospace, Menlo, monospace;
-  --r-sm: 4px;
-  --r: 6px;
-  --r-lg: 10px;
-  --sidebar-w: 268px;
+  --signal-console-ink: #0b0b0d;
+  --font-sans: 'Archivo', system-ui, sans-serif;
+  --font-mono: 'Fragment Mono', ui-monospace, Menlo, monospace;
+  --hatch: repeating-linear-gradient(-45deg, var(--frame) 0 6px, transparent 6px 12px);
+  --r-sm: 3px;
+  --r: 4px;
+  --r-lg: 6px;
+  --sidebar-w: 248px;
 }

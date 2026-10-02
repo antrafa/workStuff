@@ -68,6 +68,13 @@ The menu is split into four groups.
 
 Every page has a **?** next to its title (hover shows what the page is for) and a **Como usar esta tela** link that opens the step-by-step guide and its limits. The texts live in `src/app/help.ts`, and `npm run check` fails if a menu page has none.
 
+### Navigation
+
+- **Ctrl K** (Cmd K on macOS) opens a palette to jump to any page by name or by what it does. `Ctrl D` inside it pins the highlighted page.
+- **Favorites**: the star next to the breadcrumb pins a page to the top of the menu; `Alt 1`–`Alt 9` open favorites by position.
+- **Environment frame**: on Kubernetes pages the window gets a frame whose weight grows with the risk of the connected cluster (thin for DES, dashed for ITG, thick for HML, hatched for PRO and unclassified). Other pages show `LOCAL`.
+- The status bar at the bottom shows the local server and the versions of kubectl, docker and git, plus which AI CLIs are installed.
+
 **Settings** (`/configuracoes`) picks the AI provider, model and effort. It also holds the theme (dark, light, auto), the accent color, and which menu items are shown.
 
 ## Security model

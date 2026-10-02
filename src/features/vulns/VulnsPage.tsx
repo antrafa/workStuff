@@ -52,7 +52,6 @@ export default function VulnsPage() {
 
   return (
     <Page
-      eyebrow="Deploy"
       title="Vulnerabilidades"
       hint="Dependências de um projeto (package.json e pom.xml) com as falhas conhecidas na base pública OSV e a última versão publicada. Só lê os arquivos."
     >

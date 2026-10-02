@@ -53,7 +53,6 @@ export default function ReviewPage() {
 
   return (
     <Page
-      eyebrow="Deploy"
       title="Revisão antes do MR"
       hint="A IA revisa o que a sua branch traz contra a base, lendo o código em volta, e aponta os problemas por severidade com arquivo e linha. Só leitura."
     >

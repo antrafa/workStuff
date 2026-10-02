@@ -63,11 +63,10 @@ export default function IncidentPage() {
     .filter(e => level === 'tudo' || e.severity === 'crítico' || (level === 'aviso' && e.severity === 'aviso'))
     .filter(e => !query || `${e.object} ${e.title} ${e.detail}`.toLowerCase().includes(query.toLowerCase())), [timeline, level, query])
 
-  if (session.loading && !session.data) return <Page eyebrow="Kubernetes" title="Linha do tempo" hint=""><SkeletonRows rows={3} /></Page>
+  if (session.loading && !session.data) return <Page title="Linha do tempo" hint=""><SkeletonRows rows={3} /></Page>
 
   return (
     <Page
-      eyebrow="Kubernetes"
       title="Linha do tempo de incidente"
       hint="Eventos, restarts, rollouts e erros de log de um namespace numa ordem só, e o rascunho do post-mortem pela IA. Só leitura."
       actions={timeline && timeline.entries.length > 0 && <button className="btn btn-primary" onClick={() => setDrafting(true)}><Sparkles size={14} /> Rascunhar post-mortem</button>}

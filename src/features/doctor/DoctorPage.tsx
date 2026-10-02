@@ -21,7 +21,6 @@ export default function DoctorPage() {
 
   return (
     <Page
-      eyebrow="Deploy"
       title="Máquina"
       hint="O que falta nesta máquina para trabalhar, e como resolver cada item. Nada é instalado sem você clicar."
       actions={

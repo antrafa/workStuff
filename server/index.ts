@@ -21,6 +21,7 @@ import { schedulesRouter } from './routes/schedules.ts'
 import { runbooksRouter } from './routes/runbooks.ts'
 import { startScheduler } from './lib/schedules/scheduler.ts'
 import { settingsRouter } from './routes/settings.ts'
+import { statusRouter } from './routes/status.ts'
 
 const PORT = Number(process.env.PORT ?? 3101)
 const app = express()
@@ -46,6 +47,7 @@ app.use('/api/profile', profileRouter)
 app.use('/api/local', localRouter)
 app.use('/api/schedules', schedulesRouter)
 app.use('/api/runbooks', runbooksRouter)
+app.use('/api/status', statusRouter)
 
 app.use('/api', (req, res) => {
   res.status(404).json({ error: `rota inexistente: ${req.method} ${req.originalUrl}` })

@@ -41,7 +41,6 @@ export default function ClusterPage() {
 
   return (
     <Page
-      eyebrow="Kubernetes"
       title="Cluster"
       hint="Pods, nodes e problemas do kubeconfig ativo, com diagnóstico por IA."
       actions={

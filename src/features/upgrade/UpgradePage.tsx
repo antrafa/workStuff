@@ -27,7 +27,6 @@ export default function UpgradePage() {
 
   return (
     <Page
-      eyebrow="Kubernetes"
       title="Prontidão para upgrade"
       hint="O que quebra ao atualizar o Kubernetes: APIs removidas na versão de destino, certificados TLS dos ingresses e credenciais dos kubeconfigs perto de vencer. Só leitura."
     >

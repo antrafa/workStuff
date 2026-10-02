@@ -33,7 +33,6 @@ export default function CatalogPage() {
 
   return (
     <Page
-      eyebrow="IA"
       title="Catálogo"
       hint="Tudo o que alimenta as sessões de IA, juntado das pastas que você escolher: skills, prompts, rules, personas, templates e notas."
       actions={

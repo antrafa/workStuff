@@ -25,7 +25,7 @@ const LABELS: Record<string, string> = {
 
 export default function GeradorPage() {
   return (
-    <Page eyebrow="Ferramentas" title="Gerador de dados" hint="Massa de teste brasileira válida, gerada na sua máquina. Documentos passam na validação, mas não pertencem a ninguém.">
+    <Page title="Gerador de dados" hint="Massa de teste brasileira válida, gerada na sua máquina. Documentos passam na validação, mas não pertencem a ninguém.">
       <div className="gerador-grid">
         {CARDS.map(c => <GeneratorCard key={c.kind} spec={c} />)}
       </div>

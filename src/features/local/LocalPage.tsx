@@ -9,7 +9,6 @@ export default function LocalPage() {
   const state = useAsync(fetchServices)
   return (
     <Page
-      eyebrow="Ferramentas"
       title="Serviços locais"
       hint="O que está rodando nesta máquina: portas em escuta com o processo dono, e containers, imagens, volumes e projetos compose do Docker."
       actions={<button className="btn" onClick={state.reload}><RotateCw size={14} className={state.loading ? 'spin' : ''} /> Atualizar</button>}

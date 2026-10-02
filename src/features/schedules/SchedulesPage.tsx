@@ -38,7 +38,6 @@ export default function SchedulesPage() {
 
   return (
     <Page
-      eyebrow="Ferramentas"
       title="Verificações agendadas"
       hint="O painel confere de tempos em tempos o que você cadastrar e avisa por notificação do sistema quando algo muda de estado. Só roda enquanto o servidor está no ar."
       actions={<button className="btn btn-primary" onClick={() => setCreating(true)}><Plus size={14} /> Nova verificação</button>}

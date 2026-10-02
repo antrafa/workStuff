@@ -17,7 +17,7 @@ export const ACCENTS = [
 type Prefs = { theme: Theme; accent: string }
 
 // Fundos contra os quais a cor de destaque precisa ser legível (mesmos valores de tokens.css).
-const SURFACE = { dark: '#181917', light: '#fbfaf6' }
+const SURFACE = { dark: '#131418', light: '#ffffff' }
 const DEFAULTS: Prefs = { theme: 'dark', accent: ACCENTS[0].hex }
 
 function read(): Prefs {

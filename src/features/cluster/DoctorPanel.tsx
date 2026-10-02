@@ -1,10 +1,9 @@
 import { AlertTriangle, Check, ChevronRight, History, Plus, Send, ShieldAlert, ShieldCheck, Square, Trash2, X } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router'
-import { CopyButton, Markdown, Modal, useToast } from '@/ui'
+import { CopyButton, EnvStamp, Markdown, Modal, useToast } from '@/ui'
 import { relTime } from '@/lib/format'
 import { useAsync } from '@/lib/useAsync'
-import { EnvBadge } from './KubeconfigBar'
 import { useClusterShared } from './api'
 import {
   approveDoctor, askDoctor, deleteConversation, fetchConversation, fetchConversations, fetchStatus, rejectDoctor, stopConversation,
@@ -119,7 +118,7 @@ export function DoctorPanel() {
       <header className="doctor-head">
         <b>Cluster Doctor</b>
         <span className="mono">{session.kubeconfig.id.replace(/\.(ya?ml|kubeconfig)$/, '')}</span>
-        <EnvBadge env={env} />
+        <EnvStamp env={env} />
         {(env === 'PRO' || !env) && <span className="badge badge-crit" title="Nenhuma escrita é proposta para execução neste ambiente">somente leitura</span>}
         <div className="spacer" />
         <span className="muted" style={{ fontSize: 11.5 }} title="O agente só roda leituras do kubectl; escrita é proposta e executada pelo painel depois da sua confirmação">
@@ -250,7 +249,7 @@ function HistoryModal({ onOpen, onClose, currentId }: { onOpen: (c: Conversation
               <b style={{ fontSize: 13 }}>{c.title}</b>
               <span className="muted mono" style={{ fontSize: 11.5 }}>{c.kubeconfigId} · {c.messages} pergunta(s) · {relTime(c.updatedAt)}{c.pending ? ' · aguardando confirmação' : ''}</span>
             </div>
-            <EnvBadge env={c.environment as never} />
+            <EnvStamp env={c.environment as never} />
             {c.running && <span className="badge badge-signal">respondendo</span>}
             <button
               className={`btn btn-sm ${confirming === c.id ? 'btn-danger' : 'btn-ghost btn-icon'}`}

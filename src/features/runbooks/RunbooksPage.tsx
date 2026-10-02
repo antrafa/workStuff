@@ -34,7 +34,6 @@ export default function RunbooksPage() {
 
   return (
     <Page
-      eyebrow="Kubernetes"
       title="Runbooks"
       hint="Procedimentos em Markdown com passos kubectl. Leitura roda direto; escrita mostra o comando e espera a sua confirmação, com as mesmas travas do Cluster Doctor. Tudo fica registrado."
     >

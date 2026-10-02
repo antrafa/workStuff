@@ -156,11 +156,10 @@ export default function LogsPage() {
   const pods = [...new Set(lines.map(l => l.pod))]
   const running = status === 'conectando' || status === 'ao vivo' || status === 'pausado'
 
-  if (session.loading && !session.data) return <Page eyebrow="Kubernetes" title="Logs" hint=""><SkeletonRows rows={3} /></Page>
+  if (session.loading && !session.data) return <Page title="Logs" hint=""><SkeletonRows rows={3} /></Page>
 
   return (
     <Page
-      eyebrow="Kubernetes"
       title="Logs"
       hint="Logs de todos os pods de uma ou mais aplicações ao mesmo tempo, intercalados e com uma cor por pod. Só leitura."
     >

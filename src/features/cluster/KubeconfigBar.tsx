@@ -1,24 +1,12 @@
 import { AlertTriangle, ExternalLink, FileUp, Plug, Repeat, Trash2, Unplug } from 'lucide-react'
 import { useState } from 'react'
 import { createPortal } from 'react-dom'
-import { Async, ConfirmModal, Empty, Modal, useToast } from '@/ui'
+import { Async, ConfirmModal, Empty, EnvStamp, Modal, useToast } from '@/ui'
 import { useAsync } from '@/lib/useAsync'
 import {
   connect, deleteKubeconfig, disconnect, fetchKubeconfigs, refreshSession, setEnvironment, uploadKubeconfig,
   type Environment, type Kubeconfig, type Session,
 } from './api'
-
-export const ENV_BADGE: Record<Environment, string> = {
-  DES: 'badge-info',
-  ITG: 'badge-crit',
-  HML: 'badge-warn',
-  PRO: 'badge-ok',
-}
-
-export function EnvBadge({ env }: { env: Environment | null }) {
-  if (!env) return <span className="badge" title="Sem classificação vale como PRO: somente leitura">sem ambiente</span>
-  return <span className={`badge ${ENV_BADGE[env]}`}>{env}</span>
-}
 
 export function KubeconfigBar({ session }: { session: Session | null }) {
   const [picking, setPicking] = useState(false)
@@ -51,7 +39,7 @@ export function KubeconfigBar({ session }: { session: Session | null }) {
           <span className="eyebrow">Kubeconfig ativo</span>
           <div className="row">
             <b className="mono">{k.filename}</b>
-            <EnvBadge env={k.environment} />
+            <EnvStamp env={k.environment} />
             {k.environmentSource && <span className="muted" style={{ fontSize: 12 }} title="De onde veio a classificação">{k.environmentSource === 'manual' ? 'classificado por você' : 'pelo nome'}</span>}
           </div>
         </div>
@@ -136,7 +124,7 @@ function KubeconfigPicker({ current, onClose }: { current: string | null; onClos
                 return (
                   <div key={env ?? 'none'} className="stack" style={{ ['--gap' as string]: '6px' }}>
                     <div className="row">
-                      <EnvBadge env={env} />
+                      <EnvStamp env={env} />
                       <span className="muted" style={{ fontSize: 12 }}>{group.length} kubeconfig{group.length > 1 && 's'}</span>
                     </div>
                     {group.map(k => (

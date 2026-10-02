@@ -60,7 +60,6 @@ export default function ComparePage() {
 
   return (
     <Page
-      eyebrow="Kubernetes"
       title="Comparar ambientes"
       hint="Diferenças de imagem, réplicas, recursos, variáveis e probes entre os Deployments, StatefulSets e CronJobs de dois namespaces, em clusters iguais ou diferentes. Só leitura."
     >

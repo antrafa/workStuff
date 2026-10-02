@@ -46,7 +46,6 @@ export default function ReposPage() {
 
   return (
     <Page
-      eyebrow="Deploy"
       title="Repositórios"
       hint="Navegue no GitLab ou no GitHub e clone projetos ou subgrupos inteiros, mantendo a hierarquia de pastas a partir de um grupo base."
       actions={list.length > 0 && <button className="btn btn-primary" onClick={() => setWizard({ editing: null })}><Plus size={14} /> Nova conexão</button>}

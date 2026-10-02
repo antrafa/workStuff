@@ -100,7 +100,6 @@ export default function AnalysisPage() {
 
   return (
     <Page
-      eyebrow="IA"
       title="Análise"
       hint="Relatório de arquitetura de um projeto local, gerado pelo agente de IA em modo leitura, e conversa sobre o código."
       actions={

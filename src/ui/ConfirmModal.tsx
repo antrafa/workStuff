@@ -1,5 +1,7 @@
-import type { LucideIcon } from 'lucide-react'
-import type { ReactNode } from 'react'
+import { Lock, type LucideIcon } from 'lucide-react'
+import { useState, type ReactNode } from 'react'
+import { CopyButton } from './CopyButton'
+import { EnvStamp } from './EnvStamp'
 import { Modal } from './Modal'
 
 type Props = {
@@ -8,26 +10,113 @@ type Props = {
   icon: LucideIcon
   onConfirm: () => void
   onClose: () => void
-  children: ReactNode
+  /** Ambiente onde a ação roda: vira o carimbo do cabeçalho. */
+  env?: string | null
+  /** Nome curto da ação, no cabeçalho ("reiniciar workload"). */
+  action?: string
+  /** Comando exato que vai rodar. */
+  command?: string
+  effects?: ReactNode[]
+  losses?: ReactNode[]
+  /** Perda irreversível: o botão só libera depois de digitar este texto. */
+  typeToConfirm?: string
+  children?: ReactNode
 }
 
-// Confirmação de ação destrutiva: o corpo diz a consequência, o botão diz a ação.
-export function ConfirmModal({ title, confirmLabel, icon: Icon, onConfirm, onClose, children }: Props) {
+// Confirmação de ação destrutiva em três partes: o comando, o que acontece e o que se perde.
+// O botão diz a ação; Enter não confirma, só o clique.
+export function ConfirmModal({ title, confirmLabel, icon: Icon, onConfirm, onClose, env, action, command, effects, losses, typeToConfirm, children }: Props) {
+  const [typed, setTyped] = useState('')
+  const blocked = typeToConfirm !== undefined && typed !== typeToConfirm
   return (
     <Modal
-      title={title}
-      width={460}
+      title={<ConfirmHead env={env} action={action ?? 'confirmar'} />}
+      width={560}
       onClose={onClose}
       footer={
         <>
+          <span className="muted confirm-keys">Esc cancela · Enter não confirma</span>
+          <div className="spacer" />
           <button className="btn" onClick={onClose}>Cancelar</button>
-          <button className="btn btn-danger" onClick={() => (onConfirm(), onClose())}>
+          <button className="btn btn-danger-solid" disabled={blocked} onClick={() => (onConfirm(), onClose())}>
             <Icon size={14} /> {confirmLabel}
           </button>
         </>
       }
     >
+      <h2 className="confirm-title display">{title}</h2>
+      <dl className="confirm-grid">
+        {command && <Section label="Comando"><Command value={command} /></Section>}
+        {effects && effects.length > 0 && <Section label="Efeito"><Bullets items={effects} /></Section>}
+        {losses && losses.length > 0 && <Section label="Perde"><Bullets items={losses} /></Section>}
+      </dl>
       {children}
+      {typeToConfirm !== undefined && (
+        <label className="field confirm-type">
+          <span>Digite <code className="inline">{typeToConfirm}</code> para confirmar</span>
+          <input className="input mono" value={typed} onChange={e => setTyped(e.target.value)} autoFocus spellCheck={false} />
+        </label>
+      )}
     </Modal>
   )
 }
+
+type LockedProps = { title: string; env: string | null; reason: string; command?: string; canDo?: ReactNode[]; onClose: () => void }
+
+// A mesma ação num ambiente travado: explica por que não roda e o que dá para fazer daqui.
+export function LockedActionModal({ title, env, reason, command, canDo, onClose }: LockedProps) {
+  return (
+    <Modal
+      title={
+        <span className="row locked-head">
+          <EnvStamp env={env} /> <Lock size={13} /> <b>somente leitura · nada será executado</b>
+        </span>
+      }
+      width={560}
+      onClose={onClose}
+      footer={
+        <>
+          {command && <CopyButton value={command} label="Copiar comando" />}
+          <button className="btn" onClick={onClose}>Fechar</button>
+        </>
+      }
+    >
+      <div className="locked-band" />
+      <h2 className="confirm-title display">{title}</h2>
+      <p className="confirm-reason">{reason}</p>
+      <dl className="confirm-grid">
+        {command && <Section label="Seria rodado"><pre className="code locked-code">{command}</pre></Section>}
+        {canDo && canDo.length > 0 && <Section label="Pode aqui"><Bullets items={canDo} /></Section>}
+      </dl>
+    </Modal>
+  )
+}
+
+function ConfirmHead({ env, action }: { env?: string | null; action: string }) {
+  return (
+    <span className="row">
+      {env !== undefined && <EnvStamp env={env} />}
+      <span className="eyebrow">{action}</span>
+    </span>
+  )
+}
+
+function Section({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <>
+      <dt className="eyebrow">{label}</dt>
+      <dd>{children}</dd>
+    </>
+  )
+}
+
+function Command({ value }: { value: string }) {
+  return (
+    <div className="confirm-command">
+      <pre className="code">{value}</pre>
+      <CopyButton value={value} />
+    </div>
+  )
+}
+
+const Bullets = ({ items }: { items: ReactNode[] }) => <ul className="confirm-list">{items.map((item, i) => <li key={i}>{item}</li>)}</ul>

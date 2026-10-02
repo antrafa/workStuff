@@ -23,7 +23,7 @@ const TOOLS: Tool[] = [
 
 export default function ToolsPage() {
   return (
-    <Page eyebrow="Ferramentas" title="Conversores" hint="Conversões do dia a dia, feitas no navegador: nada do que você cola sai da máquina.">
+    <Page title="Conversores" hint="Conversões do dia a dia, feitas no navegador: nada do que você cola sai da máquina.">
       <div className="tools-grid">
         {TOOLS.map(({ icon: Icon, title, description, body }) => (
           <section key={title} className="card">

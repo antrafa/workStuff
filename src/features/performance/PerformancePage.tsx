@@ -80,7 +80,6 @@ export default function PerformancePage() {
 
   return (
     <Page
-      eyebrow="Kubernetes"
       title="Performance"
       hint="Grava CPU, memória, restarts, throttling e latência do Istio de pods escolhidos ao longo do tempo, e gera um relatório com IA."
       actions={

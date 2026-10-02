@@ -1,11 +1,10 @@
 import { Link2, Link2Off, RotateCw } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router'
-import { useToast } from '@/ui'
+import { EnvStamp, useToast } from '@/ui'
 import { useAsync } from '@/lib/useAsync'
 import { fetchKubeconfigs, fetchNamespaces, removeLink, saveLink, type NamespaceLink as LinkT } from './api'
 
-const ENV_BADGE: Record<string, string> = { DES: 'badge-info', ITG: 'badge-crit', HML: 'badge-warn', PRO: 'badge-ok' }
 
 type Props = { projectId: number; link: LinkT | null; environment: string | null; onChange: () => void; onReadNow: () => void; reading: boolean }
 
@@ -20,7 +19,7 @@ export function NamespaceLinkBar({ projectId, link, environment, onChange, onRea
         <Link2 size={14} />
         <span>Uso ao vivo de</span>
         <b className="mono">{link.kubeconfigId.replace(/\.(ya?ml|kubeconfig)$/, '')}</b>
-        {environment && <span className={`badge ${ENV_BADGE[environment] ?? ''}`}>{environment}</span>}
+        {environment && <EnvStamp env={environment} />}
         <span className="muted">/</span>
         <b className="mono">{link.namespace}</b>
         <div className="spacer" />

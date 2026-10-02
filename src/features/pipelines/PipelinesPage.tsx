@@ -36,7 +36,6 @@ export default function PipelinesPage() {
 
   return (
     <Page
-      eyebrow="Deploy"
       title="Pipelines"
       hint="Status das esteiras dos projetos que você acompanha no GitLab CI e no GitHub Actions. No job que falhou, a IA lê o log e explica a causa."
       actions={

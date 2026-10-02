@@ -49,7 +49,6 @@ export default function SettingsPage() {
 
   return (
     <Page
-      eyebrow="Painel"
       title="Configurações"
       hint="Provedor de IA, tema, cor de destaque e quais telas aparecem no menu."
       actions={

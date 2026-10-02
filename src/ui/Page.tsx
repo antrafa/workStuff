@@ -2,15 +2,14 @@ import { CircleHelp } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { usePageHelp } from './PageHelp'
 
-type Props = { eyebrow: string; title: string; hint: string; actions?: ReactNode; children: ReactNode }
+type Props = { title: string; hint: string; actions?: ReactNode; children: ReactNode }
 
-export function Page({ eyebrow, title, hint, actions, children }: Props) {
+export function Page({ title, hint, actions, children }: Props) {
   const help = usePageHelp()
   return (
     <div className="page">
       <header className="page-head">
         <div>
-          <div className="eyebrow">{eyebrow}</div>
           <h1>
             {title}
             {help && (
