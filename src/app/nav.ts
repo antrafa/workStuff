@@ -1,5 +1,5 @@
 import {
-  Activity, Cpu, Dices, FileSearch, GitBranch, ServerCog, ShieldAlert, Sparkles, Stethoscope, Workflow, Wrench,
+  Activity, ArrowUpCircle, Cpu, Dices, FileSearch, GitBranch, ServerCog, ShieldAlert, Sparkles, Stethoscope, Workflow, Wrench,
   type LucideIcon,
 } from 'lucide-react'
 
@@ -23,6 +23,7 @@ export const NAV: NavGroup[] = [
     items: [
       { path: '/cluster', label: 'Cluster', hint: 'Pods, nodes e diagnóstico ao vivo', icon: Cpu },
       { path: '/recursos', label: 'Requests & Limits', hint: 'Recursos declarados nos manifests', icon: ServerCog },
+      { path: '/upgrade', label: 'Upgrade', hint: 'APIs removidas, certificados e credenciais antes de atualizar', icon: ArrowUpCircle },
       { path: '/performance', label: 'Performance', hint: 'CPU, memória e restarts no tempo', icon: Activity },
     ],
   },

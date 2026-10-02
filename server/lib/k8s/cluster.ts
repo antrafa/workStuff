@@ -22,7 +22,7 @@ export async function activeSession(): Promise<{ kubeconfig: Kubeconfig; context
   return { kubeconfig, context, target: { file: kubeconfig.file, context } }
 }
 
-async function requireSession() {
+export async function requireSession() {
   const s = await activeSession()
   if (!s) throw new ClusterError('nenhum cluster conectado: escolha um kubeconfig', 409)
   return s

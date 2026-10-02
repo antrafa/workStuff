@@ -1,7 +1,8 @@
 // Varredura de um projeto: dependências declaradas + falhas conhecidas (OSV) + última versão publicada.
 
 import { readDependencies, type Dependency } from './manifests.ts'
-import { PARALLEL, fetchVuln, latestVersion, majorsBehind, mapLimit, queryVulnIds, toAdvisory, type Advisory, type Severity } from './osv.ts'
+import { mapLimit } from '../concurrency.ts'
+import { PARALLEL, fetchVuln, latestVersion, majorsBehind, queryVulnIds, toAdvisory, type Advisory, type Severity } from './osv.ts'
 
 export type ScannedDependency = Dependency & { advisories: Advisory[]; latest: string | null; majorsBehind: number | null }
 

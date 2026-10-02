@@ -3,6 +3,7 @@
 // Autoteste: node server/lib/vulns/osv.ts --selfcheck
 
 import assert from 'node:assert/strict'
+import { mapLimit } from '../concurrency.ts'
 import type { Dependency, Ecosystem } from './manifests.ts'
 
 export type Severity = 'crítica' | 'alta' | 'média' | 'baixa' | 'desconhecida'
@@ -20,20 +21,6 @@ const OSV = 'https://api.osv.dev/v1'
 const TIMEOUT = 20_000
 const BATCH = 500
 export const PARALLEL = 8
-
-// Poucas requisições ao mesmo tempo: a OSV e o registry limitam quem martela.
-export async function mapLimit<T, R>(items: T[], limit: number, fn: (item: T) => Promise<R>): Promise<R[]> {
-  const out: R[] = new Array(items.length)
-  let next = 0
-  const worker = async () => {
-    while (next < items.length) {
-      const i = next++
-      out[i] = await fn(items[i])
-    }
-  }
-  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker))
-  return out
-}
 
 async function getJson(url: string, init?: RequestInit): Promise<unknown> {
   const res = await fetch(url, { ...init, signal: AbortSignal.timeout(TIMEOUT) })
