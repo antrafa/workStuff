@@ -33,7 +33,9 @@ async function call(c: Conn, path: string): Promise<{ data: unknown; res: Respon
   } catch (e) {
     throw new RepoError((e as Error).name === 'TimeoutError' ? `${c.url} não respondeu em ${TIMEOUT / 1000}s` : `não consegui falar com ${c.url}: ${(e as Error).message}`, 504)
   }
-  if (res.status === 401) throw new RepoError('o token foi recusado (401): ele expirou ou não tem as permissões pedidas', 401)
+  if (res.status === 401) {
+    throw new RepoError(c.token ? 'o token foi recusado (401): ele expirou ou não tem as permissões pedidas' : 'isto exige login (401): configure um token na conexão, na tela Repositórios', 401)
+  }
   if (res.status === 403 && res.headers.get('x-ratelimit-remaining') === '0') throw new RepoError('limite de chamadas da API atingido; configure um token para ter limite maior', 429)
   if (res.status === 404) throw new RepoError('não encontrado: o caminho não existe ou o token não tem acesso a ele', 404)
   if (!res.ok) throw new RepoError(`${c.url} respondeu ${res.status} em ${path.split('?')[0]}`, 502)
