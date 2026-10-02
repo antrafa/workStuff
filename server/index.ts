@@ -18,6 +18,7 @@ import { reviewRouter } from './routes/review.ts'
 import { profileRouter } from './routes/profile.ts'
 import { localRouter } from './routes/local.ts'
 import { schedulesRouter } from './routes/schedules.ts'
+import { runbooksRouter } from './routes/runbooks.ts'
 import { startScheduler } from './lib/schedules/scheduler.ts'
 import { settingsRouter } from './routes/settings.ts'
 
@@ -44,6 +45,7 @@ app.use('/api/review', reviewRouter)
 app.use('/api/profile', profileRouter)
 app.use('/api/local', localRouter)
 app.use('/api/schedules', schedulesRouter)
+app.use('/api/runbooks', runbooksRouter)
 
 app.use('/api', (req, res) => {
   res.status(404).json({ error: `rota inexistente: ${req.method} ${req.originalUrl}` })

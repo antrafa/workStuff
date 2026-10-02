@@ -1,5 +1,5 @@
 import {
-  Activity, ArrowUpCircle, BellRing, Cpu, Dices, FileSearch, GitBranch, GitCompare, GitPullRequest, History, ScrollText, Server, ServerCog, ShieldAlert, Sparkles, Stethoscope, Users, Workflow, Wrench,
+  Activity, ArrowUpCircle, BellRing, BookOpen, Cpu, Dices, FileSearch, GitBranch, GitCompare, GitPullRequest, History, ScrollText, Server, ServerCog, ShieldAlert, Sparkles, Stethoscope, Users, Workflow, Wrench,
   type LucideIcon,
 } from 'lucide-react'
 
@@ -29,6 +29,7 @@ export const NAV: NavGroup[] = [
       { path: '/incidente', label: 'Linha do tempo', hint: 'Eventos, restarts e rollouts de um incidente, e o post-mortem', icon: History },
       { path: '/comparar', label: 'Comparar ambientes', hint: 'Imagem, réplicas, recursos e variáveis entre dois namespaces', icon: GitCompare },
       { path: '/upgrade', label: 'Upgrade', hint: 'APIs removidas, certificados e credenciais antes de atualizar', icon: ArrowUpCircle },
+      { path: '/runbooks', label: 'Runbooks', hint: 'Procedimentos em Markdown com passos kubectl executáveis', icon: BookOpen },
       { path: '/performance', label: 'Performance', hint: 'CPU, memória e restarts no tempo', icon: Activity },
     ],
   },

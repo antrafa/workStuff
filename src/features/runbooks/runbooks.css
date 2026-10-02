@@ -1,0 +1,14 @@
+.rb-layout { display: grid; grid-template-columns: 260px 1fr; gap: 16px; align-items: start; }
+@media (max-width: 800px) { .rb-layout { grid-template-columns: 1fr; } }
+.rb-list { overflow: hidden; }
+.rb-item { display: block; width: 100%; text-align: left; padding: 8px 14px; border: 0; border-top: 1px solid var(--line); background: none; color: inherit; cursor: pointer; font-size: 13px; }
+.rb-item:hover { background: var(--surface-2); }
+.rb-active { background: var(--signal-soft); }
+.rb-vars { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 10px; }
+.rb-step { border: 1px solid var(--line); border-left-width: 3px; border-radius: var(--r); padding: 8px 10px; display: flex; flex-direction: column; gap: 6px; }
+.rb-read { border-left-color: var(--info); }
+.rb-write { border-left-color: var(--warn); }
+.rb-blocked { border-left-color: var(--line); opacity: 0.8; }
+.rb-cmd { font-size: 12.5px; word-break: break-all; }
+.rb-out { margin: 0; max-height: 260px; overflow: auto; font-size: 12px; white-space: pre; }
+.rb-fail { color: var(--crit); white-space: pre-wrap; }

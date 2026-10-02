@@ -30,6 +30,7 @@ export const router = createBrowserRouter([
           { path: 'incidente', element: page(() => import('@/features/incident/IncidentPage')) },
           { path: 'comparar', element: page(() => import('@/features/compare/ComparePage')) },
           { path: 'upgrade/:aba?', element: page(() => import('@/features/upgrade/UpgradePage')) },
+          { path: 'runbooks', element: page(() => import('@/features/runbooks/RunbooksPage')) },
           { path: 'performance', element: page(() => import('@/features/performance/PerformancePage')) },
           { path: 'conversores', element: page(() => import('@/features/tools/ToolsPage')) },
           { path: 'servicos', element: page(() => import('@/features/local/LocalPage')) },
