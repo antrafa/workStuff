@@ -1,5 +1,5 @@
 import {
-  Activity, ArrowUpCircle, Cpu, Dices, FileSearch, GitBranch, GitCompare, GitPullRequest, History, ScrollText, ServerCog, ShieldAlert, Sparkles, Stethoscope, Workflow, Wrench,
+  Activity, ArrowUpCircle, Cpu, Dices, FileSearch, GitBranch, GitCompare, GitPullRequest, History, ScrollText, ServerCog, ShieldAlert, Sparkles, Stethoscope, Users, Workflow, Wrench,
   type LucideIcon,
 } from 'lucide-react'
 
@@ -13,6 +13,7 @@ export const NAV: NavGroup[] = [
     label: 'Deploy',
     items: [
       { path: '/maquina', label: 'Máquina', hint: 'O que falta instalar para trabalhar', icon: Stethoscope },
+      { path: '/perfil', label: 'Perfil de equipe', hint: 'Exporta e importa a configuração para outra pessoa', icon: Users },
       { path: '/repositorios', label: 'Repositórios', hint: 'Navega no GitLab/GitHub e clona com a hierarquia de pastas', icon: GitBranch },
       { path: '/pipelines', label: 'Pipelines', hint: 'Esteiras do GitLab CI e GitHub Actions, com a falha explicada pela IA', icon: Workflow },
       { path: '/revisao', label: 'Revisão antes do MR', hint: 'A IA revisa o diff da sua branch contra a base', icon: GitPullRequest },
