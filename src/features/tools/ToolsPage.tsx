@@ -1,9 +1,10 @@
 import './tools.css'
-import { Binary, CalendarClock, Clock, Fingerprint, KeyRound, Link } from 'lucide-react'
+import { Binary, Braces, CalendarClock, Clock, Diff, Fingerprint, Hash, KeyRound, Link, Regex } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { Page } from '@/ui'
 import { Base64Tool, CronTool, JwtTool, TimestampTool, UrlTool, UuidTool } from './Converters'
+import { DiffTool, HashTool, JsonTool, RegexTool } from './TextTools'
 
 type Tool = { icon: LucideIcon; title: string; description: string; body: ReactNode }
 
@@ -14,6 +15,10 @@ const TOOLS: Tool[] = [
   { icon: Clock, title: 'Timestamp', description: 'Epoch em segundos ou milissegundos para data legível.', body: <TimestampTool /> },
   { icon: Fingerprint, title: 'UUID', description: 'Gera UUID v4 aleatório, um ou em lote.', body: <UuidTool /> },
   { icon: CalendarClock, title: 'Cron', description: 'Próximas execuções de uma expressão de 5 campos.', body: <CronTool /> },
+  { icon: Braces, title: 'JSON', description: 'Formata, compacta, valida com linha e coluna do erro, e converte para YAML.', body: <JsonTool /> },
+  { icon: Diff, title: 'Diff', description: 'Diferença linha a linha entre dois textos.', body: <DiffTool /> },
+  { icon: Regex, title: 'Regex', description: 'Testa uma expressão regular e mostra cada correspondência e grupo.', body: <RegexTool /> },
+  { icon: Hash, title: 'Hash', description: 'SHA-256, SHA-1 e SHA-512 de um texto.', body: <HashTool /> },
 ]
 
 export default function ToolsPage() {

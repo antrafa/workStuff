@@ -41,3 +41,16 @@
   flex-direction: column;
   gap: 4px;
 }
+.tool-two {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+.tool-diff {
+  margin: 0;
+  max-height: 300px;
+  overflow: auto;
+  font-size: 12px;
+}
+.diff-removida { color: var(--crit); background: var(--crit-soft); }
+.diff-adicionada { color: var(--ok); background: var(--ok-soft); }

@@ -34,7 +34,7 @@ export const NAV: NavGroup[] = [
   {
     label: 'Ferramentas',
     items: [
-      { path: '/conversores', label: 'Conversores', hint: 'JWT, base64, URL, timestamp, UUID, cron', icon: Wrench },
+      { path: '/conversores', label: 'Conversores', hint: 'JWT, base64, URL, timestamp, UUID, cron, JSON, diff, regex, hash', icon: Wrench },
       { path: '/gerador', label: 'Gerador de dados', hint: 'CPF, CNPJ, pessoa e empresa de teste', icon: Dices },
     ],
   },

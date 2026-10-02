@@ -3,7 +3,7 @@ import { CopyButton, Segmented } from '@/ui'
 import { base64Decode, base64Encode, decodeJwt, parseEpoch } from './convert'
 import { nextCronRuns } from './cron'
 
-function attempt<T>(fn: () => T): { value: T | null; error: string | null } {
+export function attempt<T>(fn: () => T): { value: T | null; error: string | null } {
   try {
     return { value: fn(), error: null }
   } catch (e) {
@@ -11,7 +11,7 @@ function attempt<T>(fn: () => T): { value: T | null; error: string | null } {
   }
 }
 
-function Output({ value, error }: { value: string | null; error: string | null }) {
+export function Output({ value, error }: { value: string | null; error: string | null }) {
   if (error) return <small className="tool-error">{error}</small>
   if (!value) return null
   return (

@@ -52,7 +52,7 @@ The menu is split into four groups.
 
 | Page | Route | What it does |
 |---|---|---|
-| **Converters** (Conversores) | `/conversores` | JWT decoding with an expiry check, Base64/base64url, URL encoding, timestamp conversion, UUID v4 and cron next-run preview. Runs in the browser. |
+| **Converters** (Conversores) | `/conversores` | JWT decoding with an expiry check, Base64/base64url, URL encoding, timestamp conversion, UUID v4, cron next-run preview, JSON format/minify/validate (with line and column of the error) and JSON → YAML, line diff, regex tester and SHA hashes. Runs in the browser. |
 | **Data generator** (Gerador de dados) | `/gerador` | Generates Brazilian test data: people, CPF, CNPJ (including the new alphanumeric format), names, addresses and companies, with an optional state (UF) filter. Runs in the browser. |
 
 ### AI
