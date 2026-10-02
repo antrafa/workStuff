@@ -19,6 +19,7 @@ export const router = createBrowserRouter([
           { index: true, element: <Navigate to="/cluster" replace /> },
           { path: 'maquina', element: page(() => import('@/features/doctor/DoctorPage')) },
           { path: 'repositorios', element: page(() => import('@/features/repos/ReposPage')) },
+          { path: 'pipelines', element: page(() => import('@/features/pipelines/PipelinesPage')) },
           { path: 'gitlab', element: <Navigate to="/repositorios" replace /> },
           { path: 'cluster/:aba?', element: page(() => import('@/features/cluster/ClusterPage')) },
           { path: 'recursos', element: page(() => import('@/features/resources/ResourcesPage')) },

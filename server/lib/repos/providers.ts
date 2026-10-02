@@ -23,7 +23,13 @@ const TIMEOUT = 20_000
 const apiBase = (c: Conn) =>
   c.provider === 'gitlab' ? `${c.url}/api/v4` : c.url === 'https://github.com' ? 'https://api.github.com' : `${c.url}/api/v3`
 
-async function call(c: Conn, path: string): Promise<{ data: unknown; res: Response }> {
+export async function call(c: Conn, path: string): Promise<{ data: unknown; res: Response }> {
+  const res = await send(c, path)
+  return { data: await res.json(), res }
+}
+
+// Resposta crua, já com os erros traduzidos: para quem precisa de texto (log de job) em vez de JSON.
+export async function send(c: Conn, path: string): Promise<Response> {
   const headers: Record<string, string> = c.provider === 'gitlab'
     ? (c.token ? { 'PRIVATE-TOKEN': c.token } : {})
     : { Accept: 'application/vnd.github+json', ...(c.token ? { Authorization: `Bearer ${c.token}` } : {}) }
@@ -39,7 +45,7 @@ async function call(c: Conn, path: string): Promise<{ data: unknown; res: Respon
   if (res.status === 403 && res.headers.get('x-ratelimit-remaining') === '0') throw new RepoError('limite de chamadas da API atingido; configure um token para ter limite maior', 429)
   if (res.status === 404) throw new RepoError('não encontrado: o caminho não existe ou o token não tem acesso a ele', 404)
   if (!res.ok) throw new RepoError(`${c.url} respondeu ${res.status} em ${path.split('?')[0]}`, 502)
-  return { data: await res.json(), res }
+  return res
 }
 
 // Todas as páginas: GitLab informa X-Next-Page; GitHub, o cabeçalho Link com rel="next".

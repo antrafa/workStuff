@@ -1,5 +1,5 @@
 import {
-  Activity, Cpu, Dices, FileSearch, GitBranch, ServerCog, Sparkles, Stethoscope, Wrench,
+  Activity, Cpu, Dices, FileSearch, GitBranch, ServerCog, Sparkles, Stethoscope, Workflow, Wrench,
   type LucideIcon,
 } from 'lucide-react'
 
@@ -14,6 +14,7 @@ export const NAV: NavGroup[] = [
     items: [
       { path: '/maquina', label: 'Máquina', hint: 'O que falta instalar para trabalhar', icon: Stethoscope },
       { path: '/repositorios', label: 'Repositórios', hint: 'Navega no GitLab/GitHub e clona com a hierarquia de pastas', icon: GitBranch },
+      { path: '/pipelines', label: 'Pipelines', hint: 'Esteiras do GitLab CI e GitHub Actions, com a falha explicada pela IA', icon: Workflow },
     ],
   },
   {

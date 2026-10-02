@@ -1,0 +1,4 @@
+.pl-row { cursor: pointer; }
+.table tbody tr.pl-selected td { background: var(--signal-soft); }
+.pl-runs { display: flex; flex-wrap: wrap; gap: 6px; }
+.pl-log { max-height: 60vh; overflow: auto; white-space: pre-wrap; word-break: break-word; font-size: 12px; }

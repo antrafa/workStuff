@@ -31,6 +31,7 @@ The menu is split into four groups.
 |---|---|---|
 | **Machine** (Máquina) | `/maquina` | Checks the workstation and shows each item as ok, missing or warning, with a suggested fix. Covers base tools (git, curl, zip), credentials (git identity, SSH key, `~/.m2/settings.xml`, `~/.npmrc`), Java/Maven via SDKMAN, Node via NVM, Docker, kubectl and kubeconfigs, AI CLIs, IDEs, disk space and network reachability. The check itself changes nothing. A fix only runs when you click it, and only for items marked as automatic. |
 | **Repositories** (Repositórios) | `/repositorios` | Connects to GitLab or GitHub, lets you browse groups and projects, and clones them into a workspace folder that mirrors the group hierarchy. A token can be typed in the UI, read from `GITLAB_TOKEN`/`GITHUB_TOKEN`, or taken from `gh auth token`. |
+| **Pipelines** | `/pipelines` | Shows the latest GitLab CI or GitHub Actions pipeline of each project you follow, its jobs and their logs. For a failed job, **Explain failure** sends the end of the log to an AI agent in read-only mode, which also reads the code when the project is cloned. Refreshes every 30 s. |
 
 ### Kubernetes
 

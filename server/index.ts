@@ -9,6 +9,7 @@ import { reposRouter } from './routes/repos.ts'
 import { resourcesRouter } from './routes/resources.ts'
 import { k8sRouter } from './routes/k8s.ts'
 import { performanceRouter } from './routes/performance.ts'
+import { pipelinesRouter } from './routes/pipelines.ts'
 import { settingsRouter } from './routes/settings.ts'
 
 const PORT = Number(process.env.PORT ?? 3101)
@@ -25,6 +26,7 @@ app.use('/api/analysis', analysisRouter)
 app.use('/api/resources', resourcesRouter)
 app.use('/api/repos', reposRouter)
 app.use('/api/performance', performanceRouter)
+app.use('/api/pipelines', pipelinesRouter)
 
 app.use('/api', (req, res) => {
   res.status(404).json({ error: `rota inexistente: ${req.method} ${req.originalUrl}` })
