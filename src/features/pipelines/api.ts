@@ -1,5 +1,6 @@
 import { api } from '@/lib/api'
 import { streamPost } from '@/lib/stream'
+import type { AiStreamEvent } from '@/ui'
 
 export type Status = 'success' | 'failed' | 'running' | 'pending' | 'canceled' | 'skipped' | 'manual' | 'unknown'
 
@@ -35,12 +36,7 @@ export type Watch = {
   error: string | null
 }
 
-export type ExplainEvent =
-  | { type: 'log'; lines: number; truncated: boolean; clone: string | null }
-  | { type: 'text'; text: string }
-  | { type: 'error'; message: string }
-  | { type: 'done'; provider: string; model: string; durationMs: number; stopped: boolean }
-  | { type: string }
+export type ExplainEvent = AiStreamEvent | (AiStreamEvent & { type: 'log'; lines: number; truncated: boolean; clone: string | null })
 
 export const fetchWatches = () => api.get<Watch[]>('/pipelines/watch')
 export const addWatch = (sourceId: string, fullPath: string) => api.post('/pipelines/watch', { sourceId, fullPath })

@@ -1,0 +1,7 @@
+.ic-list { list-style: none; margin: 0; padding: 6px 0; }
+.ic-item { display: flex; gap: 14px; padding: 8px 14px; border-left: 3px solid transparent; }
+.ic-item + .ic-item { border-top: 1px solid var(--line); }
+.ic-crit { border-left-color: var(--crit); }
+.ic-warn { border-left-color: var(--warn); }
+.ic-time { font-size: 11.5px; white-space: nowrap; padding-top: 2px; }
+.ic-detail { font-size: 12px; margin-top: 3px; word-break: break-word; }
