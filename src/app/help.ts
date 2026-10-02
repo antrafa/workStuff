@@ -100,12 +100,15 @@ export const HELP: Record<string, Help> = {
     purpose: 'Mostra os pods, nodes e problemas do cluster conectado, com logs ao vivo e diagnóstico pela IA. A aba Cluster Doctor é um chat em que a IA investiga o cluster por você.',
     steps: [
       'Escolha o kubeconfig e o contexto na barra do topo.',
-      'Em "Visão geral", escolha o namespace e clique num pod para ver detalhes, eventos e logs.',
+      'Em "Visão geral", os pods que precisam de atenção vêm primeiro; os saudáveis ficam recolhidos.',
+      'Clique num pod para abrir os logs ao vivo na própria linha e, se quiser, pedir ao agente de IA que investigue.',
+      '"Descrever" mostra labels, imagem, ConfigMaps e eventos; "Reiniciar…" mostra o comando antes de rodar.',
       'Em "Problemas", veja só o que está falhando e peça o diagnóstico da IA.',
       'No "Cluster Doctor", descreva o problema; a IA roda comandos de leitura e propõe a correção.',
     ],
     notes: [
       'Cada kubeconfig é classificado como DES, ITG, HML ou PRO. PRO é somente leitura, e sem classificação vale como PRO.',
+      'A moldura da tela mostra o ambiente: fina em DES, tracejada em ITG, grossa em HML e hachurada em PRO.',
       'Toda escrita (restart, edit, delete) mostra o comando exato e só roda depois que você confirma.',
       'Secrets nunca são lidos.',
     ],

@@ -45,9 +45,12 @@ export default function ClusterPage() {
       hint="Pods, nodes e problemas do kubeconfig ativo, com diagnóstico por IA."
       actions={
         session && (
-          <button className="btn" onClick={pods.reload} title="Recarrega os pods agora (o painel já atualiza a cada 30s)">
-            <RotateCw size={14} className={pods.loading ? 'spin' : ''} /> Atualizar
-          </button>
+          <>
+            {pods.data && <PodCounts pods={pods.data} />}
+            <button className="btn" onClick={pods.reload} title="Recarrega os pods agora (o painel já atualiza a cada 30s)">
+              <RotateCw size={14} className={pods.loading ? 'spin' : ''} /> Atualizar
+            </button>
+          </>
         )
       }
     >
@@ -68,7 +71,6 @@ export default function ClusterPage() {
 
           {!aba && (
             <>
-              <NodesPanel key={sessionKey} />
               <PodsTable
                 state={pods}
                 env={env}
@@ -77,8 +79,8 @@ export default function ClusterPage() {
                 onNamespace={setNamespace}
                 namespaces={namespaces.data}
                 onOpen={pod => setDetail({ pod })}
-                onLogs={setLogsPod}
               />
+              <NodesPanel key={sessionKey} />
             </>
           )}
           {aba === 'problemas' && <ProblemsPanel state={pods} env={env} onOpen={pod => setDetail({ pod, tab: 'eventos' })} onLogs={setLogsPod} />}
@@ -99,6 +101,19 @@ export default function ClusterPage() {
       )}
       {logsPod && <LogsDock key={`${logsPod.namespace}/${logsPod.name}`} pod={logsPod} onClose={() => setLogsPod(null)} />}
     </Page>
+  )
+}
+
+// Os números que respondem "está tudo bem?" ao lado do título, sem precisar rolar.
+function PodCounts({ pods }: { pods: Pod[] }) {
+  const critical = pods.filter(p => p.health.level === 'critical').length
+  const warning = pods.filter(p => p.health.level === 'warning').length
+  return (
+    <dl className="head-stats">
+      <div><dt className="eyebrow">Pods</dt><dd>{pods.length}</dd></div>
+      <div className={critical ? 'is-crit' : ''}><dt className="eyebrow">◆ Crítico</dt><dd>{critical}</dd></div>
+      <div className={warning ? 'is-warn' : ''}><dt className="eyebrow">▲ Atenção</dt><dd>{warning}</dd></div>
+    </dl>
   )
 }
 

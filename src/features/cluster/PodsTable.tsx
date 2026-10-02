@@ -1,9 +1,10 @@
-import { ArrowDownUp, Boxes, Info, RotateCcw, ScrollText } from 'lucide-react'
-import { useMemo, useState } from 'react'
-import { Async, Chips, Empty, Meter, Search, SkeletonRows } from '@/ui'
+import { ArrowDownUp, Boxes, ChevronRight, Info, Sparkles } from 'lucide-react'
+import { Fragment, useMemo, useState } from 'react'
+import { AiStream, Async, Chips, Empty, Meter, Search, SkeletonRows } from '@/ui'
 import { pct, relTime } from '@/lib/format'
+import { LogsDock } from './LogsDock'
 import { RestartModal } from './RestartModal'
-import { canWrite, type Environment, type Pod } from './api'
+import { canWrite, diagnosePod, type DiagnoseEvent, type Environment, type HealthLevel, type Pod } from './api'
 
 type State = { data: Pod[] | null; error: string | null; loading: boolean; reload: () => void }
 type Props = {
@@ -14,17 +15,23 @@ type Props = {
   onNamespace: (ns: string) => void
   namespaces: { namespaces: string[]; limitedRbac: boolean } | null
   onOpen: (p: Pod) => void
-  onLogs: (p: Pod) => void
 }
 type Filter = 'todos' | 'running' | 'pending' | 'problema'
-type SortKey = 'name' | 'mem' | 'restarts' | 'uptime'
+type SortKey = 'severity' | 'name' | 'mem' | 'restarts' | 'uptime'
 
-const HEALTH_DOT = { ok: 'dot-ok', warning: 'dot-warn', critical: 'dot-crit' }
+const SEVERITY: Record<HealthLevel, number> = { critical: 2, warning: 1, ok: 0 }
+
+// Estado com forma e palavra, não só cor: ◆ crítico, ▲ atenção, ● ok.
+export function HealthChip({ level }: { level: HealthLevel }) {
+  if (level === 'critical') return <span className="badge badge-crit">◆ crítico</span>
+  if (level === 'warning') return <span className="badge badge-warn">▲ atenção</span>
+  return <span className="badge badge-ok">● ok</span>
+}
 
 export function restartTitle(env: Environment | null, p: Pod) {
-  if (!canWrite(env)) return env === 'PRO' ? 'Reinício bloqueado: PRO é somente leitura' : 'Reinício bloqueado: classifique o kubeconfig como DES, ITG ou HML'
   if (!p.workload) return 'Pod sem Deployment/StatefulSet/DaemonSet: não há o que reiniciar'
-  return `Reinicia o ${p.workload.kind} ${p.workload.name}`
+  if (!canWrite(env)) return env === 'PRO' ? 'Travado em PRO: abre o comando para levar à mudança' : 'Travado: classifique o kubeconfig como DES, ITG ou HML'
+  return `Reinicia o ${p.workload.kind} ${p.workload.name} (pede confirmação)`
 }
 
 // RBAC limitado: sem lista de namespaces, o usuário digita o que quer ver.
@@ -46,11 +53,13 @@ function NamespaceControl({ namespace, onNamespace, namespaces, forceInput }: Pi
   )
 }
 
-export function PodsTable({ state, env, metricsUnavailable, namespace, onNamespace, namespaces, onOpen, onLogs }: Props) {
+export function PodsTable({ state, env, metricsUnavailable, namespace, onNamespace, namespaces, onOpen }: Props) {
   const [query, setQuery] = useState('')
   const [filter, setFilter] = useState<Filter>('todos')
-  const [sort, setSort] = useState<{ key: SortKey; desc: boolean }>({ key: 'restarts', desc: true })
+  const [sort, setSort] = useState<{ key: SortKey; desc: boolean }>({ key: 'severity', desc: true })
   const [restarting, setRestarting] = useState<Pod | null>(null)
+  const [expanded, setExpanded] = useState<string | null>(null)
+  const [showHealthy, setShowHealthy] = useState(false)
 
   const all = state.data ?? []
   const needsNamespace = Boolean(state.error?.includes('escolha um namespace'))
@@ -70,7 +79,8 @@ export function PodsTable({ state, env, metricsUnavailable, namespace, onNamespa
       return true
     })
     const value = (p: Pod) =>
-      sort.key === 'name' ? p.name
+      sort.key === 'severity' ? SEVERITY[p.health.level] * 1e6 + p.restartCount
+        : sort.key === 'name' ? p.name
         : sort.key === 'mem' ? pct(p.memUsageMi ?? 0, p.memLimitMi)
         : sort.key === 'restarts' ? p.restartCount
         : -new Date(p.startTime).getTime()
@@ -80,12 +90,76 @@ export function PodsTable({ state, env, metricsUnavailable, namespace, onNamespa
     })
   }, [scoped, filter, sort])
 
+  const attention = rows.filter(p => p.health.level !== 'ok')
+  const healthy = rows.filter(p => p.health.level === 'ok')
+  // Sem nada pedindo atenção, os saudáveis são a lista inteira: não faz sentido escondê-los.
+  const healthyOpen = showHealthy || attention.length === 0
+
   const sortBy = (key: SortKey) => setSort(s => ({ key, desc: s.key === key ? !s.desc : true }))
   const th = (key: SortKey, label: string, className = '') => (
     <th className={`sortable ${className}`} onClick={() => sortBy(key)} title={`Ordenar por ${label.toLowerCase()}`}>
       {label} {sort.key === key && <ArrowDownUp size={10} />}
     </th>
   )
+
+  const podRow = (p: Pod) => {
+    const key = `${p.namespace}/${p.name}`
+    const open = expanded === key
+    return (
+      <Fragment key={key}>
+        <tr className={`clickable pod-row ${open ? 'is-open' : ''}`} onClick={() => setExpanded(open ? null : key)} title="Abre logs e o agente de IA aqui mesmo">
+          <td><HealthChip level={p.health.level} /></td>
+          <td>
+            <div className="row" style={{ flexWrap: 'nowrap', ['--gap' as string]: '6px' }}>
+              <ChevronRight size={13} className="pod-caret" />
+              <div style={{ minWidth: 0 }}>
+                <div className="mono pod-name">{p.name}</div>
+                <div className="muted pod-sub">{p.namespace} · <span className="mono">{p.imageTag}</span></div>
+              </div>
+            </div>
+          </td>
+          <td className="pod-reason">
+            <div>{p.status}</div>
+            {p.health.reasons.length > 0 && <div className="muted" title={p.health.reasons.join('\n')}>{p.health.reasons.join(' · ')}</div>}
+          </td>
+          <td className="num">{p.readyContainers}</td>
+          <td className="num">{p.restartCount > 0 ? <b style={{ color: p.restartCount > 5 ? 'var(--crit)' : 'var(--warn)' }}>{p.restartCount}</b> : 0}</td>
+          <td className="num">{p.cpuUsageM === null ? '—' : `${p.cpuUsageM}m`}</td>
+          <td style={{ minWidth: 120 }}>
+            {p.memUsageMi === null ? (
+              <span className="muted">—</span>
+            ) : (
+              <div className="stack" style={{ ['--gap' as string]: '4px' }}>
+                <span className="mono" style={{ fontSize: 12, whiteSpace: 'nowrap' }}>
+                  {p.memUsageMi}Mi <span className="muted">/ {p.memLimitMi ? `${p.memLimitMi}Mi` : 'sem limite'}</span>
+                </span>
+                {p.memLimitMi > 0 && <Meter percent={pct(p.memUsageMi, p.memLimitMi)} />}
+              </div>
+            )}
+          </td>
+          <td className="num">{relTime(p.startTime).replace('há ', '')}</td>
+          <td onClick={e => e.stopPropagation()}>
+            <div className="row-actions">
+              <button className="btn-link" onClick={() => onOpen(p)} title="Labels, imagem, ConfigMaps e eventos">Descrever</button>
+              <button className="btn-link danger" disabled={!p.workload} onClick={() => setRestarting(p)} title={restartTitle(env, p)}>
+                Reiniciar…
+              </button>
+            </div>
+          </td>
+        </tr>
+        {open && (
+          <tr className="pod-expanded">
+            <td colSpan={9}>
+              <div className="pod-inline">
+                <LogsDock pod={p} inline onClose={() => setExpanded(null)} />
+                <PodAgent pod={p} />
+              </div>
+            </td>
+          </tr>
+        )}
+      </Fragment>
+    )
+  }
 
   return (
     <section className="card">
@@ -97,9 +171,9 @@ export function PodsTable({ state, env, metricsUnavailable, namespace, onNamespa
         <span className="mono muted" style={{ fontSize: 12 }}>
           {rows.length} / {all.length} pods
         </span>
-        {metricsUnavailable && <span className="badge badge-warn" title="Sem metrics-server (ou sem permissão): a coluna de memória mostra só o limite">sem métricas</span>}
+        {metricsUnavailable && <span className="badge badge-warn" title="Sem metrics-server (ou sem permissão): CPU e memória mostram só o limite">sem métricas</span>}
       </div>
-      <div style={{ padding: '10px 16px 0' }}>
+      <div style={{ padding: '10px 16px' }}>
         <Chips
           value={filter}
           onChange={setFilter}
@@ -112,7 +186,7 @@ export function PodsTable({ state, env, metricsUnavailable, namespace, onNamespa
         />
       </div>
       {needsNamespace && (
-        <div className="callout callout-info" style={{ margin: '12px 16px 0' }}>
+        <div className="callout callout-info" style={{ margin: '0 16px 12px' }}>
           <Info size={16} /> O RBAC deste usuário não lista pods de todos os namespaces. Digite um namespace acima para ver os pods dele.
         </div>
       )}
@@ -127,65 +201,33 @@ export function PodsTable({ state, env, metricsUnavailable, namespace, onNamespa
             <Empty icon={Boxes} title="Nada casa com o filtro" action={<button className="btn btn-sm" onClick={() => (setQuery(''), setFilter('todos'))}>Limpar filtros</button>} />
           ) : (
             <div className="table-wrap">
-              <table className="table">
+              <table className="table pods-table">
                 <thead>
                   <tr>
+                    {th('severity', 'Estado')}
                     {th('name', 'Pod')}
-                    <th>Node</th>
-                    {th('uptime', 'Uptime')}
+                    <th>Fase</th>
+                    <th className="num">Pronto</th>
+                    {th('restarts', 'Reinícios', 'num')}
+                    <th className="num">CPU</th>
                     {th('mem', 'Memória')}
-                    {th('restarts', 'Restarts', 'num')}
-                    <th>Motivo</th>
-                    <th />
+                    {th('uptime', 'Idade', 'num')}
+                    <th>Ações</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {rows.map(p => (
-                    <tr key={`${p.namespace}/${p.name}`} className="clickable" onClick={() => onOpen(p)}>
-                      <td>
-                        <div className="row" style={{ flexWrap: 'nowrap' }}>
-                          <span className={`dot ${HEALTH_DOT[p.health.level]}`} />
-                          <div style={{ minWidth: 0 }}>
-                            <div className="mono pod-name">{p.name}</div>
-                            <div className="muted" style={{ fontSize: 11.5 }}>
-                              {p.namespace} · {p.status} · <span className="mono">{p.imageTag}</span>
-                            </div>
-                          </div>
-                        </div>
-                      </td>
-                      <td className="mono muted" style={{ fontSize: 12, whiteSpace: 'nowrap' }}>{p.nodeName}</td>
-                      <td className="mono" style={{ fontSize: 12, whiteSpace: 'nowrap' }}>{relTime(p.startTime).replace('há ', '')}</td>
-                      <td style={{ minWidth: 130 }}>
-                        {p.memUsageMi === null ? (
-                          <span className="muted">—</span>
-                        ) : (
-                          <div className="stack" style={{ ['--gap' as string]: '4px' }}>
-                            <span className="mono" style={{ fontSize: 12, whiteSpace: 'nowrap' }}>
-                              {p.memUsageMi}Mi <span className="muted">/ {p.memLimitMi ? `${p.memLimitMi}Mi` : 'sem limite'}</span>
-                            </span>
-                            {p.memLimitMi > 0 && <Meter percent={pct(p.memUsageMi, p.memLimitMi)} />}
-                          </div>
-                        )}
-                      </td>
-                      <td className="num">{p.restartCount > 0 ? <b style={{ color: p.restartCount > 5 ? 'var(--crit)' : 'var(--warn)' }}>{p.restartCount}</b> : 0}</td>
-                      <td style={{ fontSize: 12, minWidth: 180 }}>{p.health.reasons.join(' · ') || <span className="muted">—</span>}</td>
-                      <td onClick={e => e.stopPropagation()}>
-                        <div className="row" style={{ flexWrap: 'nowrap', ['--gap' as string]: '4px' }}>
-                          <button className="btn btn-sm" onClick={() => onLogs(p)} title="Abre os logs deste pod no painel inferior">
-                            <ScrollText size={13} /> Logs
-                          </button>
-                          <button
-                            className="btn btn-sm"
-                            disabled={!canWrite(env) || !p.workload}
-                            onClick={() => setRestarting(p)}
-                            title={restartTitle(env, p)}
-                          >
-                            <RotateCcw size={13} /> Reiniciar
-                          </button>
-                        </div>
+                  {attention.length > 0 && (
+                    <tr className="group-row"><td colSpan={9}>Precisam de atenção · {attention.length}</td></tr>
+                  )}
+                  {attention.map(podRow)}
+                  {healthy.length > 0 && attention.length > 0 && (
+                    <tr className="group-row clickable" onClick={() => setShowHealthy(s => !s)}>
+                      <td colSpan={9}>
+                        <ChevronRight size={12} className={showHealthy ? 'rot' : ''} /> Saudáveis · {healthy.length} <span className="muted">— {showHealthy ? 'esconder' : 'mostrar'}</span>
                       </td>
                     </tr>
-                  ))}
+                  )}
+                  {healthyOpen && healthy.map(podRow)}
                 </tbody>
               </table>
             </div>
@@ -197,3 +239,31 @@ export function PodsTable({ state, env, metricsUnavailable, namespace, onNamespa
   )
 }
 
+// O agente só roda quando pedido: cada investigação é uma chamada à IA.
+function PodAgent({ pod }: { pod: Pod }) {
+  const [started, setStarted] = useState(false)
+  return (
+    <div className="pod-agent">
+      <div className="row">
+        <span className="eyebrow">Agente de IA</span>
+        <span className="muted" style={{ fontSize: 12 }}>só leitura · logs e eventos vão no prompt</span>
+      </div>
+      {started ? (
+        <AiStream<DiagnoseEvent & { type: string }>
+          start={(onEvent, signal) => diagnosePod(pod, onEvent, signal)}
+          initial="Juntando logs e eventos…"
+          describe={e => (e.type === 'logs' ? `${e.lines} linhas de log enviadas; o agente está analisando…` : null)}
+        />
+      ) : (
+        <div className="stack" style={{ ['--gap' as string]: '8px' }}>
+          <p className="muted" style={{ margin: 0, fontSize: 13 }}>
+            {pod.health.reasons.length ? `Sinais: ${pod.health.reasons.join(' · ')}.` : 'Nenhum sinal de problema neste pod.'} O agente lê os logs recentes e os eventos e aponta a causa provável.
+          </p>
+          <button className="btn btn-sm" style={{ alignSelf: 'flex-start' }} onClick={() => setStarted(true)}>
+            <Sparkles size={13} /> Investigar com IA
+          </button>
+        </div>
+      )}
+    </div>
+  )
+}

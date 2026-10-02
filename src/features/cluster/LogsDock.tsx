@@ -15,7 +15,8 @@ function levelOf(line: string) {
   return 'info'
 }
 
-export function LogsDock({ pod, onClose }: { pod: Pod; onClose: () => void }) {
+// inline: dentro da linha do pod na tabela; sem inline: painel fixo no rodapé da tela.
+export function LogsDock({ pod, onClose, inline }: { pod: Pod; onClose: () => void; inline?: boolean }) {
   const [lines, setLines] = useState<string[]>([])
   const [status, setStatus] = useState<'conectando' | 'seguindo' | 'fim' | string>('conectando')
   const [level, setLevel] = useState<Level>('tudo')
@@ -69,7 +70,7 @@ export function LogsDock({ pod, onClose }: { pod: Pod; onClose: () => void }) {
   }
 
   return (
-    <div className="logs-dock">
+    <div className={`logs-dock ${inline ? 'inline' : ''}`}>
       <div className="logs-head">
         <b className="mono">{pod.name}</b>
         {pod.containers.length > 1 && (
@@ -101,7 +102,7 @@ export function LogsDock({ pod, onClose }: { pod: Pod; onClose: () => void }) {
         </button>
         <button className="btn btn-sm" aria-pressed={wrap} onClick={() => setWrap(w => !w)}><WrapText size={13} /> Quebrar linha</button>
         <button className="btn btn-sm" onClick={download} disabled={visible.length === 0} title="Baixa as linhas visíveis (com o filtro aplicado)"><Download size={13} /> Baixar</button>
-        <button className="btn btn-ghost btn-sm btn-icon" onClick={onClose} title="Fechar logs"><X size={14} /></button>
+        <button className="btn btn-ghost btn-sm btn-icon" onClick={onClose} title={inline ? 'Recolher a linha' : 'Fechar logs'}><X size={14} /></button>
       </div>
       <pre ref={body} className={`logs-body ${wrap ? 'wrap' : ''}`}>
         {visible.map((l, i) => <div key={i} className={`log-${levelOf(l)}`}>{l}</div>)}
