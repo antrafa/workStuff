@@ -51,6 +51,7 @@ const RECIPES = {
   intellij: { url: 'https://www.jetbrains.com/toolbox-app/' },
   dbeaver: { snap: 'dbeaver-ce', brew: '--cask dbeaver-community', winget: 'dbeaver.dbeaver', url: 'https://dbeaver.io/download/' },
   postman: { snap: 'postman', brew: '--cask postman', winget: 'Postman.Postman', url: 'https://www.postman.com/downloads/' },
+  trivy: { pacman: 'trivy', snap: 'trivy', brew: 'trivy', winget: 'AquaSecurity.Trivy', url: 'https://trivy.dev/latest/getting-started/installation/' },
   compass: { brew: '--cask mongodb-compass', winget: 'MongoDB.Compass.Full', url: 'https://www.mongodb.com/try/download/compass' },
 } satisfies Record<string, Recipe>
 
@@ -288,6 +289,10 @@ async function kubernetes(fix: ReturnType<typeof fixesFor>): Promise<CheckResult
   ]
 }
 
+// Opcional: sem ele a tela Vulnerabilidades consulta só as dependências diretas, pela OSV.
+const security = (fix: ReturnType<typeof fixesFor>) =>
+  binary('Segurança', 'trivy', 'trivy', fix.install(RECIPES.trivy), 'aviso', ['--version'])
+
 async function ai(): Promise<CheckResult[]> {
   const clis = (await Promise.all(['claude', 'codex', 'agy'].map(async c => ((await has(c)) ? c : null)))).filter(Boolean)
   return [
@@ -367,6 +372,7 @@ export async function diagnose(p: Platform = PLATFORM): Promise<CheckResult[]> {
     docker(p, fix),
     workstuff(p, fix),
     kubernetes(fix),
+    Promise.all([security(fix)]),
     ai(),
     ides(p, fix),
     Promise.resolve([disk()]),

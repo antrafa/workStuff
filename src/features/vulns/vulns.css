@@ -1,0 +1,4 @@
+.vu-history { flex-wrap: wrap; --gap: 6px; }
+.vu-row { cursor: pointer; }
+.table tbody tr.vu-detail td { background: var(--surface-2); }
+.vu-advisory { display: flex; align-items: flex-start; gap: 10px; font-size: 13px; }

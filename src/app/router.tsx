@@ -20,6 +20,7 @@ export const router = createBrowserRouter([
           { path: 'maquina', element: page(() => import('@/features/doctor/DoctorPage')) },
           { path: 'repositorios', element: page(() => import('@/features/repos/ReposPage')) },
           { path: 'pipelines', element: page(() => import('@/features/pipelines/PipelinesPage')) },
+          { path: 'vulnerabilidades', element: page(() => import('@/features/vulns/VulnsPage')) },
           { path: 'gitlab', element: <Navigate to="/repositorios" replace /> },
           { path: 'cluster/:aba?', element: page(() => import('@/features/cluster/ClusterPage')) },
           { path: 'recursos', element: page(() => import('@/features/resources/ResourcesPage')) },
