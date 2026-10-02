@@ -118,3 +118,57 @@
 .skills-sh-row:last-child {
   border-bottom: 0;
 }
+
+/* ── Lista com seleção em lote ── */
+.catalog-table td {
+  vertical-align: middle;
+}
+.catalog-slug {
+  font-size: 13px;
+  color: var(--ink);
+}
+.catalog-sub {
+  font-size: 12px;
+  max-width: 340px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.catalog-origin {
+  font-size: 12px;
+  white-space: nowrap;
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.catalog-table .agent-chip {
+  white-space: nowrap;
+}
+.catalog-table tr.is-selected td {
+  background: var(--signal-soft);
+}
+.catalog-table input[type='checkbox'] {
+  accent-color: var(--signal);
+}
+.bulk-bar {
+  position: sticky;
+  bottom: 0;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  background: var(--surface);
+  border: 1px solid var(--line-hi);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-pop);
+}
+.bulk-preview {
+  flex: 1;
+  min-width: 0;
+  font-size: 12px;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}

@@ -265,7 +265,7 @@ export const HELP: Record<string, Help> = {
     steps: [
       'Cadastre as pastas onde os itens ficam.',
       'Encontre o item pela busca ou pelo filtro de tipo.',
-      'Ligue o item no agente desejado.',
+      'Ligue o item no agente desejado, ou marque vários na lista e ative todos de uma vez num agente.',
       'Use "Revisão com IA" para a IA avaliar o item, ou busque skills prontas no skills.sh.',
     ],
     notes: [

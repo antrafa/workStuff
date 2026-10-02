@@ -2,15 +2,16 @@ import './catalog.css'
 import { BookOpen, FolderOpen, Plus, RotateCw, Store } from 'lucide-react'
 import { useState } from 'react'
 import { useSearchParams } from 'react-router'
-import { Async, Empty, Page, Search, SkeletonRows } from '@/ui'
+import { Async, Empty, Page, Search, Segmented, SkeletonRows } from '@/ui'
 import { useAsync } from '@/lib/useAsync'
 import { CreateModal, RootsModal } from './CatalogModals'
 import { AgentsBar, ItemCard, SourcesBar } from './CatalogParts'
 import { DetailModal } from './DetailModal'
+import { ItemsTable } from './ItemsTable'
 import { SkillsShModal } from './SkillsShModal'
 import { fetchCatalog, type Catalog, type CatalogItem, type Kind, type Status } from './api'
 import { KIND_LABEL, KIND_ORDER, STATUS } from './labels'
-
+type View = 'lista' | 'cartoes'
 
 export default function CatalogPage() {
   const state = useAsync(fetchCatalog)
@@ -19,6 +20,8 @@ export default function CatalogPage() {
   const [params, setParams] = useSearchParams()
   const kind: Kind = KIND_ORDER.includes(params.get('tipo') as Kind) ? (params.get('tipo') as Kind) : 'skill'
   const setKind = (k: Kind) => setParams(p => (p.set('tipo', k), p), { replace: true })
+  const view: View = params.get('vista') === 'cartoes' ? 'cartoes' : 'lista'
+  const setView = (v: View) => setParams(p => (p.set('vista', v), p), { replace: true })
   const [skillsSh, setSkillsSh] = useState(false)
   const [root, setRoot] = useState('todas')
   const [status, setStatus] = useState<'todos' | Status>('todos')
@@ -64,8 +67,8 @@ export default function CatalogPage() {
             <AgentsBar agents={data.agents} />
             <Items
               data={data}
-              filters={{ query, kind, root, status }}
-              setters={{ setQuery, setKind, setRoot, setStatus }}
+              filters={{ query, kind, root, status, view }}
+              setters={{ setQuery, setKind, setRoot, setStatus, setView }}
               onClear={clearFilters}
               onOpen={setDetailId}
               onPatch={patch}
@@ -87,8 +90,9 @@ export default function CatalogPage() {
 
 type ItemsProps = {
   data: Catalog
-  filters: { query: string; kind: Kind; root: string; status: 'todos' | Status }
+  filters: { query: string; kind: Kind; root: string; status: 'todos' | Status; view: View }
   setters: {
+    setView: (v: View) => void
     setQuery: (v: string) => void
     setKind: (v: Kind) => void
     setRoot: (v: string) => void
@@ -133,6 +137,7 @@ function Items({ data, filters, setters, onClear, onOpen, onPatch, onSkillsSh }:
           {(Object.keys(STATUS) as Status[]).map(s => <option key={s} value={s}>{STATUS[s].label}</option>)}
         </select>
         <div className="spacer" />
+        <Segmented value={filters.view} onChange={setters.setView} options={[{ id: 'lista', label: 'Lista' }, { id: 'cartoes', label: 'Cartões' }]} />
         <span className="mono muted" style={{ fontSize: 12 }}>{visible.length} / {total(filters.kind)} {KIND_LABEL[filters.kind].toLowerCase()}</span>
         {filters.kind === 'skill' && (
           <button className="btn" onClick={onSkillsSh} title="Busca e instala skills do catálogo público skills.sh">
@@ -151,6 +156,8 @@ function Items({ data, filters, setters, onClear, onOpen, onPatch, onSkillsSh }:
             {total(filters.kind) ? undefined : filters.kind === 'skill' ? 'Nenhuma pasta tem skill (pasta com SKILL.md). Instale uma do skills.sh ou adicione a pasta onde elas ficam.' : 'Crie um item ou adicione a pasta onde eles ficam.'}
           </Empty>
         </div>
+      ) : filters.view === 'lista' ? (
+        <ItemsTable items={visible} agents={data.agents} onOpen={onOpen} onAgent={(id, agent, st) => onPatch(id, { agents: { ...data.items.find(i => i.id === id)!.agents, [agent]: st } })} />
       ) : (
         <div className="grid" style={{ ['--min' as string]: '320px' }}>
           {visible.map(i => (
