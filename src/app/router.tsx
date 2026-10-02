@@ -32,6 +32,7 @@ export const router = createBrowserRouter([
           { path: 'upgrade/:aba?', element: page(() => import('@/features/upgrade/UpgradePage')) },
           { path: 'performance', element: page(() => import('@/features/performance/PerformancePage')) },
           { path: 'conversores', element: page(() => import('@/features/tools/ToolsPage')) },
+          { path: 'servicos', element: page(() => import('@/features/local/LocalPage')) },
           { path: 'gerador', element: page(() => import('@/features/gerador/GeradorPage')) },
           { path: 'catalogo', element: page(() => import('@/features/catalog/CatalogPage')) },
           { path: 'analise', element: page(() => import('@/features/analysis/AnalysisPage')) },
