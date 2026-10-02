@@ -17,6 +17,8 @@ import { incidentRouter } from './routes/incident.ts'
 import { reviewRouter } from './routes/review.ts'
 import { profileRouter } from './routes/profile.ts'
 import { localRouter } from './routes/local.ts'
+import { schedulesRouter } from './routes/schedules.ts'
+import { startScheduler } from './lib/schedules/scheduler.ts'
 import { settingsRouter } from './routes/settings.ts'
 
 const PORT = Number(process.env.PORT ?? 3101)
@@ -41,6 +43,7 @@ app.use('/api/incident', incidentRouter)
 app.use('/api/review', reviewRouter)
 app.use('/api/profile', profileRouter)
 app.use('/api/local', localRouter)
+app.use('/api/schedules', schedulesRouter)
 
 app.use('/api', (req, res) => {
   res.status(404).json({ error: `rota inexistente: ${req.method} ${req.originalUrl}` })
@@ -56,4 +59,5 @@ app.use(onError)
 // Só localhost: o painel roda comandos na máquina e não deve ficar exposto na rede.
 app.listen(PORT, '127.0.0.1', () => {
   console.log(`[api] http://127.0.0.1:${PORT} · dados em ${DATA_DIR}`)
+  startScheduler()
 })

@@ -1,5 +1,5 @@
 import {
-  Activity, ArrowUpCircle, Cpu, Dices, FileSearch, GitBranch, GitCompare, GitPullRequest, History, ScrollText, Server, ServerCog, ShieldAlert, Sparkles, Stethoscope, Users, Workflow, Wrench,
+  Activity, ArrowUpCircle, BellRing, Cpu, Dices, FileSearch, GitBranch, GitCompare, GitPullRequest, History, ScrollText, Server, ServerCog, ShieldAlert, Sparkles, Stethoscope, Users, Workflow, Wrench,
   type LucideIcon,
 } from 'lucide-react'
 
@@ -37,6 +37,7 @@ export const NAV: NavGroup[] = [
     items: [
       { path: '/conversores', label: 'Conversores', hint: 'JWT, base64, URL, timestamp, UUID, cron, JSON, diff, regex, hash', icon: Wrench },
       { path: '/servicos', label: 'Serviços locais', hint: 'Portas em escuta, containers e projetos compose', icon: Server },
+      { path: '/agenda', label: 'Verificações agendadas', hint: 'Avisa quando pipeline, certificado ou pods mudam de estado', icon: BellRing },
       { path: '/gerador', label: 'Gerador de dados', hint: 'CPF, CNPJ, pessoa e empresa de teste', icon: Dices },
     ],
   },

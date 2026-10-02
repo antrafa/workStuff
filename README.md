@@ -55,6 +55,7 @@ The menu is split into four groups.
 |---|---|---|
 | **Converters** (Conversores) | `/conversores` | JWT decoding with an expiry check, Base64/base64url, URL encoding, timestamp conversion, UUID v4, cron next-run preview, JSON format/minify/validate (with line and column of the error) and JSON → YAML, line diff, regex tester and SHA hashes. Runs in the browser. |
 | **Local services** (Serviços locais) | `/servicos` | Listening ports with the owning process (flagging the ones open to the network), Docker containers and compose projects, with start, stop and restart behind a confirmation that shows the exact command. |
+| **Scheduled checks** (Verificações agendadas) | `/agenda` | While the server is running, periodically checks what you register (a broken pipeline, a certificate close to expiry, pods in a critical state, critical vulnerabilities in a project) and sends a desktop notification only when the state changes. |
 | **Data generator** (Gerador de dados) | `/gerador` | Generates Brazilian test data: people, CPF, CNPJ (including the new alphanumeric format), names, addresses and companies, with an optional state (UF) filter. Runs in the browser. |
 
 ### AI
