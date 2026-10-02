@@ -174,13 +174,12 @@ export function DockerSection({ data, onChanged }: { data: Services; onChanged: 
           icon={pending.kind === 'remove' ? Trash2 : pending.action === 'stop' ? Square : pending.action === 'start' ? Play : RotateCw}
           onConfirm={() => run(pending)}
           onClose={() => setPending(null)}
-        >
-          <p>O painel vai rodar nesta máquina:</p>
-          <pre className="code">{commandOf(pending)}</pre>
-          <p className="muted" style={{ fontSize: 12.5 }}>
-            {pending.kind === 'remove' ? CONSEQUENCE[pending.on] : pending.action !== 'start' ? 'Quem estiver usando o serviço perde a conexão até ele voltar.' : 'O serviço sobe com a configuração atual.'}
-          </p>
-        </ConfirmModal>
+          action={pending.kind === 'remove' ? 'apagar' : ACTION_LABEL[pending.action].toLowerCase()}
+          env="LOCAL"
+          command={commandOf(pending)}
+          effects={[pending.kind === 'remove' ? CONSEQUENCE[pending.on] : pending.action !== 'start' ? 'Quem estiver usando o serviço perde a conexão até ele voltar.' : 'O serviço sobe com a configuração atual.']}
+          typeToConfirm={pending.kind === 'remove' && pending.on === 'volumes' ? pending.label : undefined}
+        />
       )}
     </section>
   )

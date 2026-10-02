@@ -12,6 +12,10 @@ export function PortsCard({ data, onChanged }: { data: Services; onChanged: () =
   const [force, setForce] = useState(false)
   const [busy, setBusy] = useState<number | null>(null)
   const toast = useToast()
+  // Mesma porta com mais de um processo: um deles está atendendo no lugar do outro.
+  const pidsByPort = new Map<number, Set<number | null>>()
+  data.ports.forEach(p => pidsByPort.set(p.port, (pidsByPort.get(p.port) ?? new Set()).add(p.pid)))
+  const conflict = (p: Port) => (pidsByPort.get(p.port)?.size ?? 0) > 1
   const ports = data.ports.filter(p => !query || `${p.port} ${p.process ?? ''} ${p.pid ?? ''}`.toLowerCase().includes(query.toLowerCase()))
 
   const kill = async (p: Port, forced: boolean) => {
@@ -36,12 +40,13 @@ export function PortsCard({ data, onChanged }: { data: Services; onChanged: () =
       {ports.length === 0 ? <Empty icon={Unplug} title="Nenhuma porta neste filtro" /> : (
         <div className="table-wrap">
           <table className="table">
-            <thead><tr><th className="num">Porta</th><th>Endereço</th><th>Processo</th><th className="num">PID</th><th /></tr></thead>
+            <thead><tr><th>Estado</th><th className="num">Porta</th><th>Endereço</th><th>Processo</th><th className="num">PID</th><th /></tr></thead>
             <tbody>
               {ports.map(p => {
                 const self = p.panel
                 return (
                   <tr key={`${p.address}|${p.port}|${p.pid}`}>
+                    <td>{conflict(p) ? <span className="badge badge-crit" title="Outro processo também escuta nesta porta">◆ conflito</span> : <span className="badge badge-ok">● ok</span>}</td>
                     <td className="num mono">{p.port}</td>
                     <td className="mono">{p.address}{exposed(p.address) && <span className="badge badge-warn" style={{ marginLeft: 6 }} title="Aceita conexão de outras máquinas da rede">rede</span>}</td>
                     <td className="mono">
@@ -69,21 +74,19 @@ export function PortsCard({ data, onChanged }: { data: Services; onChanged: () =
       {target && target.pid && (
         <ConfirmModal
           title={`Encerrar o processo da porta ${target.port}?`}
+          action="encerrar processo"
+          env="LOCAL"
+          command={killCommand(data.os, target.pid, force)}
+          effects={[`${target.process ?? 'O processo'} (PID ${target.pid}) para e a porta ${target.port} fica livre`, 'Requisições em andamento falham']}
+          losses={['Dados não salvos pelo processo', 'Se for um servidor de desenvolvimento, basta subir de novo']}
           confirmLabel={force ? 'Forçar encerramento' : 'Encerrar'}
           icon={Skull}
           onConfirm={() => kill(target, force)}
           onClose={() => setTarget(null)}
         >
-          <p>O painel vai rodar nesta máquina:</p>
-          <pre className="code">{killCommand(data.os, target.pid, force)}</pre>
-          <p className="muted" style={{ fontSize: 12.5 }}>
-            {target.process ?? 'O processo'} (PID {target.pid}) para, e tudo o que ele estava fazendo é interrompido: requisições em andamento falham e dados
-            não salvos se perdem. Se for um servidor de desenvolvimento, basta subir de novo.
-          </p>
-          <label className="row" style={{ fontSize: 13, ['--gap' as string]: '8px' }}>
-            <input type="checkbox" checked={force} onChange={e => setForce(e.target.checked)} />
-            Forçar ({data.os === 'win32' ? 'taskkill /F' : 'SIGKILL'}): encerra na hora, sem dar chance de o processo fechar arquivos e conexões. Use só se o
-            encerramento normal não resolver.
+          <label className="row confirm-type" style={{ fontSize: 13, ['--gap' as string]: '8px', flexWrap: 'nowrap', alignItems: 'flex-start' }}>
+            <input type="checkbox" checked={force} onChange={e => setForce(e.target.checked)} style={{ marginTop: 3 }} />
+            <span>Forçar ({data.os === 'win32' ? 'taskkill /F' : 'SIGKILL'}): encerra na hora, sem dar chance de o processo fechar arquivos e conexões. Use só se o encerramento normal não resolver.</span>
           </label>
         </ConfirmModal>
       )}
