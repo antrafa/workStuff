@@ -21,7 +21,7 @@ function classify(stderr: string): KubeError {
   if (/forbidden/i.test(msg)) return new KubeError(msg, 'forbidden')
   if (/unauthorized|must be logged in|provide credentials/i.test(msg)) return new KubeError(msg, 'unauthorized')
   if (/NotFound|not found/i.test(msg)) return new KubeError(msg, 'notfound')
-  if (/timeout|timed out|no such host|connection refused|dial tcp|i\/o timeout/i.test(msg)) return new KubeError(msg, 'unreachable')
+  if (/timeout|timed out|no such host|connection refused|was refused|dial tcp|i\/o timeout/i.test(msg)) return new KubeError(msg, 'unreachable')
   return new KubeError(msg, 'other')
 }
 
