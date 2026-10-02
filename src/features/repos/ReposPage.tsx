@@ -1,9 +1,10 @@
 import './repos.css'
-import { FolderGit2, Pencil, Plus, Trash2 } from 'lucide-react'
+import { Pencil, Plus, Trash2 } from 'lucide-react'
 import { useEffect, useState } from 'react'
-import { Async, ConfirmModal, Empty, Page, SkeletonRows, useToast } from '@/ui'
+import { Async, ConfirmModal, Page, SkeletonRows, useToast } from '@/ui'
 import { useAsync } from '@/lib/useAsync'
 import { Browser } from './Browser'
+import { NoConnection } from './NoConnection'
 import { SetupWizard } from './SetupWizard'
 import { deleteSource, fetchSources, type Source } from './api'
 
@@ -54,17 +55,7 @@ export default function ReposPage() {
         state={sources}
         isEmpty={d => d.length === 0}
         skeleton={<SkeletonRows rows={3} height={56} />}
-        empty={
-          <div className="card">
-            <Empty
-              icon={FolderGit2}
-              title="Nenhuma conexão ainda"
-              action={<button className="btn btn-primary" onClick={() => setWizard({ editing: null })}><Plus size={14} /> Conectar GitLab ou GitHub</button>}
-            >
-              Conecte seu GitLab ou GitHub, escolha o grupo base e a pasta do workspace. Depois é só navegar e clonar: cada projeto vai para a pasta que espelha o caminho dele no provedor.
-            </Empty>
-          </div>
-        }
+        empty={<NoConnection onConnect={() => setWizard({ editing: null })} />}
       >
         {() => (
           <>
@@ -99,9 +90,16 @@ export default function ReposPage() {
         />
       )}
       {deleting && (
-        <ConfirmModal title={`Remover a conexão ${deleting.label}?`} confirmLabel="Remover" icon={Trash2} onClose={() => setDeleting(null)} onConfirm={() => remove(deleting)}>
-          Sai só a conexão (e o token colado, se houver). Os repositórios já clonados em <code className="inline">{deleting.workspaceLabel}</code> não são tocados.
-        </ConfirmModal>
+        <ConfirmModal
+          title={`Remover a conexão ${deleting.label}?`}
+          action="remover conexão"
+          effects={['Sai a conexão e o token colado, se houver']}
+          losses={[<>Nada no disco: os clones em <code className="inline">{deleting.workspaceLabel}</code> não são tocados</>]}
+          confirmLabel="Remover"
+          icon={Trash2}
+          onClose={() => setDeleting(null)}
+          onConfirm={() => remove(deleting)}
+        />
       )}
     </Page>
   )

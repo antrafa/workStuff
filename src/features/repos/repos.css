@@ -265,3 +265,65 @@
   background: var(--signal);
   transition: width 0.2s;
 }
+
+/* ── Sem conexão: o que falta ── */
+.need-card {
+  display: grid;
+  grid-template-columns: 160px 1fr;
+  max-width: 760px;
+}
+.need-count {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 20px;
+  border-right: 1px solid var(--line);
+}
+.need-count b {
+  font-size: 56px;
+  line-height: 1;
+}
+.need-body {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 20px 24px;
+}
+.need-body h2 {
+  margin: 0;
+  font-size: 26px;
+  line-height: 1.1;
+}
+.need-body p {
+  margin: 0;
+}
+.need-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 4px 0 8px;
+}
+.need-list > div {
+  display: grid;
+  grid-template-columns: 90px 1fr;
+  align-items: center;
+}
+.need-list dd {
+  display: flex;
+  gap: 14px;
+  margin: 0;
+  font-size: 13px;
+}
+.need-list dd .mono {
+  font-size: 12px;
+}
+@media (max-width: 640px) {
+  .need-card {
+    grid-template-columns: 1fr;
+  }
+  .need-count {
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+  }
+}
