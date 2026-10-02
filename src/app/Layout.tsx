@@ -5,6 +5,7 @@ import { SkeletonRows } from '@/ui'
 import { useHiddenPaths } from './menu'
 import { NAV, findNav } from './nav'
 import { AppIcon } from './AppIcon'
+import { HelpButton } from './HelpButton'
 import { setTheme, useTheme } from './theme'
 import { refreshSession, useClusterShared } from '@/features/cluster/api'
 import { EnvBadge } from '@/features/cluster/KubeconfigBar'
@@ -87,6 +88,7 @@ export function Layout() {
               {cluster.problems} pods com problema
             </Link>
           )}
+          <HelpButton key={pathname} pathname={pathname} title={current?.item.label ?? 'Configurações'} />
           <button
             className="btn btn-ghost btn-icon"
             onClick={() => setTheme(dark ? 'light' : 'dark')}

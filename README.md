@@ -66,6 +66,8 @@ The menu is split into four groups.
 | **Catalog** (Catálogo) | `/catalogo` | Scans folders you choose for skills, prompts, rules, personas and templates, then enables them per agent (Claude Code, Codex, Gemini, OpenCode). Skills are enabled with a symlink; rules and personas go into a marked block in the agent's instruction file (e.g. `~/.claude/CLAUDE.md`). Files the panel did not create are never touched. You can also search and install skills from [skills.sh](https://skills.sh). |
 | **Analysis** (Análise) | `/analise` | Pick a project folder and an AI agent writes a full architecture report in read-only mode. Reports are cached per git commit. You can chat about the report, save it into the project under `docs/arquitetura`, and view an existing `graphify-out/graph.html`. |
 
+Every page has a **Help** button in the top bar that explains what the page is for, how to use it step by step, and its limits. The texts live in `src/app/help.ts`, and `npm run check` fails if a menu page has none.
+
 **Settings** (`/configuracoes`) picks the AI provider, model and effort. It also holds the theme (dark, light, auto), the accent color, and which menu items are shown.
 
 ## Security model

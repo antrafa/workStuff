@@ -268,3 +268,5 @@
   text-transform: uppercase;
   vertical-align: 1px;
 }
+.help p { margin: 4px 0 0; line-height: 1.55; }
+.help ol, .help ul { margin: 6px 0 0; padding-left: 20px; display: flex; flex-direction: column; gap: 6px; line-height: 1.5; }
