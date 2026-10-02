@@ -9,7 +9,7 @@ import { KubeError, kubectl, kubectlJson, type Target } from '../k8s/kubectl.ts'
 import { CLUSTER_RESOURCES, appliedApiVersion, parseDeprecatedMetrics, parseVersion, removalFor, type DeprecatedCall, type Removal } from './deprecations.ts'
 import { tlsCertificate, type CertInfo } from './certs.ts'
 
-type Obj = { kind: string; metadata: { name: string; namespace?: string; annotations?: Record<string, string> }; spec?: { tls?: { hosts?: string[] }[] } }
+type Obj = { kind: string; metadata: { name: string; namespace?: string; annotations?: Record<string, string> }; spec?: { tls?: { hosts?: string[] }[]; hosts?: string[] } }
 
 export type ObjectHit = { kind: string; namespace: string | null; name: string; appliedWith: string; removal: Removal }
 
@@ -81,28 +81,27 @@ export async function clusterReport(target: string | null, namespace: string | n
 
 export type IngressCert = { host: string; ingresses: string[]; info: CertInfo }
 
-export function tlsHosts(ingresses: Obj[]): Map<string, string[]> {
+// Hosts com TLS: spec.tls dos Ingresses e spec.hosts dos VirtualServices do Istio (o TLS termina no
+// gateway, e o host é o que o cliente acessa). Nome curto de serviço interno não tem certificado público.
+export function tlsHosts(objects: Obj[]): Map<string, string[]> {
   const hosts = new Map<string, string[]>()
-  for (const ing of ingresses) {
-    for (const tls of ing.spec?.tls ?? []) {
-      for (const host of tls.hosts ?? []) {
-        const label = `${ing.metadata.namespace}/${ing.metadata.name}`
-        hosts.set(host, [...(hosts.get(host) ?? []), label])
-      }
-    }
+  for (const o of objects) {
+    const found = o.kind === 'VirtualService' ? (o.spec?.hosts ?? []).filter(h => h.includes('.') && !h.endsWith('.svc.cluster.local')) : (o.spec?.tls ?? []).flatMap(t => t.hosts ?? [])
+    const label = `${o.kind === 'VirtualService' ? 'vs' : 'ing'}:${o.metadata.namespace}/${o.metadata.name}`
+    for (const host of found) hosts.set(host, [...(hosts.get(host) ?? []), label])
   }
   return hosts
 }
 
-export async function ingressCertificates(namespace: string | null): Promise<{ context: string; certificates: IngressCert[] }> {
+export async function ingressCertificates(namespace: string | null): Promise<{ context: string; forbidden: string[]; certificates: IngressCert[] }> {
   const { target: t, context } = await requireSession()
-  let ingresses: Obj[]
-  try {
-    ingresses = (await kubectlJson<{ items: Obj[] }>(t, ['get', 'ingresses', ...scope(namespace)], 60_000)).items
-  } catch (e) {
-    explain(e)
-  }
-  const hosts = [...tlsHosts(ingresses)]
+  const forbidden: string[] = []
+  // VirtualService só existe com Istio: sem o CRD, listKind devolve vazio e fica só o Ingress.
+  const [ingresses, virtualServices] = await Promise.all([
+    listKind(t, 'ingresses', namespace, forbidden),
+    listKind(t, 'virtualservices.networking.istio.io', namespace, forbidden),
+  ])
+  const hosts = [...tlsHosts([...ingresses, ...virtualServices])]
   const certificates = await mapLimit(hosts, 8, async ([host, names]): Promise<IngressCert> => ({
     host,
     ingresses: names,
@@ -111,7 +110,7 @@ export async function ingressCertificates(namespace: string | null): Promise<{ c
       ? { validTo: null, daysLeft: null, state: 'sem-certificado', detail: 'host curinga: confira pelos hosts concretos' }
       : await tlsCertificate(host),
   }))
-  return { context, certificates: certificates.sort((a, b) => (a.info.daysLeft ?? 1e9) - (b.info.daysLeft ?? 1e9)) }
+  return { context, forbidden, certificates: certificates.sort((a, b) => (a.info.daysLeft ?? 1e9) - (b.info.daysLeft ?? 1e9)) }
 }
 
 if (import.meta.main && process.argv.includes('--selfcheck')) {
@@ -132,7 +131,8 @@ if (import.meta.main && process.argv.includes('--selfcheck')) {
     { kind: 'Ingress', metadata: { name: 'a', namespace: 'x' }, spec: { tls: [{ hosts: ['app.exemplo.com', '*.exemplo.com'] }] } },
     { kind: 'Ingress', metadata: { name: 'b', namespace: 'y' }, spec: { tls: [{ hosts: ['app.exemplo.com'] }] } },
     { kind: 'Ingress', metadata: { name: 'sem-tls', namespace: 'y' } },
+    { kind: 'VirtualService', metadata: { name: 'vs', namespace: 'z' }, spec: { hosts: ['app.exemplo.com', 'api', 'api.z.svc.cluster.local'] } },
   ])
-  assert.deepEqual([...hosts], [['app.exemplo.com', ['x/a', 'y/b']], ['*.exemplo.com', ['x/a']]])
+  assert.deepEqual([...hosts], [['app.exemplo.com', ['ing:x/a', 'ing:y/b', 'vs:z/vs']], ['*.exemplo.com', ['ing:x/a']]])
   console.log('upgrade cluster selfcheck: ok')
 }

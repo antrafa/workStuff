@@ -34,20 +34,20 @@ export function IngressCertsSection({ namespace }: { namespace: string }) {
   return (
     <section className="card">
       <div className="card-head">
-        <div className="card-title spacer">Hosts com TLS nos ingresses{namespace ? ` de ${namespace}` : ''}</div>
+        <div className="card-title spacer">Hosts com TLS{namespace ? ` em ${namespace}` : ''}</div>
         <button className="btn btn-primary btn-sm" onClick={run} disabled={running}><ScanSearch size={13} /> {running ? 'Conectando…' : certs ? 'Verificar de novo' : 'Verificar certificados'}</button>
       </div>
       <div className="card-pad stack">
         {!certs && !running && !error && (
           <p className="muted" style={{ fontSize: 12.5 }}>
-            Para cada host de <span className="mono">spec.tls</span>, o painel abre uma conexão TLS e lê a data de vencimento do certificado apresentado.
+            Para cada host com TLS dos Ingresses e dos VirtualServices do Istio, o painel abre uma conexão TLS e lê a data de vencimento do certificado apresentado.
             Não lê Secret. Host só acessível pela rede interna precisa da VPN.
           </p>
         )}
         {running && <SkeletonRows rows={4} height={32} />}
         {error && <div className="callout callout-crit" style={{ fontSize: 12.5 }}>{error}</div>}
         {certs && !running && (certs.length === 0 ? (
-          <Empty icon={Lock} title="Nenhum ingress com TLS" />
+          <Empty icon={Lock} title="Nenhum host com TLS">Nem Ingress com spec.tls nem VirtualService do Istio neste escopo.</Empty>
         ) : (
           <div className="table-wrap">
             <table className="table">
