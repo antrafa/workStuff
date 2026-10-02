@@ -9,7 +9,8 @@ import { fetchKubeconfigs, type Kubeconfig } from '@/features/cluster/api'
 type Side = { kubeconfigId: string; context: string; namespace: string }
 type State = 'igual' | 'diferente' | 'só em A' | 'só em B'
 type WorkloadDiff = { kind: string; name: string; state: State; diffs: { field: string; a: string | null; b: string | null }[] }
-type Result = { a: { label: string; count: number }; b: { label: string; count: number }; workloads: WorkloadDiff[] }
+type SideInfo = { label: string; count: number; forbidden: string[] }
+type Result = { a: SideInfo; b: SideInfo; workloads: WorkloadDiff[] }
 
 const STORAGE = 'compare-sides'
 const empty: Side = { kubeconfigId: '', context: '', namespace: '' }
@@ -115,8 +116,12 @@ function Diffs({ result }: { result: Result }) {
   const rows = (filter === 'mudou' ? changed : result.workloads).filter(w => w.name.toLowerCase().includes(query.toLowerCase()))
   const count = (s: State) => result.workloads.filter(w => w.state === s).length
 
+  const blocked = [['A', result.a], ['B', result.b]].filter(([, s]) => (s as SideInfo).forbidden.length) as [string, SideInfo][]
   return (
     <>
+      {blocked.map(([label, s]) => (
+        <div key={label} className="callout callout-warn" style={{ fontSize: 12.5 }}>Lado {label}: sem permissão para listar {s.forbidden.join(', ')}; esses tipos ficaram fora da comparação.</div>
+      ))}
       <div className="grid" style={{ ['--min' as string]: '150px' }}>
         {(['diferente', 'só em A', 'só em B', 'igual'] as State[]).map(s => (
           <div key={s} className="stat"><span className="eyebrow">{s}</span><b>{count(s)}</b><small>workloads</small></div>

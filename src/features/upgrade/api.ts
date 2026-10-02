@@ -28,7 +28,7 @@ const query = (params: Record<string, string>) => {
 }
 
 export const fetchClusterReport = (target: string, namespace: string) => api.get<ClusterReport>(`/upgrade/cluster${query({ target, namespace })}`)
-export const fetchIngressCerts = (namespace: string) => api.get<{ context: string; certificates: IngressCert[] }>(`/upgrade/certificates${query({ namespace })}`)
+export const fetchIngressCerts = (namespace: string) => api.get<{ context: string; forbidden: string[]; certificates: IngressCert[] }>(`/upgrade/certificates${query({ namespace })}`)
 export const fetchKubeconfigCerts = () => api.get<KubeconfigCerts[]>('/upgrade/kubeconfigs')
 export const scanManifests = (path: string, target: string) => api.post<ManifestReport>('/upgrade/manifests', { path, target })
 export const pickFolder = () => api.post<{ path: string | null }>('/upgrade/pick-folder')

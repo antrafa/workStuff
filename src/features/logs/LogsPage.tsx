@@ -84,7 +84,11 @@ export default function LogsPage() {
     }
   }
 
-  const toggle = (s: string) => setPicked(prev => (prev.includes(s) ? prev.filter(x => x !== s) : [...prev, s]))
+  // Só dá para combinar valores da mesma chave: outra chave recomeça a seleção, e os chips marcados batem com o seletor.
+  const toggle = (s: string) => setPicked(prev => {
+    if (prev.includes(s)) return prev.filter(x => x !== s)
+    return prev.length && prev[0].split('=')[0] !== s.split('=')[0] ? [s] : [...prev, s]
+  })
   useEffect(() => {
     if (picked.length) setSelector(combine(picked))
   }, [picked])
@@ -112,7 +116,10 @@ export default function LogsPage() {
       if (e.type === 'line') {
         const line = { id: seq.current++, pod: e.pod, container: e.container, text: e.text }
         setStatus(s => (s === 'conectando' ? 'ao vivo' : s))
-        ;(paused.current ?? incoming.current).push(line)
+        const target = paused.current ?? incoming.current
+        target.push(line)
+        // Pausa longa numa app barulhenta não pode crescer sem fim: fica só o que caberia na tela.
+        if (target.length > MAX_LINES) target.splice(0, target.length - MAX_LINES)
       }
       if (e.type === 'error') ((setError(e.message), setStatus('erro')))
       if (e.type === 'done') (es.close(), setStatus(s => (s === 'erro' ? s : 'parado')))
@@ -130,7 +137,9 @@ export default function LogsPage() {
       setLines(prev => [...prev, ...buffered].slice(-MAX_LINES))
       setStatus('ao vivo')
     } else {
-      paused.current = []
+      // O que ainda estava no lote de 250 ms vem primeiro: a ordem das linhas se mantém ao retomar.
+      paused.current = incoming.current
+      incoming.current = []
       setStatus('pausado')
     }
   }

@@ -16,6 +16,7 @@ function CertBadge({ info }: { info: CertInfo }) {
 
 export function IngressCertsSection({ namespace }: { namespace: string }) {
   const [certs, setCerts] = useState<IngressCert[] | null>(null)
+  const [forbidden, setForbidden] = useState<string[]>([])
   const [running, setRunning] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -23,7 +24,9 @@ export function IngressCertsSection({ namespace }: { namespace: string }) {
     setRunning(true)
     setError(null)
     try {
-      setCerts((await fetchIngressCerts(namespace)).certificates)
+      const r = await fetchIngressCerts(namespace)
+      setCerts(r.certificates)
+      setForbidden(r.forbidden)
     } catch (e) {
       setError((e as Error).message)
     } finally {
@@ -46,6 +49,9 @@ export function IngressCertsSection({ namespace }: { namespace: string }) {
         )}
         {running && <SkeletonRows rows={4} height={32} />}
         {error && <div className="callout callout-crit" style={{ fontSize: 12.5 }}>{error}</div>}
+        {certs && !running && forbidden.length > 0 && (
+          <div className="callout callout-warn" style={{ fontSize: 12.5 }}>Sem permissão para listar {forbidden.join(' e ')}: os hosts deles não entraram na verificação.</div>
+        )}
         {certs && !running && (certs.length === 0 ? (
           <Empty icon={Lock} title="Nenhum host com TLS">Nem Ingress com spec.tls nem VirtualService do Istio neste escopo.</Empty>
         ) : (

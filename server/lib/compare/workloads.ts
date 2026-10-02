@@ -4,7 +4,7 @@
 
 import assert from 'node:assert/strict'
 import { createHmac, randomBytes } from 'node:crypto'
-import { kubectlJson, type Target } from '../k8s/kubectl.ts'
+import { KubeError, kubectlJson, type Target } from '../k8s/kubectl.ts'
 
 type EnvVar = { name: string; value?: string; valueFrom?: { secretKeyRef?: { name: string; key: string }; configMapKeyRef?: { name: string; key: string }; fieldRef?: { fieldPath: string } } }
 type Probe = { httpGet?: { path?: string; port?: number | string }; tcpSocket?: { port?: number | string }; exec?: unknown; initialDelaySeconds?: number; periodSeconds?: number; timeoutSeconds?: number; failureThreshold?: number }
@@ -32,6 +32,8 @@ export type Workload = { kind: string; name: string; fields: Flat }
 // A impressão digital usa uma chave aleatória por processo, então só serve para comparar os dois lados
 // desta resposta, e não para descobrir a senha por tentativa.
 const SENSITIVE = /pass|senha|secret|token|key|credential|pwd|auth/i
+// Senha dentro do valor: usuário:senha@ numa URL ou password= numa string de conexão (JDBC, ODBC).
+const SECRET_VALUE = /:\/\/[^/\s:@]+:[^@\s]+@|[?&;](password|pwd)=/i
 const FINGERPRINT_KEY = randomBytes(32)
 const fingerprint = (v: string) => `•••• oculto (${createHmac('sha256', FINGERPRINT_KEY).update(v).digest('hex').slice(0, 8)})`
 
@@ -42,7 +44,7 @@ function envValue(e: EnvVar): string {
   if (f?.configMapKeyRef) return `configmap ${f.configMapKeyRef.name}/${f.configMapKeyRef.key}`
   if (f?.fieldRef) return `campo ${f.fieldRef.fieldPath}`
   const value = e.value ?? ''
-  return value && SENSITIVE.test(e.name) ? fingerprint(value) : value
+  return value && (SENSITIVE.test(e.name) || SECRET_VALUE.test(value)) ? fingerprint(value) : value
 }
 
 function probe(p: Probe | undefined): string {
@@ -99,9 +101,17 @@ export function compare(a: Workload[], b: Workload[]): WorkloadDiff[] {
   return out.sort((x, y) => order[x.state] - order[y.state] || x.name.localeCompare(y.name))
 }
 
-export async function readWorkloads(t: Target, namespace: string): Promise<Workload[]> {
-  const list = await kubectlJson<{ items: WorkloadJson[] }>(t, ['get', 'deployments,statefulsets,cronjobs', '-n', namespace], 60_000)
-  return list.items.map(flatten)
+const KINDS = ['deployments', 'statefulsets', 'cronjobs']
+
+// Uma chamada por tipo: com um tipo bloqueado pelo RBAC, o kubectl de três tipos juntos falha inteiro.
+export async function readWorkloads(t: Target, namespace: string): Promise<{ workloads: Workload[]; forbidden: string[] }> {
+  const forbidden: string[] = []
+  const lists = await Promise.all(KINDS.map(kind => kubectlJson<{ items: WorkloadJson[] }>(t, ['get', kind, '-n', namespace], 60_000).catch(e => {
+    if (e instanceof KubeError && e.kind === 'forbidden') return (forbidden.push(kind), { items: [] })
+    throw e
+  })))
+  if (forbidden.length === KINDS.length) throw new KubeError(`sem permissão para listar ${KINDS.join(', ')} em ${namespace}`, 'forbidden')
+  return { workloads: lists.flatMap(l => l.items.map(flatten)), forbidden }
 }
 
 if (import.meta.main && process.argv.includes('--selfcheck')) {
@@ -121,6 +131,10 @@ if (import.meta.main && process.argv.includes('--selfcheck')) {
   assert.equal(p1['app.env.spring.datasource.password'], p2['app.env.spring.datasource.password'], 'mesma senha, mesma impressão')
   assert.notEqual(p1['app.env.spring.datasource.password'], p3['app.env.spring.datasource.password'], 'senha diferente aparece como diferença')
   assert.equal(flatten(dep('x:1', 1, [{ name: 'LOG_LEVEL', value: 'info' }])).fields['app.env.LOG_LEVEL'], 'info', 'variável comum continua visível')
+  for (const v of ['postgres://app:hunter2@db:5432/x', 'jdbc:sqlserver://db;user=app;password=hunter2', 'mongodb://u:p@h/db?x=1']) {
+    assert.ok(!JSON.stringify(flatten(dep('x:1', 1, [{ name: 'DATABASE_URL', value: v }])).fields).includes(v), `senha no valor: ${v}`)
+  }
+  assert.equal(flatten(dep('x:1', 1, [{ name: 'API_URL', value: 'https://api.exemplo.com/v1' }])).fields['app.env.API_URL'], 'https://api.exemplo.com/v1', 'URL sem senha continua visível')
   assert.match(hml.fields['app.readiness'], /^http \/health:8080/)
 
   const cron: WorkloadJson = { kind: 'CronJob', metadata: { name: 'limpeza' }, spec: { schedule: '0 3 * * *', jobTemplate: { spec: { template: { spec: { containers: [{ name: 'job', image: 'busybox:1.36' }] } } } } } }

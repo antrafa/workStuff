@@ -38,7 +38,7 @@ type ReplicaSetJson = {
   spec: { template: { spec: { containers: { name: string; image: string }[] } } }
 }
 
-const NOISE = /^(Scheduled|Pulled|Created|Started|SuccessfulCreate|SuccessfulDelete|ScalingReplicaSet)$/
+const NOISE = /^(Scheduled|Pulled|Created|Started|SuccessfulCreate|SuccessfulDelete)$/
 
 export function fromEvents(events: EventJson[], since: Date): Entry[] {
   return events.flatMap(e => {
@@ -46,7 +46,7 @@ export function fromEvents(events: EventJson[], since: Date): Entry[] {
     if (new Date(at) < since) return []
     const warning = e.type === 'Warning'
     // Evento normal de rotina (agendou, baixou imagem) só polui: entra só o que é aviso ou mudança de escala.
-    if (!warning && NOISE.test(e.reason) && e.reason !== 'ScalingReplicaSet') return []
+    if (!warning && NOISE.test(e.reason)) return []
     const severity: Entry['severity'] = warning ? (/BackOff|OOM|Failed|Unhealthy|Evict|Kill/i.test(e.reason) ? 'crítico' : 'aviso') : 'info'
     return [{
       at, source: 'evento' as const, severity, object: `${e.involvedObject.kind}/${e.involvedObject.name}`,
@@ -80,7 +80,9 @@ export function fromReplicaSets(sets: ReplicaSetJson[], since: Date): Entry[] {
   })
 }
 
-const ERROR_LINE = /\b(ERROR|FATAL|SEVERE|Exception|panic|Caused by)\b/
+// "Exception" e "Error" grudados no nome da classe (NullPointerException, OutOfMemoryError) não têm
+// fronteira de palavra antes: casam pelo sufixo.
+const ERROR_LINE = /\b(ERROR|FATAL|SEVERE|panic|Caused by)\b|\w(Exception|Error)\b/
 
 // Log anterior (--previous --timestamps) de quem reiniciou: as últimas linhas de erro antes de morrer.
 export function errorLines(pod: string, container: string, log: string, since: Date, max = 5): Entry[] {
@@ -111,12 +113,15 @@ export async function buildTimeline(t: Target, namespace: string, hours: number)
   ])
   const restarts = fromPods(pods, since)
   // Log anterior só dos pods que reiniciaram na janela, e no máximo seis: cada um é uma chamada.
-  const targets = [...new Map(restarts.map(r => [r.object, r])).values()].slice(0, MAX_LOG_PODS)
-  if (restarts.length > targets.length) notes.push(`log anterior lido de ${MAX_LOG_PODS} dos pods que reiniciaram`)
+  const restartedPods = [...new Map(restarts.map(r => [r.object, r])).values()]
+  const targets = restartedPods.slice(0, MAX_LOG_PODS)
+  if (restartedPods.length > targets.length) notes.push(`log anterior lido de ${MAX_LOG_PODS} dos ${restartedPods.length} pods que reiniciaram`)
   const logs = await mapLimit(targets, 3, async r => {
     const pod = r.object.slice(4)
     const container = r.title.split(' ')[0]
-    const log = await kubectl(t, ['logs', pod, '-n', namespace, '-c', container, '--previous', '--timestamps', '--tail=400'], 30_000).catch(() => '')
+    // Falha ao ler o log entra nas notas: o post-mortem precisa saber que esse dado faltou.
+    const log = await kubectl(t, ['logs', pod, '-n', namespace, '-c', container, '--previous', '--timestamps', '--tail=400'], 30_000)
+      .catch(e => (notes.push(`log anterior de ${pod}: ${(e as Error).message.split('\n')[0].slice(0, 120)}`), ''))
     return errorLines(pod, container, log, since)
   })
   if (events.length && !fromEvents(events, since).length) notes.push('o cluster guarda eventos por pouco tempo (em geral 1 h): eventos mais antigos já sumiram')
@@ -151,9 +156,10 @@ if (import.meta.main && process.argv.includes('--selfcheck')) {
   const log = [
     '2026-10-01T09:59:00.000000000Z ERROR antes da janela',
     '2026-10-01T10:03:00.000000000Z INFO tudo bem',
-    '2026-10-01T10:03:30.000000000Z java.lang.OutOfMemoryError: Java heap space Exception',
+    '2026-10-01T10:03:30.000000000Z java.lang.OutOfMemoryError: Java heap space',
+    '2026-10-01T10:03:30.500000000Z java.lang.IllegalStateException: pool esgotado',
     '2026-10-01T10:03:31.000000000Z ERROR c.x.Api - falhou ao processar',
   ].join('\n')
-  assert.deepEqual(errorLines('api-1', 'app', log, since).map(e => e.detail), ['java.lang.OutOfMemoryError: Java heap space Exception', 'ERROR c.x.Api - falhou ao processar'])
+  assert.deepEqual(errorLines('api-1', 'app', log, since).map(e => e.detail), ['java.lang.OutOfMemoryError: Java heap space', 'java.lang.IllegalStateException: pool esgotado', 'ERROR c.x.Api - falhou ao processar'])
   console.log('incident timeline selfcheck: ok')
 }

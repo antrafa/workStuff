@@ -33,11 +33,11 @@ async function workloadsOf(side: Awaited<ReturnType<typeof resolveSide>>, label:
 compareRouter.post('/', async (req, res) => {
   try {
     const [a, b] = await Promise.all([resolveSide(req.body?.a, 'A'), resolveSide(req.body?.b, 'B')])
-    const [wa, wb] = await Promise.all([workloadsOf(a, 'A'), workloadsOf(b, 'B')])
+    const [ra, rb] = await Promise.all([workloadsOf(a, 'A'), workloadsOf(b, 'B')])
     res.json({
-      a: { label: a.label, environment: a.environment, count: wa.length },
-      b: { label: b.label, environment: b.environment, count: wb.length },
-      workloads: compare(wa, wb),
+      a: { label: a.label, environment: a.environment, count: ra.workloads.length, forbidden: ra.forbidden },
+      b: { label: b.label, environment: b.environment, count: rb.workloads.length, forbidden: rb.forbidden },
+      workloads: compare(ra.workloads, rb.workloads),
     })
   } catch (e) {
     if (!(e instanceof ClusterError)) throw e

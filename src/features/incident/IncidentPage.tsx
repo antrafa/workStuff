@@ -9,7 +9,9 @@ import { useAsync } from '@/lib/useAsync'
 import { fetchSession } from '@/features/cluster/api'
 
 type Entry = { at: string; source: 'evento' | 'restart' | 'rollout' | 'log'; severity: 'info' | 'aviso' | 'crítico'; object: string; title: string; detail: string }
-type Timeline = { context: string; since: string; entries: Entry[]; notes: string[] }
+// params: o que gerou a linha do tempo na tela. O post-mortem usa estes, não o que está digitado agora.
+type Params = { namespace: string; hours: string; focus: string }
+type Timeline = { context: string; since: string; entries: Entry[]; notes: string[]; params: Params }
 type Level = 'tudo' | 'aviso' | 'crítico'
 
 const NS_KEY = 'incident-namespace'
@@ -47,7 +49,9 @@ export default function IncidentPage() {
       // sem storage o namespace não é lembrado
     }
     try {
-      setTimeline(await api.get<Timeline>(`/incident/timeline?${new URLSearchParams({ namespace, hours, focus })}`))
+      const params = { namespace, hours, focus }
+      const t = await api.get<Omit<Timeline, 'params'>>(`/incident/timeline?${new URLSearchParams(params)}`)
+      setTimeline({ ...t, params })
     } catch (e) {
       setError((e as Error).message)
     } finally {
@@ -123,11 +127,11 @@ export default function IncidentPage() {
           )}
         </>
       )}
-      {drafting && (
+      {drafting && timeline && (
         <Modal title="Rascunho do post-mortem" width={860} onClose={() => setDrafting(false)}>
           <AiStream<AiStreamEvent & { entries?: number; sent?: number }>
             initial="remontando a linha do tempo…"
-            start={(onEvent, signal) => streamPost('/incident/postmortem', onEvent, signal, { namespace, hours: Number(hours), focus })}
+            start={(onEvent, signal) => streamPost('/incident/postmortem', onEvent, signal, { ...timeline.params, hours: Number(timeline.params.hours) })}
             describe={e => (e.type === 'timeline' ? `${e.sent} de ${e.entries} entradas enviadas; a IA está escrevendo…` : null)}
           />
         </Modal>

@@ -158,20 +158,22 @@ k8sRouter.get('/logs', async (req, res) => {
   const sse = openSse(res)
   const child = kubectlStream(session.target, multiLogArgs({ namespace, selector, container, tail, sinceSeconds: since }))
   let buffer = ''
+  const sendLine = (line: string) => {
+    const parsed = parsePrefixed(line)
+    if (parsed) sse.send({ type: 'line', ...parsed })
+    else if (line) sse.send({ type: 'line', pod: '?', container: '?', text: line })
+  }
   child.stdout.on('data', chunk => {
     buffer += chunk.toString('utf-8')
     const lines = buffer.split('\n')
     buffer = lines.pop() ?? ''
-    for (const line of lines) {
-      const parsed = parsePrefixed(line)
-      if (parsed) sse.send({ type: 'line', ...parsed })
-      else if (line) sse.send({ type: 'line', pod: '?', container: '?', text: line })
-    }
+    lines.forEach(sendLine)
   })
   let stderr = ''
   child.stderr.on('data', chunk => (stderr += chunk.toString('utf-8')))
   sse.signal.addEventListener('abort', () => child.kill('SIGTERM'), { once: true })
   child.on('close', code => {
+    if (buffer) sendLine(buffer)
     const error = stderr.split('\n').filter(l => l.trim() && !l.startsWith('Warning:')).join(' ')
     if (code !== 0 && !sse.signal.aborted) sse.send({ type: 'error', message: error || `kubectl logs saiu com código ${code}` })
     sse.send({ type: 'done' })
