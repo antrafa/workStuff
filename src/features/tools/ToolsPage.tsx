@@ -15,7 +15,7 @@ const TOOLS: Tool[] = [
   { icon: Clock, title: 'Timestamp', description: 'Epoch em segundos ou milissegundos para data legível.', body: <TimestampTool /> },
   { icon: Fingerprint, title: 'UUID', description: 'Gera UUID v4 aleatório, um ou em lote.', body: <UuidTool /> },
   { icon: CalendarClock, title: 'Cron', description: 'Próximas execuções de uma expressão de 5 campos.', body: <CronTool /> },
-  { icon: Braces, title: 'JSON', description: 'Formata, compacta, valida com linha e coluna do erro, e converte para YAML.', body: <JsonTool /> },
+  { icon: Braces, title: 'JSON', description: 'Formata, compacta, valida com linha e coluna do erro, e converte de e para YAML.', body: <JsonTool /> },
   { icon: Diff, title: 'Diff', description: 'Diferença linha a linha entre dois textos.', body: <DiffTool /> },
   { icon: Regex, title: 'Regex', description: 'Testa uma expressão regular e mostra cada correspondência e grupo.', body: <RegexTool /> },
   { icon: Hash, title: 'Hash', description: 'SHA-256, SHA-1 e SHA-512 de um texto.', body: <HashTool /> },

@@ -1,23 +1,24 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Segmented } from '@/ui'
 import { Output, attempt } from './Converters'
-import { MAX_DIFF_LINES, digest, formatJson, lineDiff, regexMatches, toYaml } from './text'
+import { MAX_DIFF_LINES, digest, formatJson, lineDiff, regexMatches, toYaml, yamlToJson } from './text'
 
-type JsonMode = 'formatar' | 'compactar' | 'yaml'
+type JsonMode = 'formatar' | 'compactar' | 'yaml' | 'de-yaml'
 
 export function JsonTool() {
   const [mode, setMode] = useState<JsonMode>('formatar')
   const [input, setInput] = useState('')
   const result = attempt(() => {
     if (!input.trim()) return null
+    if (mode === 'de-yaml') return yamlToJson(input)
     const pretty = formatJson(input)
     if (mode === 'compactar') return JSON.stringify(JSON.parse(pretty))
     return mode === 'yaml' ? toYaml(JSON.parse(pretty)) : pretty
   })
   return (
     <div className="stack" style={{ ['--gap' as string]: '8px' }}>
-      <Segmented<JsonMode> value={mode} onChange={setMode} options={[{ id: 'formatar', label: 'Formatar' }, { id: 'compactar', label: 'Compactar' }, { id: 'yaml', label: 'Para YAML' }]} />
-      <textarea className="textarea mono" rows={5} value={input} placeholder='{"cole": "o JSON"}' onChange={e => setInput(e.target.value)} />
+      <Segmented<JsonMode> value={mode} onChange={setMode} options={[{ id: 'formatar', label: 'Formatar' }, { id: 'compactar', label: 'Compactar' }, { id: 'yaml', label: 'Para YAML' }, { id: 'de-yaml', label: 'De YAML' }]} />
+      <textarea className="textarea mono" rows={5} value={input} placeholder={mode === 'de-yaml' ? 'cole o YAML (aceita vários documentos com ---)' : '{"cole": "o JSON"}'} onChange={e => setInput(e.target.value)} />
       <Output value={result.value} error={result.error} />
     </div>
   )

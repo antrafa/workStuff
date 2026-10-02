@@ -1,4 +1,6 @@
-// Funções de texto dos conversores, sem dependência: JSON, JSON → YAML e diff por linha.
+// Funções de texto dos conversores: JSON, YAML (pela lib yaml) e diff por linha.
+
+import { parseAllDocuments, stringify } from 'yaml'
 
 export function formatJson(input: string, indent = 2): string {
   try {
@@ -74,41 +76,16 @@ export function errorAt(s: string): number {
   }
 }
 
-// Escalar que o YAML leria como outro tipo (número, booleano, null, data) ou que quebra a sintaxe vai entre aspas.
-const NEEDS_QUOTES = /^$|^[\s]|[\s]$|^(true|false|yes|no|on|off|null|~|y|n)$|^[-+]?(\d|\.\d)|^[-?:,[\]{}#&*!|>'"%@`]|: | #|\n/i
+// Estilo dos manifests do Kubernetes: "- " da lista sem recuo extra embaixo da chave.
+export const toYaml = (value: unknown) => stringify(value, { indentSeq: false }).trimEnd()
 
-function scalar(v: unknown): string {
-  if (v === null) return 'null'
-  if (typeof v === 'number' || typeof v === 'boolean') return String(v)
-  const s = String(v)
-  return NEEDS_QUOTES.test(s) ? JSON.stringify(s) : s
-}
-
-const isEmpty = (v: unknown) => (Array.isArray(v) ? v.length === 0 : typeof v === 'object' && v !== null && Object.keys(v).length === 0)
-
-// Bloco de lista e mapa no estilo dos manifests do Kubernetes ("- " sem recuo extra embaixo da chave).
-export function toYaml(value: unknown, indent = 0): string {
-  const pad = ' '.repeat(indent)
-  if (Array.isArray(value)) {
-    if (!value.length) return `${pad}[]`
-    return value.map(item => {
-      if (typeof item === 'object' && item !== null && !isEmpty(item)) {
-        const inner = toYaml(item, indent + 2).slice(indent + 2)
-        return `${pad}- ${inner}`
-      }
-      return `${pad}- ${isEmpty(item) ? (Array.isArray(item) ? '[]' : '{}') : scalar(item)}`
-    }).join('\n')
-  }
-  if (typeof value === 'object' && value !== null) {
-    const entries = Object.entries(value)
-    if (!entries.length) return `${pad}{}`
-    return entries.map(([k, v]) => {
-      const key = scalar(k)
-      if (typeof v === 'object' && v !== null && !isEmpty(v)) return `${pad}${key}:\n${toYaml(v, Array.isArray(v) ? indent : indent + 2)}`
-      return `${pad}${key}: ${isEmpty(v) ? (Array.isArray(v) ? '[]' : '{}') : scalar(v)}`
-    }).join('\n')
-  }
-  return pad + scalar(value)
+// Vários documentos (separados por ---) viram um array; um documento só vira o próprio valor.
+export function yamlToJson(input: string, indent = 2): string {
+  const docs = parseAllDocuments(input)
+  const error = docs.flatMap(d => d.errors)[0]
+  if (error) throw new Error(`YAML inválido: ${error.message.split('\n')[0]}`)
+  const values = docs.map(d => d.toJS())
+  return JSON.stringify(values.length === 1 ? values[0] : values, null, indent)
 }
 
 export type DiffLine = { kind: 'igual' | 'removida' | 'adicionada'; text: string; a: number | null; b: number | null }

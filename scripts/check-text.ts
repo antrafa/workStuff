@@ -1,6 +1,6 @@
 // Autoteste dos conversores de texto: node scripts/check-text.ts
 import assert from 'node:assert/strict'
-import { digest, formatJson, lineDiff, regexMatches, toYaml } from '../src/features/tools/text.ts'
+import { digest, formatJson, lineDiff, regexMatches, toYaml, yamlToJson } from '../src/features/tools/text.ts'
 
 assert.equal(formatJson('{"a":1,"b":[true,null]}'), '{\n  "a": 1,\n  "b": [\n    true,\n    null\n  ]\n}')
 assert.throws(() => formatJson('{\n  "a": 1,\n  "b": }'), /linha 3, coluna 8: encontrei "}"/)
@@ -47,7 +47,9 @@ assert.equal(toYaml(manifest), [
   'nulo: null',
   'texto: "a: b"',
 ].join('\n'), 'string que parece booleano ou número vai entre aspas')
-assert.equal(toYaml([1, 'x', [2, 3]]), '- 1\n- x\n- - 2\n  - 3')
+assert.deepEqual(JSON.parse(yamlToJson(toYaml(manifest))), manifest, 'ida e volta sem perder nada')
+assert.deepEqual(JSON.parse(yamlToJson('a: 1\n---\nb: [x, y]\n')), [{ a: 1 }, { b: ['x', 'y'] }], 'vários documentos viram array')
+assert.throws(() => yamlToJson('a: [1, 2\nb: 3'), /YAML inválido/)
 
 const diff = lineDiff('a\nb\nc\nd', 'a\nB\nc\nd\ne')
 assert.deepEqual(diff.map(d => `${d.kind[0]}${d.text}`), ['ia', 'rb', 'aB', 'ic', 'id', 'ae'])
