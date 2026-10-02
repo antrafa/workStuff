@@ -5,11 +5,12 @@ import { join } from 'node:path'
 import { runAi } from '../lib/ai/runner.ts'
 import { openSse } from '../lib/sse.ts'
 import {
-  ClusterError, activeSession, checkName, connect, disconnect, listNamespaces, listNodes, listPods, podDetail, podEvents,
+  ClusterError, activeSession, checkName, connect, explain, disconnect, listNamespaces, listNodes, listPods, podDetail, podEvents,
   recentLogs, restartWorkload,
 } from '../lib/k8s/cluster.ts'
 import { deleteKubeconfig, listKubeconfigs, saveKubeconfig, setEnvironment } from '../lib/k8s/kubeconfigs.ts'
-import { kubectlStream } from '../lib/k8s/kubectl.ts'
+import { kubectlJson, kubectlStream } from '../lib/k8s/kubectl.ts'
+import { multiLogArgs, parsePrefixed, selectorSuggestions, validSelector } from '../lib/k8s/multilogs.ts'
 import type { Environment } from '../lib/k8s/policy.ts'
 
 export const k8sRouter = Router()
@@ -119,6 +120,58 @@ k8sRouter.get('/pods/:ns/:pod/logs', async (req, res) => {
   sse.signal.addEventListener('abort', () => child.kill('SIGTERM'), { once: true })
   child.on('close', code => {
     if (buffer) sse.send({ type: 'line', text: buffer })
+    const error = stderr.split('\n').filter(l => l.trim() && !l.startsWith('Warning:')).join(' ')
+    if (code !== 0 && !sse.signal.aborted) sse.send({ type: 'error', message: error || `kubectl logs saiu com código ${code}` })
+    sse.send({ type: 'done' })
+    sse.end()
+  })
+})
+
+// Seletores sugeridos para a tela de logs: as labels de app dos pods do namespace, com quantos pods cada.
+k8sRouter.get('/logs/selectors', handle(async req => {
+  const namespace = checkName('namespace', req.query.namespace)
+  const session = await activeSession()
+  if (!session) throw new ClusterError('nenhum cluster conectado', 409)
+  const pods = await kubectlJson<{ items: { metadata: { labels?: Record<string, string> } }[] }>(session.target, ['get', 'pods', '-n', namespace]).catch(e => explain(e))
+  return selectorSuggestions(pods.items.map(p => p.metadata.labels ?? {}))
+}))
+
+// Logs de vários pods por seletor de label, por SSE. Cada linha vem com o pod e o container de origem.
+k8sRouter.get('/logs', async (req, res) => {
+  let namespace: string, selector: string, container: string | null
+  try {
+    namespace = checkName('namespace', req.query.namespace)
+    selector = String(req.query.selector ?? '').trim()
+    if (!validSelector(selector)) throw new ClusterError('seletor de label inválido (ex.: app=api ou app.kubernetes.io/name=api)')
+    container = typeof req.query.container === 'string' && req.query.container ? checkName('container', req.query.container) : null
+  } catch (e) {
+    res.status(400).json({ error: (e as Error).message })
+    return
+  }
+  const session = await activeSession()
+  if (!session) {
+    res.status(409).json({ error: 'nenhum cluster conectado' })
+    return
+  }
+  const tail = Math.min(Math.max(Number(req.query.tail) || 100, 1), 5000)
+  const since = Number(req.query.since) > 0 ? Math.min(Number(req.query.since), 7 * 86400) : null
+  const sse = openSse(res)
+  const child = kubectlStream(session.target, multiLogArgs({ namespace, selector, container, tail, sinceSeconds: since }))
+  let buffer = ''
+  child.stdout.on('data', chunk => {
+    buffer += chunk.toString('utf-8')
+    const lines = buffer.split('\n')
+    buffer = lines.pop() ?? ''
+    for (const line of lines) {
+      const parsed = parsePrefixed(line)
+      if (parsed) sse.send({ type: 'line', ...parsed })
+      else if (line) sse.send({ type: 'line', pod: '?', container: '?', text: line })
+    }
+  })
+  let stderr = ''
+  child.stderr.on('data', chunk => (stderr += chunk.toString('utf-8')))
+  sse.signal.addEventListener('abort', () => child.kill('SIGTERM'), { once: true })
+  child.on('close', code => {
     const error = stderr.split('\n').filter(l => l.trim() && !l.startsWith('Warning:')).join(' ')
     if (code !== 0 && !sse.signal.aborted) sse.send({ type: 'error', message: error || `kubectl logs saiu com código ${code}` })
     sse.send({ type: 'done' })

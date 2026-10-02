@@ -24,6 +24,7 @@ export const router = createBrowserRouter([
           { path: 'gitlab', element: <Navigate to="/repositorios" replace /> },
           { path: 'cluster/:aba?', element: page(() => import('@/features/cluster/ClusterPage')) },
           { path: 'recursos', element: page(() => import('@/features/resources/ResourcesPage')) },
+          { path: 'logs', element: page(() => import('@/features/logs/LogsPage')) },
           { path: 'comparar', element: page(() => import('@/features/compare/ComparePage')) },
           { path: 'upgrade/:aba?', element: page(() => import('@/features/upgrade/UpgradePage')) },
           { path: 'performance', element: page(() => import('@/features/performance/PerformancePage')) },

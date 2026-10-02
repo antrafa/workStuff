@@ -1,0 +1,4 @@
+.lg-apps { flex-wrap: wrap; --gap: 6px; max-height: 140px; overflow: auto; }
+.lg-legend { display: flex; flex-wrap: wrap; gap: 12px; padding: 6px 14px; font-size: 11.5px; border-bottom: 1px solid var(--line); }
+.lg-body { margin: 0; padding: 10px 14px; height: 60vh; overflow: auto; font: 12px/1.6 var(--font-mono); white-space: pre-wrap; word-break: break-word; }
+.lg-pod { opacity: 0.9; margin-right: 6px; }
