@@ -88,7 +88,7 @@ workStuff runs commands on your machine and against real clusters, so its defaul
 - **Node.js 22.18 or newer**. The server runs TypeScript directly with Node's native type stripping. It is tested on Node 24.
 - **npm**
 - **git** and **ssh**
-- **Linux or macOS**, plus `bash` and `which`
+- **Linux, macOS or Windows**. Linux is the tested platform. On macOS and Windows the Machine page suggests `brew` and `winget` commands, which have not been tested on real machines yet, and Antigravity is unavailable because bubblewrap only exists on Linux.
 
 **Required for each feature**
 

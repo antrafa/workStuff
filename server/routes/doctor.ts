@@ -1,17 +1,19 @@
 import { Router } from 'express'
+import { fileURLToPath } from 'node:url'
 import { diagnose } from '../lib/doctor/checks.ts'
 import { FixRefused, resolveFix, runFix } from '../lib/doctor/fix.ts'
 import { DEFAULTS, parseDoctorConfig, readDoctorConfig, saveDoctorConfig } from '../lib/doctor/config.ts'
 import { openSse } from '../lib/sse.ts'
+import { PLATFORM } from '../lib/platform.ts'
 
 export const doctorRouter = Router()
 
-const PROJECT_ROOT = new URL('../..', import.meta.url).pathname
+const PROJECT_ROOT = fileURLToPath(new URL('../..', import.meta.url))
 
 doctorRouter.get('/', async (_req, res) => {
   const items = await diagnose()
   const count = (s: string) => items.filter(i => i.status === s).length
-  res.json({ items, resumo: { ok: count('ok'), falta: count('falta'), aviso: count('aviso') } })
+  res.json({ items, platform: PLATFORM, resumo: { ok: count('ok'), falta: count('falta'), aviso: count('aviso') } })
 })
 
 // Cadastro do que é específico do seu contexto (registries, endereços, versões), em ~/.workstuff.

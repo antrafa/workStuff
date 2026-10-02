@@ -7,7 +7,8 @@ export type Check = { grupo: string; item: string; status: CheckStatus; detalhe:
 
 export type FixEvent = { type: 'line'; text: string } | { type: 'done'; ok: boolean; code: number; error?: string }
 
-export const fetchChecks = () => api.get<{ items: Check[] }>('/doctor').then(r => r.items)
+export type Platform = { os: 'linux' | 'darwin' | 'win32'; family: string | null; label: string }
+export const fetchChecks = () => api.get<{ items: Check[]; platform: Platform }>('/doctor')
 export const runFix = (c: Check, onEvent: (e: FixEvent) => void, signal: AbortSignal) =>
   streamPost<FixEvent>('/doctor/fix', onEvent, signal, { grupo: c.grupo, item: c.item })
 

@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import { chmodSync, existsSync } from 'node:fs'
+import { isAbsolute } from 'node:path'
 import { dataFile, expandHome, tildify } from '../paths.ts'
 import { readJson, writeJson } from '../jsonFile.ts'
 import { run, which } from '../run.ts'
@@ -76,7 +77,7 @@ export function validateInput(b: Record<string, unknown>): Omit<Source, 'id'> & 
   if (!['stored', 'env', 'gh', 'none'].includes(tokenSource)) throw new RepoError('origem do token inválida')
   if (tokenSource === 'gh' && provider !== 'github') throw new RepoError('o login do gh só vale para GitHub')
   const workspace = typeof b.workspace === 'string' ? expandHome(b.workspace.trim()) : ''
-  if (!workspace.startsWith('/')) throw new RepoError('informe a pasta do workspace (caminho absoluto ou começando com ~)')
+  if (!isAbsolute(workspace)) throw new RepoError('informe a pasta do workspace (caminho absoluto ou começando com ~)')
   const basePath = normalizePath(typeof b.basePath === 'string' ? b.basePath : '')
   if (basePath && !/^[A-Za-z0-9._/-]+$/.test(basePath)) throw new RepoError('grupo base inválido')
   const label = typeof b.label === 'string' && b.label.trim() ? b.label.trim().slice(0, 60) : `${provider === 'gitlab' ? 'GitLab' : 'GitHub'}${basePath ? ` · ${basePath.split('/').pop()}` : ''}`

@@ -21,10 +21,17 @@ const PRELUDE = [
   'export NVM_DIR="$HOME/.nvm"; [ -s "$NVM_DIR/nvm.sh" ] && source "$NVM_DIR/nvm.sh"',
 ].join('\n')
 
+// No Windows não há bash nem sdk/nvm como função: a única correção automática lá é o npm install,
+// que o PowerShell roda direto.
+const shellFor = (correcao: string): [string, string[]] => process.platform === 'win32'
+  ? ['powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', correcao]]
+  : ['bash', ['-c', `${PRELUDE}\n${correcao}`]]
+
 export function runFix(fix: CheckResult, cwd: string, onLine: (line: string) => void, signal: AbortSignal): Promise<number> {
   return new Promise((resolve, reject) => {
-    const child = spawn('bash', ['-c', `${PRELUDE}\n${fix.correcao}`], { cwd, stdio: ['ignore', 'pipe', 'pipe'] })
-    const forward = (chunk: Buffer) => chunk.toString('utf-8').split('\n').filter(Boolean).forEach(onLine)
+    const [bin, args] = shellFor(fix.correcao)
+    const child = spawn(bin, args, { cwd, stdio: ['ignore', 'pipe', 'pipe'] })
+    const forward = (chunk: Buffer) => chunk.toString('utf-8').split(/\r?\n/).filter(Boolean).forEach(onLine)
     child.stdout.on('data', forward)
     child.stderr.on('data', forward)
     signal.addEventListener('abort', () => child.kill('SIGTERM'), { once: true })

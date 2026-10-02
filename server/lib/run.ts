@@ -21,9 +21,11 @@ export async function runHelp(bin: string) {
   }
 }
 
+// Windows não tem which: o equivalente é o where, que lista todos os achados (vale o primeiro).
 export async function which(bin: string): Promise<string | null> {
   try {
-    return (await run('which', [bin], 5_000)).trim() || null
+    const found = await run(process.platform === 'win32' ? 'where' : 'which', [bin], 5_000)
+    return found.split(/\r?\n/)[0].trim() || null
   } catch {
     return null
   }

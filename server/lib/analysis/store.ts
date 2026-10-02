@@ -5,7 +5,7 @@ import assert from 'node:assert/strict'
 import { execFileSync } from 'node:child_process'
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { basename, join } from 'node:path'
+import { basename, isAbsolute, join } from 'node:path'
 import { dataFile, expandHome, tildify } from '../paths.ts'
 import { readJson, writeJson } from '../jsonFile.ts'
 import { run } from '../run.ts'
@@ -50,8 +50,8 @@ export class AnalysisError extends Error {
 // Caminho do projeto vindo da tela: absoluto (ou ~) e diretório existente. É o cwd do agente.
 export function resolveProject(input: unknown) {
   if (typeof input !== 'string' || !input.trim()) throw new AnalysisError('informe a pasta do projeto')
-  const path = expandHome(input.trim()).replace(/\/+$/, '')
-  if (!path.startsWith('/')) throw new AnalysisError('use o caminho absoluto da pasta (ou começando com ~)')
+  const path = expandHome(input.trim()).replace(/[\\/]+$/, '')
+  if (!isAbsolute(path)) throw new AnalysisError('use o caminho absoluto da pasta (ou começando com ~)')
   if (!statSync(path, { throwIfNoEntry: false })?.isDirectory()) throw new AnalysisError(`pasta não encontrada: ${path}`)
   return path
 }

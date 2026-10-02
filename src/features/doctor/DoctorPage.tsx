@@ -14,7 +14,7 @@ const STATUS: Record<CheckStatus, { badge: string; label: string }> = {
 
 export default function DoctorPage() {
   const state = useAsync(fetchChecks)
-  const checks = state.data ?? []
+  const checks = state.data?.items ?? []
   const count = (s: CheckStatus) => checks.filter(c => c.status === s).length
   const [view, setView] = useState<'pendentes' | 'tudo'>('pendentes')
   const [configuring, setConfiguring] = useState(false)
@@ -38,6 +38,7 @@ export default function DoctorPage() {
           <div className="stat"><span className="eyebrow">Tudo certo</span><b style={{ color: 'var(--ok)' }}>{count('ok')}</b><small>itens ok</small></div>
           <div className="stat"><span className="eyebrow">Pendências</span><b style={{ color: 'var(--crit)' }}>{count('falta')}</b><small>impedem o trabalho</small></div>
           <div className="stat"><span className="eyebrow">Avisos</span><b style={{ color: 'var(--warn)' }}>{count('aviso')}</b><small>funcionam, mas com limitação</small></div>
+          {state.data && <div className="stat"><span className="eyebrow">Sistema</span><b style={{ fontSize: 18 }}>{state.data.platform.label}</b><small>comandos sugeridos para este sistema</small></div>}
         </div>
       )}
       {checks.length > 0 && count('falta') === 0 && (
@@ -57,7 +58,7 @@ export default function DoctorPage() {
       )}
       <Async
         state={state}
-        isEmpty={d => d.length === 0}
+        isEmpty={d => d.items.length === 0}
         skeleton={<SkeletonRows rows={5} height={64} />}
         empty={
           <div className="card">
@@ -67,7 +68,7 @@ export default function DoctorPage() {
           </div>
         }
       >
-        {all => {
+        {({ items: all }) => {
           const list = view === 'tudo' ? all : all.filter(c => c.status !== 'ok')
           if (list.length === 0) return <div className="card"><Empty icon={ShieldCheck} title="Nada pendente" action={<button className="btn btn-sm" onClick={() => setView('tudo')}>Ver todas as {all.length} verificações</button>}>Tudo o que o painel verifica está ok nesta máquina.</Empty></div>
           return (
