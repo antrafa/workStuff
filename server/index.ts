@@ -12,6 +12,7 @@ import { performanceRouter } from './routes/performance.ts'
 import { pipelinesRouter } from './routes/pipelines.ts'
 import { vulnsRouter } from './routes/vulns.ts'
 import { upgradeRouter } from './routes/upgrade.ts'
+import { compareRouter } from './routes/compare.ts'
 import { settingsRouter } from './routes/settings.ts'
 
 const PORT = Number(process.env.PORT ?? 3101)
@@ -31,6 +32,7 @@ app.use('/api/performance', performanceRouter)
 app.use('/api/pipelines', pipelinesRouter)
 app.use('/api/vulns', vulnsRouter)
 app.use('/api/upgrade', upgradeRouter)
+app.use('/api/compare', compareRouter)
 
 app.use('/api', (req, res) => {
   res.status(404).json({ error: `rota inexistente: ${req.method} ${req.originalUrl}` })

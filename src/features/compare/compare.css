@@ -1,0 +1,5 @@
+.cmp-sides { display: grid; grid-template-columns: 1fr auto 1fr; gap: 16px; align-items: center; }
+@media (max-width: 640px) { .cmp-sides { grid-template-columns: 1fr; } }
+.cmp-row { cursor: pointer; }
+.table tbody tr.cmp-detail > td { background: var(--surface-2); }
+.cmp-fields td { word-break: break-all; font-size: 12px; }
