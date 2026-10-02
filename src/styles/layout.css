@@ -270,3 +270,36 @@
 }
 .help p { margin: 4px 0 0; line-height: 1.55; }
 .help ol, .help ul { margin: 6px 0 0; padding-left: 20px; display: flex; flex-direction: column; gap: 6px; line-height: 1.5; }
+/* Ajuda da tela, junto ao título: o "?" mostra o propósito no tooltip; o link abre o passo a passo. */
+.page-head h1 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.page-help-icon {
+  display: inline-grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 1px solid var(--line-hi);
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+.page-help-icon:hover {
+  color: var(--signal);
+  border-color: var(--signal-line);
+  background: var(--signal-soft);
+}
+.page-help-link {
+  border: 0;
+  padding: 0;
+  background: none;
+  color: var(--signal);
+  font: inherit;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+  white-space: nowrap;
+}

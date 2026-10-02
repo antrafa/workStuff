@@ -218,16 +218,19 @@ export const HELP: Record<string, Help> = {
     ],
   },
   '/servicos': {
-    purpose: 'Mostra o que está rodando nesta máquina: portas em escuta com o processo dono, containers Docker e projetos compose, e permite iniciar, parar e reiniciar.',
+    purpose: 'Mostra o que está rodando nesta máquina: portas em escuta com o processo dono, e containers, imagens, volumes e projetos compose do Docker. Daqui dá para liberar uma porta encerrando o processo e limpar o que o Docker acumulou.',
     steps: [
-      'Filtre as portas por número ou processo para achar quem ocupa uma porta.',
-      'Veja os containers e os projetos compose abaixo.',
-      'Clique em Iniciar, Parar ou Reiniciar e confirme o comando no popup.',
+      'Filtre as portas por número, processo ou PID para achar quem ocupa uma porta.',
+      'Para liberar a porta, clique em "Encerrar" e confirme o comando; marque "Forçar" só se o encerramento normal não resolver.',
+      'No Docker, use as abas Containers, Imagens, Volumes e Compose.',
+      'Inicie, pare ou reinicie containers e projetos compose; apague containers parados, imagens e volumes que não estão em uso.',
     ],
     notes: [
+      'O comando mostrado na confirmação é o do seu sistema: kill no Linux e no macOS, taskkill no Windows.',
+      'O servidor deste painel aparece marcado como "este painel" e não pode ser encerrado por aqui.',
+      'Apagar volume apaga os dados dele para sempre. Imagem ou volume em uso por algum container é recusado pelo próprio Docker.',
       'A marca "rede" indica porta aberta para outras máquinas, e não só para esta.',
-      'O processo aparece sem os argumentos, que podem ter senha.',
-      '"Outro usuário" é processo do sistema ou de root, que o seu usuário não enxerga.',
+      'O processo aparece sem os argumentos, que podem ter senha. "Outro usuário" é processo do sistema ou de root, que o seu usuário não consegue encerrar.',
     ],
   },
   '/agenda': {

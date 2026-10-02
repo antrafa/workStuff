@@ -3,7 +3,7 @@
 // Autoteste: node server/lib/local/services.ts --selfcheck
 
 import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
+import { readFileSync, realpathSync } from 'node:fs'
 import { basename } from 'node:path'
 import { PLATFORM, type Os } from '../platform.ts'
 import { run, which } from '../run.ts'
@@ -118,7 +118,127 @@ export async function composeAction(name: string, action: Action) {
   return found
 }
 
+// ── Encerrar o processo dono de uma porta ──
+// Linux/macOS: sinal TERM (pede para sair) ou KILL (forçado). Windows não tem sinais: taskkill pede o
+// fechamento, e taskkill /F encerra à força.
+export function killCommand(os: Os, pid: number, force: boolean): string[] {
+  if (os === 'win32') return ['taskkill', '/PID', String(pid), ...(force ? ['/F'] : [])]
+  return ['kill', force ? '-KILL' : '-TERM', String(pid)]
+}
+
+const alive = (pid: number) => {
+  try {
+    process.kill(pid, 0) // sinal 0 só testa se o processo existe
+    return true
+  } catch (e) {
+    return (e as NodeJS.ErrnoException).code === 'EPERM' // existe, mas é de outro usuário
+  }
+}
+
+// Processos do próprio painel (servidor e Vite) rodam com a pasta de trabalho no projeto. No Linux dá para
+// saber pelo /proc; no macOS e no Windows sobra só o PID do servidor.
+const PROJECT_DIR = realpathSync(new URL('../../..', import.meta.url).pathname)
+
+export function isPanelProcess(pid: number | null, os: Os = PLATFORM.os): boolean {
+  if (!pid) return false
+  if (pid === process.pid) return true
+  if (os !== 'linux') return false
+  try {
+    const cwd = realpathSync(`/proc/${pid}/cwd`)
+    return cwd === PROJECT_DIR || cwd.startsWith(`${PROJECT_DIR}/`)
+  } catch {
+    return false // processo de outro usuário ou que já terminou
+  }
+}
+
+// O PID só vale se estiver na listagem de portas agora: nada de matar processo arbitrário.
+export async function killPortOwner(pid: number, force: boolean, os: Os = PLATFORM.os) {
+  if (!Number.isInteger(pid) || pid <= 1) throw new Error('PID inválido')
+  if (isPanelProcess(pid, os)) throw new Error('este processo é do próprio painel; encerrá-lo derrubaria esta tela')
+  const port = (await listPorts(os)).find(p => p.pid === pid)
+  if (!port) throw new Error('nenhuma porta em escuta pertence a esse PID agora; atualize a tela')
+  const [bin, ...args] = killCommand(os, pid, force)
+  try {
+    await run(bin, args, 15_000)
+  } catch (e) {
+    const msg = (e as Error).message
+    if (/not permitted|EPERM|Access is denied|Acesso negado/i.test(msg)) throw new Error('sem permissão: o processo é de outro usuário (root ou serviço do sistema)')
+    throw e
+  }
+  // TERM é um pedido: o processo pode demorar ou ignorar. Espera um pouco e diz o que aconteceu.
+  for (let i = 0; i < 10 && os !== 'win32' && alive(pid); i++) await new Promise(r => setTimeout(r, 300))
+  const stillAlive = os === 'win32' ? (await listPorts(os)).some(p => p.pid === pid) : alive(pid)
+  return { port, stillAlive }
+}
+
+// ── Imagens e volumes ──
+export type Image = { id: string; repository: string; tag: string; size: string; created: string; inUse: boolean }
+export type Volume = { name: string; driver: string; inUse: boolean }
+
+type DockerImage = { ID: string; Repository: string; Tag: string; Size: string; CreatedSince: string }
+
+export function parseImages(out: string, containers: Container[]): Image[] {
+  const used = new Set(containers.map(c => c.image))
+  return out.split('\n').filter(Boolean).map(l => {
+    const i = JSON.parse(l) as DockerImage
+    const ref = i.Tag && i.Tag !== '<none>' ? `${i.Repository}:${i.Tag}` : i.Repository
+    const inUse = used.has(ref) || used.has(i.Repository) || [...used].some(u => i.ID.startsWith(u) || u.startsWith(i.ID))
+    return { id: i.ID, repository: i.Repository, tag: i.Tag, size: i.Size, created: i.CreatedSince, inUse }
+  })
+}
+
+export async function listImages(containers: Container[]) {
+  return parseImages(await run('docker', ['image', 'ls', '--format', '{{json .}}'], 20_000), containers)
+}
+
+export async function listVolumes(): Promise<Volume[]> {
+  const raw = await run('docker', ['volume', 'ls', '--format', '{{json .}}'], 20_000)
+  // Volumes montados em qualquer container (rodando ou parado): apagar falharia e perderia o vínculo.
+  const mounts = await run('docker', ['ps', '-a', '--format', '{{.Mounts}}'], 20_000).catch(() => '')
+  const used = new Set(mounts.split(/[\n,]/).map(s => s.trim()).filter(Boolean))
+  return raw.split('\n').filter(Boolean).map(l => {
+    const v = JSON.parse(l) as { Name: string; Driver: string }
+    return { name: v.Name, driver: v.Driver, inUse: used.has(v.Name) }
+  })
+}
+
+// Remoção sem -f: o Docker recusa o que está em uso, e essa recusa é a trava que queremos.
+export async function removeContainer(id: string) {
+  const found = (await listContainers()).find(c => c.id === id)
+  if (!found) throw new Error('container não encontrado na listagem atual; atualize a tela')
+  if (found.state === 'running') throw new Error('o container está rodando; pare antes de apagar')
+  await run('docker', ['rm', found.id], 60_000)
+  return found.name
+}
+
+export async function removeImage(id: string) {
+  const found = (await listImages(await listContainers())).find(i => i.id === id)
+  if (!found) throw new Error('imagem não encontrada na listagem atual; atualize a tela')
+  await run('docker', ['image', 'rm', found.id], 120_000)
+  return found.tag && found.tag !== '<none>' ? `${found.repository}:${found.tag}` : found.id
+}
+
+export async function removeVolume(name: string) {
+  const found = (await listVolumes()).find(v => v.name === name)
+  if (!found) throw new Error('volume não encontrado na listagem atual; atualize a tela')
+  await run('docker', ['volume', 'rm', found.name], 60_000)
+  return found.name
+}
+
 if (import.meta.main && process.argv.includes('--selfcheck')) {
+  assert.deepEqual(killCommand('linux', 1234, false), ['kill', '-TERM', '1234'])
+  assert.deepEqual(killCommand('darwin', 1234, true), ['kill', '-KILL', '1234'])
+  assert.deepEqual(killCommand('win32', 1234, false), ['taskkill', '/PID', '1234'])
+  assert.deepEqual(killCommand('win32', 1234, true), ['taskkill', '/PID', '1234', '/F'])
+  await assert.rejects(killPortOwner(process.pid, false), /próprio painel/)
+  assert.equal(isPanelProcess(process.pid), true)
+  assert.equal(isPanelProcess(null), false)
+  await assert.rejects(killPortOwner(1, false), /PID inválido/)
+  await assert.rejects(killPortOwner(999999999, false), /nenhuma porta/)
+  const imgs = parseImages('{"ID":"sha256abc","Repository":"ollama/ollama","Tag":"latest","Size":"3GB","CreatedSince":"2 weeks ago"}\n{"ID":"def456","Repository":"<none>","Tag":"<none>","Size":"1GB","CreatedSince":"1 month ago"}',
+    [{ id: 'x', name: 'ollama', image: 'ollama/ollama', state: 'running', status: '', ports: '', project: null }])
+  assert.deepEqual(imgs.map(i => i.inUse), [true, false], 'imagem sem tag na referência do container ainda conta como em uso')
+
   const ss = [
     'LISTEN 0      4096       127.0.0.1:39855 0.0.0.0:* users:(("language_server",pid=459956,fd=22))',
     'LISTEN 0      4096   127.0.0.53%lo:53    0.0.0.0:*',

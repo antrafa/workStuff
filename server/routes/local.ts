@@ -1,18 +1,24 @@
 import { Router } from 'express'
 import { PLATFORM } from '../lib/platform.ts'
-import { checkAction, composeAction, containerAction, dockerAvailable, listCompose, listContainers, listPorts } from '../lib/local/services.ts'
+import {
+  checkAction, composeAction, containerAction, dockerAvailable, isPanelProcess, killCommand, killPortOwner, listCompose, listContainers, listImages, listPorts, listVolumes,
+  removeContainer, removeImage, removeVolume,
+} from '../lib/local/services.ts'
 
 export const localRouter = Router()
 
 localRouter.get('/services', async (_req, res) => {
   try {
     const docker = await dockerAvailable()
-    const [ports, containers, compose] = await Promise.all([
+    const [ports, containers, compose, volumes] = await Promise.all([
       listPorts(),
       docker ? listContainers() : Promise.resolve([]),
       docker ? listCompose() : Promise.resolve([]),
+      docker ? listVolumes() : Promise.resolve([]),
     ])
-    res.json({ platform: PLATFORM.label, ports, docker, containers, compose })
+    const images = docker ? await listImages(containers) : []
+    // panel: processo do próprio painel, que a tela não oferece encerrar; os: para mostrar o comando certo.
+    res.json({ platform: PLATFORM.label, os: PLATFORM.os, ports: ports.map(p => ({ ...p, panel: isPanelProcess(p.pid) })), docker, containers, compose, images, volumes })
   } catch (e) {
     res.status(500).json({ error: (e as Error).message })
   }
@@ -38,5 +44,56 @@ localRouter.post('/compose/:name/:action', async (req, res) => {
     res.json({ ok: true })
   } catch (e) {
     res.status(400).json({ error: (e as Error).message.split('\n').slice(-2).join(' ').slice(0, 400) })
+  }
+})
+
+// Recusas do Docker em português; o resto segue com a mensagem original, encurtada.
+function explainDocker(msg: string) {
+  if (/volume is in use/i.test(msg)) return 'o Docker recusou: o volume está montado em algum container; apague o container antes'
+  if (/image is being used|image has dependent child|unable to remove repository reference|conflict: unable to (delete|remove)/i.test(msg)) return 'o Docker recusou: a imagem é usada por algum container (ou por outra imagem); apague o que depende dela antes'
+  if (/cannot remove a running container|container is running/i.test(msg)) return 'o container está rodando; pare antes de apagar'
+  return msg.split('\n').filter(Boolean).slice(-2).join(' ').slice(0, 400)
+}
+
+const fail = (res: import('express').Response, e: unknown) => res.status(400).json({ error: explainDocker((e as Error).message) })
+
+// Encerrar o processo dono de uma porta. force: KILL no Linux/macOS, taskkill /F no Windows.
+localRouter.post('/ports/:pid/kill', async (req, res) => {
+  try {
+    const pid = Number(req.params.pid)
+    const force = req.body?.force === true
+    const { port, stillAlive } = await killPortOwner(pid, force)
+    console.log(`[local] ${killCommand(PLATFORM.os, pid, force).join(' ')} (porta ${port.port}, ${port.process ?? 'processo'}) → ${stillAlive ? 'ainda vivo' : 'encerrado'}`)
+    res.json({ ok: true, stillAlive })
+  } catch (e) {
+    fail(res, e)
+  }
+})
+
+// Apagar container, imagem ou volume. Sem -f de propósito: o Docker recusa o que está em uso.
+localRouter.delete('/containers/:id', async (req, res) => {
+  try {
+    console.log(`[local] docker rm ${await removeContainer(String(req.params.id))}`)
+    res.json({ ok: true })
+  } catch (e) {
+    fail(res, e)
+  }
+})
+
+localRouter.delete('/images/:id', async (req, res) => {
+  try {
+    console.log(`[local] docker image rm ${await removeImage(String(req.params.id))}`)
+    res.json({ ok: true })
+  } catch (e) {
+    fail(res, e)
+  }
+})
+
+localRouter.delete('/volumes/:name', async (req, res) => {
+  try {
+    console.log(`[local] docker volume rm ${await removeVolume(String(req.params.name))}`)
+    res.json({ ok: true })
+  } catch (e) {
+    fail(res, e)
   }
 })

@@ -1,11 +1,12 @@
 import { AlertTriangle, FlaskConical, Menu, Moon, Settings, Sun } from 'lucide-react'
 import { Suspense, useEffect, useState } from 'react'
 import { Link, NavLink, Outlet, useLocation } from 'react-router'
-import { SkeletonRows } from '@/ui'
+import { PageHelpContext, SkeletonRows } from '@/ui'
 import { useHiddenPaths } from './menu'
 import { NAV, findNav } from './nav'
 import { AppIcon } from './AppIcon'
-import { HelpButton } from './HelpButton'
+import { HelpModal } from './HelpModal'
+import { helpFor } from './help'
 import { setTheme, useTheme } from './theme'
 import { refreshSession, useClusterShared } from '@/features/cluster/api'
 import { EnvBadge } from '@/features/cluster/KubeconfigBar'
@@ -19,9 +20,15 @@ export function Layout() {
   const dark = document.documentElement.dataset.theme !== 'light'
   const hidden = useHiddenPaths()
   const [navOpen, setNavOpen] = useState(false)
+  const [helpOpen, setHelpOpen] = useState(false)
+  const help = helpFor(pathname)
+  const pageHelp = help ? { purpose: help.purpose, open: () => setHelpOpen(true) } : null
 
   // No celular o menu é gaveta: fecha sozinho ao trocar de tela.
-  useEffect(() => setNavOpen(false), [pathname])
+  useEffect(() => {
+    setNavOpen(false)
+    setHelpOpen(false)
+  }, [pathname])
 
   return (
     <div className={`shell ${navOpen ? 'nav-open' : ''}`}>
@@ -88,7 +95,6 @@ export function Layout() {
               {cluster.problems} pods com problema
             </Link>
           )}
-          <HelpButton key={pathname} pathname={pathname} title={current?.item.label ?? 'Configurações'} />
           <button
             className="btn btn-ghost btn-icon"
             onClick={() => setTheme(dark ? 'light' : 'dark')}
@@ -106,9 +112,12 @@ export function Layout() {
               </span>
             </div>
           )}
-          <Suspense fallback={<SkeletonRows rows={6} height={56} />}>
-            <Outlet />
-          </Suspense>
+          <PageHelpContext.Provider value={pageHelp}>
+            <Suspense fallback={<SkeletonRows rows={6} height={56} />}>
+              <Outlet />
+            </Suspense>
+          </PageHelpContext.Provider>
+          {helpOpen && <HelpModal pathname={pathname} title={current?.item.label ?? 'Configurações'} onClose={() => setHelpOpen(false)} />}
         </main>
       </div>
     </div>
