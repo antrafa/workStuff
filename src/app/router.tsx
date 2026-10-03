@@ -36,8 +36,11 @@ export const router = createBrowserRouter([
           { path: 'servicos', element: page(() => import('@/features/local/LocalPage')) },
           { path: 'agenda', element: page(() => import('@/features/schedules/SchedulesPage')) },
           { path: 'gerador', element: page(() => import('@/features/gerador/GeradorPage')) },
+          { path: 'dev-runbooks', element: page(() => import('@/features/devRunbooks/DevRunbooksPage')) },
           { path: 'catalogo', element: page(() => import('@/features/catalog/CatalogPage')) },
+
           { path: 'analise', element: page(() => import('@/features/analysis/AnalysisPage')) },
+          { path: 'playbooks', element: page(() => import('@/features/playbooks/PlaybooksPage')) },
           { path: 'acervo', element: <Navigate to="/catalogo" replace /> },
           { path: 'configuracoes/:secao?', element: page(() => import('@/features/settings/SettingsPage')) },
           { path: '*', element: <Navigate to="/cluster" replace /> },

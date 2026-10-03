@@ -8,7 +8,7 @@ import assert from 'node:assert/strict'
 import { appendFileSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, relative, resolve, sep } from 'node:path'
-import { dataFile } from '../paths.ts'
+import { DEFAULT_RUNBOOKS_DIR, dataFile, expandHome } from '../paths.ts'
 import { readJson, writeJson } from '../jsonFile.ts'
 import { decide } from '../doctorAi/command.ts'
 import { authorizeMutation, type Environment } from '../k8s/policy.ts'
@@ -18,11 +18,23 @@ export type Segment = { type: 'text'; md: string } | { type: 'step'; id: number;
 const CONFIG = dataFile('runbooks.json')
 const AUDIT = dataFile('runbook-audit.log')
 
-export const readRoot = () => readJson<{ root: string | null }>(CONFIG, { root: null }).root
+export const DEFAULT_ROOT = DEFAULT_RUNBOOKS_DIR
+
+export const readRoot = (): string => {
+  const configured = readJson<{ root: string | null }>(CONFIG, { root: null }).root
+  if (configured && configured !== 'default') {
+    const expanded = expandHome(configured)
+    if (statSync(expanded, { throwIfNoEntry: false })?.isDirectory()) {
+      return expanded
+    }
+  }
+  return DEFAULT_ROOT
+}
 export const saveRoot = (root: string) => writeJson(CONFIG, { root })
 
 export function listRunbooks(root: string): { file: string; title: string }[] {
   const out: { file: string; title: string }[] = []
+  if (!statSync(root, { throwIfNoEntry: false })?.isDirectory()) return out
   const walk = (dir: string, depth: number) => {
     if (depth > 3 || out.length >= 300) return
     for (const name of readdirSync(dir).sort()) {
@@ -166,5 +178,10 @@ if (import.meta.main && process.argv.includes('--selfcheck')) {
   } finally {
     rmSync(root, { recursive: true, force: true })
   }
+
+  assert.ok(statSync(DEFAULT_ROOT, { throwIfNoEntry: false })?.isDirectory(), 'pasta padrão do projeto existe')
+  assert.ok(listRunbooks(DEFAULT_ROOT).length >= 10, 'runbooks padrão do projeto encontrados')
+  assert.equal(readRoot(), DEFAULT_ROOT, 'readRoot sem config retorna DEFAULT_ROOT')
   console.log('runbooks selfcheck: ok')
 }
+

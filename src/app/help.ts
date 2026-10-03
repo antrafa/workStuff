@@ -260,6 +260,20 @@ export const HELP: Record<string, Help> = {
       'Tudo é gerado no navegador.',
     ],
   },
+  '/dev-runbooks': {
+    purpose: 'Executa procedimentos e rotinas locais de desenvolvimento: comandos de Git, Docker e Node executáveis pelo painel com confirmação.',
+    steps: [
+      'Escolha um runbook na barra lateral (ou aponte para sua própria pasta de runbooks locais).',
+      'Preencha as variáveis como projeto, branch ou container se necessário.',
+      'Clique em "Rodar" nos passos de leitura.',
+      'Nos passos com modificação (escrita), confira o comando e confirme a execução.',
+    ],
+    notes: [
+      'Apenas ferramentas de desenvolvimento homologadas podem ser executadas (git, docker, npm, etc.).',
+      'Comandos de escrita mostram o comando exato e o diretório antes de rodar.',
+      'Cada execução fica registrada em ~/.workstuff/dev-runbook-audit.log.',
+    ],
+  },
   '/catalogo': {
     purpose: 'Reúne as skills, prompts, rules, personas e templates das suas pastas e ativa cada um nos agentes de IA (Claude Code, Codex, Gemini, OpenCode).',
     steps: [
@@ -284,6 +298,20 @@ export const HELP: Record<string, Help> = {
     notes: [
       'Se o commit do projeto não mudou, a tela mostra o relatório anterior sem gastar de novo.',
       'Com um graphify-out/graph.html no projeto, a aba de grafo mostra a visualização.',
+    ],
+  },
+  '/playbooks': {
+    purpose: 'Executa procedimentos e receitas guiadas de engenharia com a IA: cada bloco prompt vira um passo executado pelo modelo com streaming.',
+    steps: [
+      'Escolha um playbook na barra lateral (ou aponte para sua própria pasta).',
+      'Preencha as variáveis solicitadas (ex.: projeto, tarefa, contexto).',
+      'Clique em "Executar com IA" em cada passo ou "Executar todos".',
+      'Acompanhe o streaming da resposta e copie o resultado gerado.',
+    ],
+    notes: [
+      'Usa o provedor e modelo configurados na tela Configurações.',
+      'A variável {{passo_anterior}} injeta automaticamente a resposta do passo anterior.',
+      'A IA roda em modo leitura sem alterar arquivos diretamente.',
     ],
   },
   '/configuracoes': {

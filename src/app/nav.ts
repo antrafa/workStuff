@@ -1,7 +1,9 @@
 import {
-  Activity, ArrowUpCircle, BellRing, BookOpen, Cpu, Dices, FileSearch, GitBranch, GitCompare, GitPullRequest, History, ScrollText, Server, ServerCog, ShieldAlert, Sparkles, Stethoscope, Users, Workflow, Wrench,
+  Activity, ArrowUpCircle, BellRing, BookOpen, Bot, Cpu, Dices, FileSearch, GitBranch, GitCompare, GitPullRequest, History, ScrollText, Server, ServerCog, ShieldAlert, Sparkles, Stethoscope, Terminal, Users, Workflow, Wrench,
   type LucideIcon,
 } from 'lucide-react'
+
+
 
 // mock: a tela ainda usa dados de exemplo; some quando a funcionalidade for portada.
 export type NavItem = { path: string; label: string; hint: string; icon: LucideIcon; mock?: true }
@@ -40,15 +42,19 @@ export const NAV: NavGroup[] = [
       { path: '/servicos', label: 'Serviços locais', hint: 'Portas em escuta, containers e projetos compose', icon: Server },
       { path: '/agenda', label: 'Verificações agendadas', hint: 'Avisa quando pipeline, certificado ou pods mudam de estado', icon: BellRing },
       { path: '/gerador', label: 'Gerador de dados', hint: 'CPF, CNPJ, pessoa e empresa de teste', icon: Dices },
+      { path: '/dev-runbooks', label: 'Runbooks de dev', hint: 'Procedimentos e comandos locais para o dia a dia do dev', icon: Terminal },
     ],
   },
+
   {
     label: 'IA',
     items: [
       { path: '/catalogo', label: 'Catálogo', hint: 'Skills, prompts, rules e personas das suas pastas', icon: Sparkles },
       { path: '/analise', label: 'Análise', hint: 'Arquitetura de um projeto via IA', icon: FileSearch },
+      { path: '/playbooks', label: 'Playbooks', hint: 'Procedimentos e receitas executados pela IA via streaming', icon: Bot },
     ],
   },
+
 ]
 
 export function findNav(pathname: string) {

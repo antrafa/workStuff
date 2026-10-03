@@ -1,10 +1,11 @@
 import { Router, type Request, type Response } from 'express'
 import { readFileSync, statSync } from 'node:fs'
+import { resolve } from 'node:path'
 import { pickFolder } from '../lib/desktop.ts'
 import { expandHome, tildify } from '../lib/paths.ts'
 import { ClusterError, activeSession } from '../lib/k8s/cluster.ts'
 import { kubectl } from '../lib/k8s/kubectl.ts'
-import { audit, classify, listRunbooks, parseRunbook, readRoot, runbookPath, saveRoot } from '../lib/runbooks/runbooks.ts'
+import { DEFAULT_ROOT, audit, classify, listRunbooks, parseRunbook, readRoot, runbookPath, saveRoot } from '../lib/runbooks/runbooks.ts'
 
 export const runbooksRouter = Router()
 
@@ -24,13 +25,25 @@ function requireRoot() {
 
 runbooksRouter.get('/', handle(() => {
   const root = readRoot()
-  return { root: root ? tildify(root) : null, runbooks: root ? listRunbooks(root) : [] }
+  const isDefault = resolve(root) === resolve(DEFAULT_ROOT)
+  return {
+    root: root ? tildify(root) : null,
+    isDefault,
+    defaultRoot: tildify(DEFAULT_ROOT),
+    runbooks: root ? listRunbooks(root) : [],
+  }
 }))
 
 runbooksRouter.put('/root', handle(req => {
-  const root = expandHome(String(req.body?.root ?? '').trim())
+  const raw = String(req.body?.root ?? '').trim()
+  if (!raw || raw === 'default') {
+    saveRoot('default')
+    return { ok: true, root: tildify(DEFAULT_ROOT), isDefault: true }
+  }
+  const root = expandHome(raw)
   if (!statSync(root, { throwIfNoEntry: false })?.isDirectory()) throw new Error(`pasta não encontrada: ${root}`)
   saveRoot(root)
+  return { ok: true, root: tildify(root), isDefault: resolve(root) === resolve(DEFAULT_ROOT) }
 }))
 
 runbooksRouter.post('/pick-folder', handle(async () => ({ path: await pickFolder('Pasta dos runbooks') })))

@@ -1,8 +1,8 @@
 import './runbooks.css'
-import { BookOpen, FolderOpen, Lock, Play, Zap } from 'lucide-react'
+import { BookOpen, FolderOpen, Lock, Play, RotateCcw, Zap } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router'
-import { Async, ConfirmModal, Empty, Markdown, Page, SkeletonRows } from '@/ui'
+import { Async, ConfirmModal, Empty, Markdown, Modal, Page, SkeletonRows } from '@/ui'
 import { api } from '@/lib/api'
 import { useAsync } from '@/lib/useAsync'
 
@@ -11,17 +11,32 @@ type Segment = { type: 'text'; md: string } | { type: 'step'; id: number; line: 
 type Doc = { session: { context: string; environment: string | null } | null; segments: Segment[] }
 type Result = { ok: boolean; command: string; output: string }
 
+type RunbooksListResponse = {
+  root: string | null
+  isDefault?: boolean
+  defaultRoot?: string
+  runbooks: { file: string; title: string }[]
+}
+
 export default function RunbooksPage() {
-  const list = useAsync(() => api.get<{ root: string | null; runbooks: { file: string; title: string }[] }>('/runbooks'))
+  const list = useAsync(() => api.get<RunbooksListResponse>('/runbooks'))
   const [file, setFile] = useState<string | null>(null)
   const [rootInput, setRootInput] = useState('')
   const [error, setError] = useState<string | null>(null)
+  const [modalOpen, setModalOpen] = useState(false)
+
+  useEffect(() => {
+    if (!file && list.data?.runbooks && list.data.runbooks.length > 0) {
+      setFile(list.data.runbooks[0].file)
+    }
+  }, [list.data, file])
 
   const setRoot = async (root: string) => {
     setError(null)
     try {
       await api.put('/runbooks/root', { root })
       setFile(null)
+      setModalOpen(false)
       list.reload()
     } catch (e) {
       setError((e as Error).message)
@@ -29,7 +44,7 @@ export default function RunbooksPage() {
   }
   const pick = async () => {
     const { path } = await api.post<{ path: string | null }>('/runbooks/pick-folder').catch(e => (setError((e as Error).message), { path: null }))
-    if (path) setRoot(path)
+    if (path) await setRoot(path)
   }
 
   return (
@@ -53,7 +68,19 @@ export default function RunbooksPage() {
         ) : (
           <div className="rb-layout">
             <aside className="card rb-list">
-              <div className="card-head"><div className="card-title spacer mono" title={d.root}>{d.root}</div><button className="btn btn-ghost btn-sm" onClick={pick}>Trocar</button></div>
+              <div className="card-head">
+                <div className="card-title spacer mono" style={{ minWidth: 0 }} title={d.root}>
+                  <div className="row" style={{ alignItems: 'center', gap: 6, flexWrap: 'nowrap' }}>
+                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {d.isDefault ? 'Runbooks do projeto' : d.root}
+                    </span>
+                    {d.isDefault && <span className="badge badge-info" style={{ fontSize: 10, flexShrink: 0 }}>projeto</span>}
+                  </div>
+                </div>
+                <button className="btn btn-ghost btn-sm" onClick={() => (setRootInput(d.root ?? ''), setModalOpen(true))}>
+                  Trocar
+                </button>
+              </div>
               {d.runbooks.length === 0 ? <p className="muted card-pad" style={{ fontSize: 12.5 }}>Nenhum .md nesta pasta.</p> : d.runbooks.map(r => (
                 <button key={r.file} className={`rb-item${r.file === file ? ' rb-active' : ''}`} onClick={() => setFile(r.file)}>
                   <div>{r.title}</div><div className="muted mono" style={{ fontSize: 11 }}>{r.file}</div>
@@ -64,6 +91,38 @@ export default function RunbooksPage() {
           </div>
         )}
       </Async>
+
+      {modalOpen && list.data && (
+        <Modal title="Pasta dos runbooks" onClose={() => setModalOpen(false)} width={520}>
+          <div className="stack">
+            <p className="muted" style={{ fontSize: 13 }}>
+              Você pode carregar runbooks a partir de qualquer pasta no computador ou usar os runbooks incluídos no projeto.
+            </p>
+            <form className="row" onSubmit={e => (e.preventDefault(), setRoot(rootInput))}>
+              <input
+                className="input mono spacer"
+                value={rootInput}
+                onChange={e => setRootInput(e.target.value)}
+                placeholder="~/runbooks"
+              />
+              <button type="button" className="btn" onClick={pick}>
+                <FolderOpen size={14} /> Escolher…
+              </button>
+              <button className="btn btn-primary" disabled={!rootInput.trim() || rootInput === list.data.root}>
+                Usar pasta
+              </button>
+            </form>
+            {!list.data.isDefault && (
+              <div style={{ paddingTop: 10, borderTop: '1px solid var(--line)' }}>
+                <button type="button" className="btn btn-ghost btn-sm" onClick={() => setRoot('default')}>
+                  <RotateCcw size={13} /> Voltar para runbooks do projeto
+                </button>
+              </div>
+            )}
+            {error && <div className="callout callout-crit" style={{ fontSize: 12.5 }}>{error}</div>}
+          </div>
+        </Modal>
+      )}
     </Page>
   )
 }
