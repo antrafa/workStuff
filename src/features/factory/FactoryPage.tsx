@@ -19,42 +19,33 @@ import { TaskReviewDrawer } from './TaskReviewDrawer'
 import { StandaloneAgentTab } from './StandaloneAgentTab'
 import { FactoryTimelineGrid } from './timeline/FactoryTimelineGrid'
 import { FactoryTraceVisualizer } from './timeline/FactoryTraceVisualizer'
+import { isTaskRunning } from './factoryRun'
 
 export default function FactoryPage() {
   const [activeTab, setActiveTab] = useState<'timeline' | 'board' | 'agents'>('timeline')
   const [modalOpen, setModalOpen] = useState(false)
-  const [selectedTask, setSelectedTask] = useState<FactoryTask | null>(null)
+  // The drawer reads the task from the polled list by id, so it never shows a stale copy
+  const [selectedId, setSelectedId] = useState<string | null>(null)
   const [visualizerTask, setVisualizerTask] = useState<FactoryTask | null>(null)
 
   const tasksLoader = useAsync(() => api.get<FactoryTask[]>('/factory/tasks'))
 
-  // Periodic light refresh when tasks are running or visualizer is open
+  // The board refreshes itself while something runs; the trace visualizer polls its own task
+  const hasActive = Boolean(tasksLoader.data?.some(isTaskRunning))
   useEffect(() => {
-    const hasActive = tasksLoader.data?.some(
-      t => Boolean(t.executing) || t.state === 'planning' || t.state === 'building' || t.state === 'qa_security'
-    )
-    if (!hasActive && !visualizerTask) return
-
-    const intervalMs = hasActive ? 2500 : 8000
-    const interval = setInterval(() => {
-      tasksLoader.reload()
-      if (visualizerTask) {
-        api.get<FactoryTask>(`/factory/tasks/${visualizerTask.id}`)
-          .then(setVisualizerTask)
-          .catch(() => {})
-      }
-    }, intervalMs)
-
+    if (!hasActive) return
+    const interval = setInterval(tasksLoader.reload, 2500)
     return () => clearInterval(interval)
-  }, [tasksLoader.data, visualizerTask])
+  }, [hasActive])
 
   const tasks = tasksLoader.data ?? []
-  const activeCount = tasks.filter(t => t.state !== 'done' && t.state !== 'canceled').length
+  const selectedTask = tasks.find(t => t.id === selectedId) ?? null
+  const activeCount = tasks.filter(isTaskRunning).length
   const reviewCount = tasks.filter(t => t.state === 'review' || t.state === 'waiting_approval').length
   const doneCount = tasks.filter(t => t.state === 'done').length
 
   const handleSelectTask = (task: FactoryTask) => {
-    setSelectedTask(task)
+    setSelectedId(task.id)
   }
 
   const handleOpenTrace = (task: FactoryTask) => {
@@ -67,25 +58,13 @@ export default function FactoryPage() {
       await api.delete(`/factory/tasks/${task.id}`)
       handleRefresh()
       if (visualizerTask?.id === task.id) setVisualizerTask(null)
-      if (selectedTask?.id === task.id) setSelectedTask(null)
+      if (selectedId === task.id) setSelectedId(null)
     } catch (e) {
       alert((e as Error).message)
     }
   }
 
-  const handleRefresh = () => {
-    tasksLoader.reload()
-    if (selectedTask) {
-      api.get<FactoryTask>(`/factory/tasks/${selectedTask.id}`)
-        .then(setSelectedTask)
-        .catch(() => setSelectedTask(null))
-    }
-    if (visualizerTask) {
-      api.get<FactoryTask>(`/factory/tasks/${visualizerTask.id}`)
-        .then(setVisualizerTask)
-        .catch(() => setVisualizerTask(null))
-    }
-  }
+  const handleRefresh = () => tasksLoader.reload()
 
   return (
     <Page
@@ -111,6 +90,10 @@ export default function FactoryPage() {
           <FactoryTraceVisualizer
             task={visualizerTask}
             onBack={() => setVisualizerTask(null)}
+            onOpenReview={t => {
+              setVisualizerTask(null)
+              setSelectedId(t.id)
+            }}
             onUpdate={handleRefresh}
           />
         ) : (
@@ -144,9 +127,9 @@ export default function FactoryPage() {
               <div className="row" style={{ gap: 12, fontSize: 12, color: 'var(--muted)' }}>
                 <span>Em andamento: <b>{activeCount}</b></span>
                 <span>·</span>
-                <span>Aguardando você: <b style={{ color: reviewCount > 0 ? 'var(--accent)' : undefined }}>{reviewCount}</b></span>
+                <span>Aguardando você: <b style={{ color: reviewCount > 0 ? 'var(--signal)' : undefined }}>{reviewCount}</b></span>
                 <span>·</span>
-                <span>Concluídas: <b style={{ color: 'var(--green)' }}>{doneCount}</b></span>
+                <span>Concluídas: <b style={{ color: 'var(--ok)' }}>{doneCount}</b></span>
               </div>
             </div>
 
@@ -205,8 +188,9 @@ export default function FactoryPage() {
 
         {/* Task review drawer */}
         <TaskReviewDrawer
+          key={selectedTask?.id}
           task={selectedTask}
-          onClose={() => setSelectedTask(null)}
+          onClose={() => setSelectedId(null)}
           onUpdate={handleRefresh}
         />
       </div>

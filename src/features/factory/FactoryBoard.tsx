@@ -13,8 +13,10 @@ import {
   Terminal,
 } from 'lucide-react'
 import { api } from '@/lib/api'
-import type { FactoryTask } from '../../../server/lib/factory/types.ts'
+import type { FactoryTask, FactoryTaskState } from '../../../server/lib/factory/types.ts'
 import { FactoryLiveConsole } from './FactoryLiveConsole'
+import { isTaskRunning } from './factoryRun'
+import { FactoryStatusChip } from './timeline/FactoryStatusChip'
 
 type Props = {
   tasks: FactoryTask[]
@@ -22,6 +24,30 @@ type Props = {
   onUpdate: () => void
   onOpenTrace?: (task: FactoryTask) => void
 }
+
+type ColumnId = 'intake' | 'planning' | 'building' | 'review' | 'done'
+
+// Exhaustive on purpose: a new state that is not placed here fails the typecheck
+// instead of silently vanishing from the board.
+const COLUMN_OF: Record<FactoryTaskState, ColumnId> = {
+  intake: 'intake',
+  planning: 'planning',
+  waiting_approval: 'planning',
+  error: 'planning',
+  building: 'building',
+  qa_security: 'building',
+  review: 'review',
+  done: 'done',
+  canceled: 'done',
+}
+
+const COLUMNS: Array<{ id: ColumnId; title: string; color: string }> = [
+  { id: 'intake', title: 'Entrada', color: 'var(--muted)' },
+  { id: 'planning', title: 'Planejamento', color: 'var(--fx-architect)' },
+  { id: 'building', title: 'Construção e QA', color: 'var(--fx-implementer)' },
+  { id: 'review', title: 'Revisão', color: 'var(--fx-reviewer)' },
+  { id: 'done', title: 'Concluído', color: 'var(--ok)' },
+]
 
 export function FactoryBoard({ tasks, onSelectTask, onUpdate, onOpenTrace }: Props) {
   const [consoleTask, setConsoleTask] = useState<FactoryTask | null>(null)
@@ -48,22 +74,13 @@ export function FactoryBoard({ tasks, onSelectTask, onUpdate, onOpenTrace }: Pro
     }
   }
 
-  // Filtragem por colunas
-  const intakeTasks = tasks.filter(t => t.state === 'intake')
-  const planningTasks = tasks.filter(
-    t => t.state === 'planning' || t.state === 'waiting_approval' || (t.state === 'error' && !t.plan)
-  )
-  const buildingTasks = tasks.filter(t => t.state === 'building' || t.state === 'qa_security')
-  const reviewTasks = tasks.filter(t => t.state === 'review' || (t.state === 'error' && t.plan))
-  const doneTasks = tasks.filter(t => t.state === 'done')
-
-  const columns = [
-    { id: 'intake', title: 'Entrada', badge: intakeTasks.length, items: intakeTasks, color: 'var(--muted)' },
-    { id: 'planning', title: 'Planejamento', badge: planningTasks.length, items: planningTasks, color: 'var(--accent)' },
-    { id: 'building', title: 'Construção & QA', badge: buildingTasks.length, items: buildingTasks, color: '#eab308' },
-    { id: 'review', title: 'Revisão', badge: reviewTasks.length, items: reviewTasks, color: '#a855f7' },
-    { id: 'done', title: 'Concluído', badge: doneTasks.length, items: doneTasks, color: '#22c55e' },
-  ]
+  const columnOf = (t: FactoryTask): ColumnId =>
+    // A failed build has a worktree: it fails where it was, not back in planning
+    t.state === 'error' && t.worktreePath ? 'building' : COLUMN_OF[t.state]
+  const columns = COLUMNS.map(c => {
+    const items = tasks.filter(t => columnOf(t) === c.id)
+    return { ...c, items, badge: items.length }
+  })
 
   return (
     <div style={{ width: '100%', minWidth: 0 }}>
@@ -89,8 +106,8 @@ export function FactoryBoard({ tasks, onSelectTask, onUpdate, onOpenTrace }: Pro
               key={col.id}
               className="stack"
               style={{
-                background: 'var(--surface-active, rgba(255,255,255,0.02))',
-                borderRadius: 'var(--r-lg, 12px)',
+                background: 'var(--surface-3)',
+                borderRadius: 'var(--r-lg)',
                 padding: 14,
                 minHeight: 520,
                 border: '1px solid var(--line)',
@@ -133,55 +150,36 @@ export function FactoryBoard({ tasks, onSelectTask, onUpdate, onOpenTrace }: Pro
                   </div>
                 ) : (
                   col.items.map(task => {
-                    const isTaskRunning = task.state === 'planning' || task.state === 'building' || task.state === 'qa_security' || Boolean(task.executing)
+                    const isRunning = isTaskRunning(task)
                     const hasError = task.state === 'error' || Boolean(task.error)
                     const isWaitingApproval = task.state === 'waiting_approval'
 
                     return (
                       <div
                         key={task.id}
-                        className="card card-pad stack"
+                        className="card card-pad stack factory-card"
                         style={{
                           cursor: 'pointer',
                           padding: 14,
                           gap: 10,
-                          transition: 'transform 0.15s, border-color 0.15s, box-shadow 0.15s',
-                          border: hasError
-                            ? '1px solid var(--red)'
+                          borderColor: hasError
+                            ? 'var(--crit)'
                             : isWaitingApproval
-                            ? '1px solid var(--accent)'
-                            : isTaskRunning
-                            ? '1px solid #5ad2dd'
-                            : '1px solid var(--line)',
-                          background: isTaskRunning ? 'rgba(90, 210, 221, 0.03)' : undefined,
+                            ? 'var(--signal)'
+                            : isRunning
+                            ? 'var(--info)'
+                            : undefined,
+                          background: isRunning ? 'var(--info-soft)' : undefined,
                         }}
                         onClick={() => onSelectTask(task)}
                       >
                         {/* Topo do Card: Badge de Estado + Botão de Logs */}
                         <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
-                          <span
-                            className="badge"
-                            style={{
-                              fontSize: 10,
-                              textTransform: 'uppercase',
-                              background: isTaskRunning
-                                ? 'rgba(90, 210, 221, 0.15)'
-                                : hasError
-                                ? 'var(--red-subtle)'
-                                : undefined,
-                              color: isTaskRunning
-                                ? '#5ad2dd'
-                                : hasError
-                                ? 'var(--red)'
-                                : undefined,
-                            }}
-                          >
-                            {task.state}
-                          </span>
+                          <FactoryStatusChip state={task.state} executing={task.executing} />
 
                           <div className="row" style={{ gap: 6, alignItems: 'center' }}>
                             {task.diffStat && (
-                              <span className="mono" style={{ fontSize: 11, color: 'var(--green)' }}>
+                              <span className="mono" style={{ fontSize: 11, color: 'var(--ok)' }}>
                                 +{task.diffStat.insertions}/-{task.diffStat.deletions}
                               </span>
                             )}
@@ -195,7 +193,7 @@ export function FactoryBoard({ tasks, onSelectTask, onUpdate, onOpenTrace }: Pro
                                 height: 22,
                                 fontSize: 11,
                                 gap: 4,
-                                color: isTaskRunning ? '#5ad2dd' : 'var(--muted)',
+                                color: isRunning ? 'var(--info)' : 'var(--muted)',
                               }}
                               onClick={e => handleOpenConsole(task, null, e)}
                               title="Abrir console e acompanhar logs em tempo real"
@@ -206,7 +204,7 @@ export function FactoryBoard({ tasks, onSelectTask, onUpdate, onOpenTrace }: Pro
                         </div>
 
                         {/* Título da Tarefa */}
-                        <div style={{ fontWeight: 600, fontSize: 13, lineHeight: 1.35, color: 'var(--foreground)' }}>
+                        <div style={{ fontWeight: 600, fontSize: 13, lineHeight: 1.35, color: 'var(--ink)' }}>
                           {task.title}
                         </div>
 
@@ -259,7 +257,7 @@ export function FactoryBoard({ tasks, onSelectTask, onUpdate, onOpenTrace }: Pro
                             </div>
                           )}
 
-                          {isTaskRunning && (
+                          {isRunning && (
                             <div className="row" style={{ gap: 6 }}>
                               <button
                                 type="button"
@@ -268,24 +266,18 @@ export function FactoryBoard({ tasks, onSelectTask, onUpdate, onOpenTrace }: Pro
                                   flex: 1,
                                   justifyContent: 'center',
                                   gap: 6,
-                                  borderColor: '#5ad2dd',
-                                  color: '#5ad2dd',
+                                  borderColor: 'var(--info)',
+                                  color: 'var(--info)',
                                 }}
                                 onClick={e => handleOpenConsole(task, null, e)}
                               >
-                                <Activity size={13} style={{ animation: 'spin 2s linear infinite' }} />
+                                <Activity size={13} className="spin" />
                                 Acompanhar
                               </button>
                               <button
                                 type="button"
-                                className="btn btn-sm"
-                                style={{
-                                  borderColor: 'rgba(239, 68, 68, 0.4)',
-                                  color: '#ef4444',
-                                  background: 'rgba(239, 68, 68, 0.1)',
-                                  padding: '0 10px',
-                                  gap: 4,
-                                }}
+                                className="btn btn-sm btn-danger"
+                                style={{ padding: '0 10px', gap: 4 }}
                                 title="Interromper execução da tarefa"
                                 onClick={e => handleStopTask(task, e)}
                                 disabled={stoppingTaskId === task.id}
@@ -300,21 +292,21 @@ export function FactoryBoard({ tasks, onSelectTask, onUpdate, onOpenTrace }: Pro
                             <div className="stack" style={{ gap: 6 }}>
                               <div className="row" style={{ gap: 6, fontSize: 11 }}>
                                 {task.qaReport?.passed ? (
-                                  <span className="row" style={{ color: 'var(--green)', gap: 3 }}>
+                                  <span className="row" style={{ color: 'var(--ok)', gap: 3 }}>
                                     <CheckCircle2 size={12} /> QA ok
                                   </span>
                                 ) : (
-                                  <span className="row" style={{ color: 'var(--yellow)', gap: 3 }}>
+                                  <span className="row" style={{ color: 'var(--warn)', gap: 3 }}>
                                     <AlertCircle size={12} /> QA pendente
                                   </span>
                                 )}
                                 <span>·</span>
                                 {task.securityReport?.passed ? (
-                                  <span className="row" style={{ color: 'var(--green)', gap: 3 }}>
+                                  <span className="row" style={{ color: 'var(--ok)', gap: 3 }}>
                                     <CheckCircle2 size={12} /> Seguro
                                   </span>
                                 ) : (
-                                  <span className="row" style={{ color: 'var(--yellow)', gap: 3 }}>
+                                  <span className="row" style={{ color: 'var(--warn)', gap: 3 }}>
                                     <ShieldAlert size={12} /> Alertas
                                   </span>
                                 )}
@@ -340,7 +332,7 @@ export function FactoryBoard({ tasks, onSelectTask, onUpdate, onOpenTrace }: Pro
                                   display: 'flex',
                                   alignItems: 'center',
                                   gap: 6,
-                                  color: 'var(--red)',
+                                  color: 'var(--crit)',
                                   fontSize: 11,
                                 }}
                               >
@@ -351,11 +343,11 @@ export function FactoryBoard({ tasks, onSelectTask, onUpdate, onOpenTrace }: Pro
                               </div>
                               <button
                                 type="button"
-                                className="btn btn-sm"
-                                style={{ width: '100%', justifyContent: 'center', gap: 6, borderColor: 'var(--red)', color: 'var(--red)' }}
-                                onClick={e => handleOpenConsole(task, task.plan ? 'approve-plan' : 'plan', e)}
+                                className="btn btn-sm btn-danger"
+                                style={{ width: '100%', justifyContent: 'center', gap: 6 }}
+                                onClick={e => handleOpenConsole(task, null, e)}
                               >
-                                <RotateCw size={12} /> Ver Logs & Tentar Novamente
+                                <RotateCw size={12} /> Ver Logs e Tentar Novamente
                               </button>
                             </div>
                           )}
@@ -364,7 +356,7 @@ export function FactoryBoard({ tasks, onSelectTask, onUpdate, onOpenTrace }: Pro
                             <button
                               type="button"
                               className="btn btn-sm"
-                              style={{ width: '100%', justifyContent: 'center', gap: 6, color: 'var(--green)' }}
+                              style={{ width: '100%', justifyContent: 'center', gap: 6, color: 'var(--ok)' }}
                               onClick={e => {
                                 e.stopPropagation()
                                 onSelectTask(task)

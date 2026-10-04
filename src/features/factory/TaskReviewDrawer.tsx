@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import {
   Activity,
   AlertTriangle,
@@ -14,14 +14,14 @@ import {
   RotateCw,
   ShieldAlert,
   Square,
-  Terminal,
   Trash2,
 } from 'lucide-react'
 import { Markdown, Modal } from '@/ui'
 import { api } from '@/lib/api'
-import { streamPost } from '@/lib/stream'
+import { isTaskRunning, runFactoryAction, type FactoryAction } from './factoryRun'
 import type { FactoryTask } from '../../../server/lib/factory/types.ts'
 import { TraceTimeline } from './TraceTimeline'
+import { FactoryStatusChip } from './timeline/FactoryStatusChip'
 
 type Props = {
   task: FactoryTask | null
@@ -29,16 +29,30 @@ type Props = {
   onUpdate: () => void
 }
 
-type Tab = 'diff' | 'qa' | 'security' | 'trace' | 'logs'
+type Tab = 'diff' | 'qa' | 'security' | 'trace'
+
+function diffLineColor(line: string): string | undefined {
+  if (line.startsWith('+++') || line.startsWith('---')) return undefined
+  if (line.startsWith('+')) return 'var(--ok)'
+  if (line.startsWith('-')) return 'var(--crit)'
+  return undefined
+}
 
 export function TaskReviewDrawer({ task, onClose, onUpdate }: Props) {
   const [tab, setTab] = useState<Tab>('diff')
   const [feedback, setFeedback] = useState('')
   const [processing, setProcessing] = useState(false)
   const [logText, setLogText] = useState('')
+  const logRef = useRef<HTMLPreElement | null>(null)
+  useEffect(() => {
+    if (logRef.current) logRef.current.scrollTop = logRef.current.scrollHeight
+  }, [logText])
   const [statusMessage, setStatusMessage] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [taskProvider, setTaskProvider] = useState<'claude' | 'codex' | 'agy'>(task?.provider || 'agy')
+
+  // Every hook must run before this early return, or opening a card crashes the drawer
+  const [stopping, setStopping] = useState(false)
 
   if (!task) return null
 
@@ -47,7 +61,7 @@ export function TaskReviewDrawer({ task, onClose, onUpdate }: Props) {
   const isError = task.state === 'error' || Boolean(task.error)
   const isAuthError =
     task.error && /authenticate|oauth|expired|unauthorized|401|api_key|token/i.test(task.error)
-  const isExecuting = processing || Boolean(task.executing) || ['planning', 'building', 'qa_security'].includes(task.state)
+  const isExecuting = processing || isTaskRunning(task)
 
   const handleProviderChange = async (newProvider: 'claude' | 'codex' | 'agy') => {
     setTaskProvider(newProvider)
@@ -58,8 +72,6 @@ export function TaskReviewDrawer({ task, onClose, onUpdate }: Props) {
       setError((err as Error).message)
     }
   }
-
-  const [stopping, setStopping] = useState(false)
 
   const handleCancelExecution = async () => {
     if (stopping) return
@@ -75,104 +87,45 @@ export function TaskReviewDrawer({ task, onClose, onUpdate }: Props) {
     }
   }
 
-  const handleRetryPlan = async () => {
+  // One runner for the three actions; text and status stream into the logs tab
+  const startAction = async (action: FactoryAction, starting: string, finished: string, body?: unknown) => {
     setProcessing(true)
     setError(null)
     setLogText('')
-    setStatusMessage('Re-executando análise com o Architect...')
-    setTab('logs')
-
+    setStatusMessage(starting)
     try {
-      await streamPost(
-        `/factory/tasks/${task.id}/plan`,
-        (e: any) => {
-          if (e.type === 'status') setStatusMessage(e.message)
-          if (e.type === 'text') setLogText(prev => prev + e.text)
-          if (e.type === 'cancelled') {
-            setStatusMessage(e.message || 'Execução interrompida pelo usuário.')
-            onUpdate()
-          }
-          if (e.type === 'done') {
-            setStatusMessage('Plano técnico gerado com sucesso!')
-            onUpdate()
-          }
-          if (e.type === 'error') setError(e.message)
-        }
-      )
-    } catch (err) {
-      setError((err as Error).message)
-    } finally {
-      setProcessing(false)
-      onUpdate()
-    }
-  }
-
-  const handleApprovePlan = async () => {
-    setProcessing(true)
-    setError(null)
-    setLogText('')
-    setStatusMessage('Iniciando esteira determinística de construção...')
-    setTab('logs')
-
-    try {
-      await streamPost(
-        `/factory/tasks/${task.id}/approve-plan`,
-        (e: any) => {
-          if (e.type === 'status') setStatusMessage(e.message)
-          if (e.type === 'text') setLogText(prev => prev + e.text)
-          if (e.type === 'cancelled') {
-            setStatusMessage(e.message || 'Execução interrompida pelo usuário.')
-            onUpdate()
-          }
-          if (e.type === 'done') {
-            setStatusMessage('Construção, portões de teste e auditoria finalizados!')
-            onUpdate()
-          }
-          if (e.type === 'error') setError(e.message)
-        }
-      )
-    } catch (err) {
-      setError((err as Error).message)
-    } finally {
-      setProcessing(false)
-      onUpdate()
-    }
-  }
-
-  const handleSendFeedback = async () => {
-    if (!feedback.trim()) return
-    setProcessing(true)
-    setError(null)
-    setLogText('')
-    setStatusMessage('Aplicando ajustes na worktree...')
-    setTab('logs')
-
-    try {
-      await streamPost(
-        `/factory/tasks/${task.id}/adjust`,
-        (e: any) => {
-          if (e.type === 'status') setStatusMessage(e.message)
-          if (e.type === 'text') setLogText(prev => prev + e.text)
-          if (e.type === 'cancelled') {
-            setStatusMessage(e.message || 'Execução interrompida pelo usuário.')
-            onUpdate()
-          }
-          if (e.type === 'done') {
-            setStatusMessage('Ajustes aplicados com sucesso!')
-            setFeedback('')
-            onUpdate()
-          }
-          if (e.type === 'error') setError(e.message)
+      const outcome = await runFactoryAction(task.id, action, {
+        body,
+        onStarted: onUpdate,
+        onEvent: e => {
+          if (e.type === 'status' && e.message) setStatusMessage(e.message)
+          if (e.type === 'text' && e.text) setLogText(prev => prev + e.text)
         },
-        undefined,
-        { feedback }
-      )
+      })
+      if (outcome.error) setError(outcome.error)
+      if (outcome.cancelled) setStatusMessage('Execução interrompida pelo usuário.')
+      if (outcome.ok) {
+        setStatusMessage(finished)
+        if (action === 'adjust') setFeedback('')
+      }
     } catch (err) {
       setError((err as Error).message)
     } finally {
       setProcessing(false)
       onUpdate()
     }
+  }
+
+  const handleRetryPlan = () => startAction('plan', 'Re-executando análise com o Architect...', 'Plano técnico gerado com sucesso!')
+  const handleApprovePlan = () =>
+    startAction('approve-plan', 'Iniciando esteira determinística de construção...', 'Construção, portões de teste e auditoria finalizados!')
+  // Same rule as the board: with a plan, retry the build; without one, plan again.
+  // In review (a failed adjust) the work is intact: the way forward is a new adjust.
+  const retry = task.state === 'review' ? null : task.plan ? handleApprovePlan : handleRetryPlan
+
+  const handleSendFeedback = () => {
+    if (!feedback.trim()) return
+    return startAction('adjust', 'Aplicando ajustes na worktree...', 'Ajustes aplicados com sucesso!', { feedback })
   }
 
   const handleOpenEditor = async () => {
@@ -192,10 +145,14 @@ export function TaskReviewDrawer({ task, onClose, onUpdate }: Props) {
     setProcessing(true)
     setError(null)
     try {
-      const res = await api.post<FactoryTask>(`/factory/tasks/${task.id}/finish`, { mode })
+      const res = await api.post<FactoryTask & { warning?: string }>(`/factory/tasks/${task.id}/finish`, { mode })
       onUpdate()
       if (res?.prUrl) {
         window.open(res.prUrl, '_blank')
+      }
+      if (res?.warning) {
+        setError(res.warning)
+        return
       }
       onClose()
     } catch (err) {
@@ -234,7 +191,7 @@ export function TaskReviewDrawer({ task, onClose, onUpdate }: Props) {
             <Cpu size={12} /> Provedor: <b>{task.provider}</b>
           </span>
           <span>·</span>
-          <span className="badge" style={{ textTransform: 'uppercase', fontSize: 10 }}>{task.state}</span>
+          <FactoryStatusChip state={task.state} executing={task.executing} />
           {task.prUrl && (
             <a
               href={task.prUrl}
@@ -250,59 +207,50 @@ export function TaskReviewDrawer({ task, onClose, onUpdate }: Props) {
 
         {/* ALERTA DE ERRO OU FALHA DE AUTENTICAÇÃO */}
         {(error || isError) && (
-          <div
-            className="card card-pad stack"
-            style={{
-              background: 'var(--red-subtle)',
-              borderColor: 'var(--red-line)',
-              gap: 10,
-            }}
-          >
-            <div className="row" style={{ gap: 8, alignItems: 'center' }}>
-              <AlertTriangle size={18} style={{ color: 'var(--red)' }} />
-              <span style={{ fontWeight: 600, color: 'var(--red)' }}>
+          <div className="callout callout-crit">
+            <AlertTriangle size={18} />
+            <div className="stack" style={{ gap: 10, flex: 1 }}>
+              <span style={{ fontWeight: 600, color: 'var(--crit)' }}>
                 {isAuthError ? 'Falha de Autenticação no Provedor' : 'Erro na Execução'}
               </span>
-            </div>
 
-            <span style={{ color: 'var(--foreground)', fontSize: 13, lineHeight: 1.4 }}>
-              {error || task.error}
-            </span>
-
-            {/* Ações de Recuperação / Troca de Provedor */}
-            <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center', marginTop: 4, flexWrap: 'wrap', gap: 8 }}>
-              <div className="row" style={{ gap: 8, alignItems: 'center' }}>
-                <span className="muted" style={{ fontSize: 12 }}>Alterar Provedor:</span>
-                <select
-                  className="input"
-                  style={{ padding: '4px 8px', fontSize: 12 }}
-                  value={taskProvider}
-                  onChange={e => handleProviderChange(e.target.value as any)}
-                  disabled={processing}
-                >
-                  <option value="agy">Antigravity (AGY)</option>
-                  <option value="codex">Codex</option>
-                  <option value="claude">Claude Code</option>
-                </select>
-              </div>
-
-              <div className="row" style={{ gap: 8 }}>
-                <button
-                  type="button"
-                  className="btn btn-sm"
-                  onClick={handleDelete}
-                  disabled={processing}
-                >
-                  <Trash2 size={13} style={{ color: 'var(--red)' }} /> Descartar
-                </button>
-                <button
-                  type="button"
-                  className="btn btn-sm btn-primary"
-                  onClick={task.plan && isWaitingApproval ? handleApprovePlan : handleRetryPlan}
-                  disabled={processing}
-                >
-                  <RotateCw size={13} /> {processing ? 'Tentando...' : 'Tentar Novamente'}
-                </button>
+              <span style={{ lineHeight: 1.4 }}>
+                {error || task.error}
+              </span>
+  
+              {/* Ações de Recuperação / Troca de Provedor */}
+              <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center', marginTop: 4, flexWrap: 'wrap', gap: 8 }}>
+                <div className="row" style={{ gap: 8, alignItems: 'center' }}>
+                  <span className="muted" style={{ fontSize: 12 }}>Alterar Provedor:</span>
+                  <select
+                    className="input"
+                    style={{ padding: '4px 8px', fontSize: 12 }}
+                    value={taskProvider}
+                    onChange={e => handleProviderChange(e.target.value as FactoryTask['provider'])}
+                    disabled={isExecuting}
+                  >
+                    <option value="agy">Antigravity (AGY)</option>
+                    <option value="codex">Codex</option>
+                    <option value="claude">Claude Code</option>
+                  </select>
+                </div>
+  
+                <div className="row" style={{ gap: 8 }}>
+                  <button
+                    type="button"
+                    className="btn btn-sm"
+                    onClick={handleDelete}
+                    disabled={processing}
+                  >
+                    <Trash2 size={13} style={{ color: 'var(--crit)', marginTop: 0 }} /> Descartar
+                  </button>
+                  {retry && (
+                    <button type="button" className="btn btn-sm btn-primary" onClick={retry} disabled={processing}>
+                      {/* .callout-crit svg pintaria o ícone de vermelho dentro do botão primário */}
+                      <RotateCw size={13} style={{ color: 'currentColor', marginTop: 0 }} /> {processing ? 'Tentando...' : 'Tentar Novamente'}
+                    </button>
+                  )}
+                </div>
               </div>
             </div>
           </div>
@@ -312,26 +260,15 @@ export function TaskReviewDrawer({ task, onClose, onUpdate }: Props) {
           <div
             className="card card-pad row"
             style={{
-              background: 'var(--surface-active)',
+              background: 'var(--surface-3)',
               fontSize: 13,
               justifyContent: 'space-between',
               alignItems: 'center',
-              border: isExecuting ? '1px solid rgba(90, 210, 221, 0.4)' : undefined,
+              borderColor: isExecuting ? 'var(--signal-line)' : undefined,
             }}
           >
             <div className="row" style={{ gap: 8, alignItems: 'center' }}>
-              {isExecuting && (
-                <span
-                  style={{
-                    width: 8,
-                    height: 8,
-                    borderRadius: '50%',
-                    background: '#5ad2dd',
-                    boxShadow: '0 0 8px #5ad2dd',
-                    animation: 'pulse 1.2s infinite',
-                  }}
-                />
-              )}
+              {isExecuting && <span className="live-dot" />}
               <span className="mono">{statusMessage || 'Execução em andamento...'}</span>
             </div>
 
@@ -341,16 +278,6 @@ export function TaskReviewDrawer({ task, onClose, onUpdate }: Props) {
                 className="btn btn-sm btn-danger"
                 onClick={handleCancelExecution}
                 disabled={stopping}
-                style={{
-                  background: 'rgba(239, 68, 68, 0.15)',
-                  color: '#ef4444',
-                  borderColor: 'rgba(239, 68, 68, 0.4)',
-                  fontSize: 12,
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 5,
-                  padding: '3px 10px',
-                }}
                 title="Interromper execução atual"
               >
                 <Square size={12} fill="currentColor" /> {stopping ? 'Parando...' : 'Parar'}
@@ -359,12 +286,22 @@ export function TaskReviewDrawer({ task, onClose, onUpdate }: Props) {
           </div>
         )}
 
+        {/* Saída do agente desta execução, em qualquer estado da tarefa */}
+        {(logText || processing) && (
+          <div className="stack" style={{ gap: 6 }}>
+            <span className="eyebrow">Saída do agente</span>
+            <pre className="factory-log" ref={logRef}>
+              {logText || 'Aguardando a primeira saída do agente...'}
+            </pre>
+          </div>
+        )}
+
         {/* CASO 1: AGUARDANDO APROVAÇÃO DO PLANO */}
         {isWaitingApproval && (
           <div className="stack" style={{ gap: 16 }}>
             <div className="card card-pad stack">
               <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
-                <span className="eyebrow" style={{ color: 'var(--accent)' }}>Plano Técnico do Architect</span>
+                <span className="eyebrow" style={{ color: 'var(--signal)' }}>Plano Técnico do Architect</span>
                 {task.handoffs?.plan?.targetFiles && task.handoffs.plan.targetFiles.length > 0 && (
                   <span className="muted" style={{ fontSize: 11 }}>
                     {task.handoffs.plan.targetFiles.length} arquivos mapeados
@@ -389,7 +326,7 @@ export function TaskReviewDrawer({ task, onClose, onUpdate }: Props) {
 
             <div className="row" style={{ justifyContent: 'space-between', borderTop: '1px solid var(--line)', paddingTop: 12 }}>
               <button type="button" className="btn" onClick={handleDelete} disabled={processing}>
-                <Trash2 size={15} style={{ color: 'var(--red)' }} /> Descartar
+                <Trash2 size={15} style={{ color: 'var(--crit)' }} /> Descartar
               </button>
 
               <div className="row" style={{ gap: 8 }}>
@@ -405,10 +342,11 @@ export function TaskReviewDrawer({ task, onClose, onUpdate }: Props) {
         {isReview && (
           <div className="stack" style={{ gap: 16 }}>
             {/* Abas de Inspeção */}
-            <div className="row" style={{ borderBottom: '1px solid var(--line)', paddingBottom: 6 }}>
+            <div className="tabs" role="tablist">
               <button
                 type="button"
-                className={`btn btn-sm ${tab === 'diff' ? 'btn-primary' : ''}`}
+                role="tab"
+                aria-selected={tab === 'diff'}
                 onClick={() => setTab('diff')}
               >
                 <GitCommit size={14} /> Diff de Código
@@ -420,22 +358,25 @@ export function TaskReviewDrawer({ task, onClose, onUpdate }: Props) {
               </button>
               <button
                 type="button"
-                className={`btn btn-sm ${tab === 'qa' ? 'btn-primary' : ''}`}
+                role="tab"
+                aria-selected={tab === 'qa'}
                 onClick={() => setTab('qa')}
               >
                 <CheckCircle2 size={14} /> QA & Testes
-                {task.qaReport?.passed && <span style={{ color: 'var(--green)', marginLeft: 4 }}>✓</span>}
+                {task.qaReport?.passed && <span style={{ color: 'var(--ok)', marginLeft: 4 }}>✓</span>}
               </button>
               <button
                 type="button"
-                className={`btn btn-sm ${tab === 'security' ? 'btn-primary' : ''}`}
+                role="tab"
+                aria-selected={tab === 'security'}
                 onClick={() => setTab('security')}
               >
                 <ShieldAlert size={14} /> Auditoria de Segurança
               </button>
               <button
                 type="button"
-                className={`btn btn-sm ${tab === 'trace' ? 'btn-primary' : ''}`}
+                role="tab"
+                aria-selected={tab === 'trace'}
                 onClick={() => setTab('trace')}
               >
                 <Activity size={14} /> Linha do Tempo (Trace)
@@ -444,13 +385,6 @@ export function TaskReviewDrawer({ task, onClose, onUpdate }: Props) {
                     {task.spans.length}
                   </span>
                 )}
-              </button>
-              <button
-                type="button"
-                className={`btn btn-sm ${tab === 'logs' ? 'btn-primary' : ''}`}
-                onClick={() => setTab('logs')}
-              >
-                <Terminal size={14} /> Console de Logs
               </button>
             </div>
 
@@ -461,16 +395,22 @@ export function TaskReviewDrawer({ task, onClose, onUpdate }: Props) {
                   <div className="row" style={{ fontSize: 12, color: 'var(--muted)' }}>
                     <span>{task.diffStat.filesChanged} arquivos alterados</span>
                     <span>·</span>
-                    <span style={{ color: 'var(--green)' }}>+{task.diffStat.insertions} adições</span>
+                    <span style={{ color: 'var(--ok)' }}>+{task.diffStat.insertions} adições</span>
                     <span>·</span>
-                    <span style={{ color: 'var(--red)' }}>-{task.diffStat.deletions} remoções</span>
+                    <span style={{ color: 'var(--crit)' }}>-{task.diffStat.deletions} remoções</span>
                   </div>
                 )}
                 <div
                   className="card card-pad mono"
-                  style={{ maxHeight: 360, overflowY: 'auto', fontSize: 12, background: 'var(--surface-active)', whiteSpace: 'pre-wrap' }}
+                  style={{ maxHeight: 360, overflowY: 'auto', fontSize: 12, background: 'var(--surface-3)', whiteSpace: 'pre-wrap' }}
                 >
-                  {task.diffContent || 'Nenhuma diferença identificada contra a branch base.'}
+                  {task.diffContent
+                    ? task.diffContent.split('\n').map((line, i) => (
+                        <span key={i} style={{ display: 'block', color: diffLineColor(line) }}>
+                          {line || ' '}
+                        </span>
+                      ))
+                    : 'Nenhuma diferença identificada contra a branch base.'}
                 </div>
               </div>
             )}
@@ -480,14 +420,14 @@ export function TaskReviewDrawer({ task, onClose, onUpdate }: Props) {
               <div className="stack card card-pad" style={{ maxHeight: 360, overflowY: 'auto', gap: 8 }}>
                 <div className="row" style={{ gap: 8 }}>
                   <span className="eyebrow">Relatório do Tester e Portão de Testes</span>
-                  <span className="badge" style={{ background: task.qaReport?.passed ? 'var(--green-subtle)' : 'var(--red-subtle)' }}>
+                  <span className={`badge ${task.qaReport?.passed ? 'badge-ok' : 'badge-crit'}`}>
                     {task.qaReport?.passed ? 'Testes Passaram' : 'Atenção aos Testes'}
                   </span>
                 </div>
                 {task.qaReport?.output && (
                   <div className="stack" style={{ gap: 4 }}>
                     <span className="muted" style={{ fontSize: 11 }}>Saída Determinística da Suíte de Testes:</span>
-                    <pre style={{ margin: 0, padding: 8, background: 'var(--surface-active)', borderRadius: 4, fontSize: 11, maxHeight: 160, overflowY: 'auto' }}>
+                    <pre style={{ margin: 0, padding: 8, background: 'var(--surface-3)', borderRadius: 4, fontSize: 11, maxHeight: 160, overflowY: 'auto' }}>
                       {task.qaReport.output}
                     </pre>
                   </div>
@@ -505,7 +445,7 @@ export function TaskReviewDrawer({ task, onClose, onUpdate }: Props) {
               <div className="stack card card-pad" style={{ maxHeight: 360, overflowY: 'auto', gap: 8 }}>
                 <div className="row" style={{ gap: 8 }}>
                   <span className="eyebrow">Auditoria do Reviewer</span>
-                  <span className="badge" style={{ background: task.securityReport?.passed ? 'var(--green-subtle)' : 'var(--yellow-subtle)' }}>
+                  <span className={`badge ${task.securityReport?.passed ? 'badge-ok' : 'badge-warn'}`}>
                     {task.securityReport?.passed ? 'Seguro' : 'Observações'}
                   </span>
                 </div>
@@ -521,64 +461,6 @@ export function TaskReviewDrawer({ task, onClose, onUpdate }: Props) {
             {tab === 'trace' && (
               <div className="stack" style={{ maxHeight: 420, overflowY: 'auto' }}>
                 <TraceTimeline spans={task.spans} />
-              </div>
-            )}
-
-            {/* Conteúdo da Aba Logs */}
-            {tab === 'logs' && (
-              <div className="stack" style={{ gap: 8 }}>
-                <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span className="eyebrow">Saída em Tempo Real dos Agentes</span>
-                  {processing && (
-                    <div className="row" style={{ gap: 6, alignItems: 'center' }}>
-                      <span className="badge" style={{ color: '#5ad2dd', borderColor: '#5ad2dd' }}>
-                        executando...
-                      </span>
-                      <button
-                        type="button"
-                        className="btn btn-sm btn-danger"
-                        onClick={handleCancelExecution}
-                        disabled={stopping}
-                        style={{
-                          background: 'rgba(239, 68, 68, 0.15)',
-                          color: '#ef4444',
-                          border: '1px solid rgba(239, 68, 68, 0.4)',
-                          fontSize: 11,
-                          padding: '2px 8px',
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: 4,
-                        }}
-                        title="Interromper execução da tarefa"
-                      >
-                        <Square size={10} fill="currentColor" /> {stopping ? 'Parando...' : 'Parar'}
-                      </button>
-                    </div>
-                  )}
-                </div>
-                {statusMessage && (
-                  <div className="card card-pad" style={{ background: 'var(--surface-active)', fontSize: 12, color: '#5ad2dd' }}>
-                    {statusMessage}
-                  </div>
-                )}
-                <pre
-                  style={{
-                    margin: 0,
-                    padding: 12,
-                    background: '#06080f',
-                    borderRadius: 8,
-                    fontSize: 12,
-                    lineHeight: 1.5,
-                    maxHeight: 360,
-                    overflowY: 'auto',
-                    whiteSpace: 'pre-wrap',
-                    wordBreak: 'break-word',
-                    color: '#dbeafe',
-                    border: '1px solid var(--line)',
-                  }}
-                >
-                  {logText || 'Aguardando logs ou nenhuma saída registrada nesta sessão.'}
-                </pre>
               </div>
             )}
 
@@ -611,7 +493,7 @@ export function TaskReviewDrawer({ task, onClose, onUpdate }: Props) {
                     <ExternalLink size={13} /> Abrir no Editor
                   </button>
                   <button type="button" className="btn btn-sm" onClick={handleDelete} disabled={processing}>
-                    <Trash2 size={13} style={{ color: 'var(--red)' }} /> Descartar
+                    <Trash2 size={13} style={{ color: 'var(--crit)' }} /> Descartar
                   </button>
                 </div>
 
@@ -641,18 +523,6 @@ export function TaskReviewDrawer({ task, onClose, onUpdate }: Props) {
           </div>
         )}
 
-        {/* LOGS DE EXECUÇÃO EM TEMPO REAL */}
-        {logText && (
-          <div className="stack" style={{ marginTop: 12 }}>
-            <span className="eyebrow">Saída da IA</span>
-            <div
-              className="card card-pad mono"
-              style={{ maxHeight: 200, overflowY: 'auto', fontSize: 11, background: 'var(--surface-active)', whiteSpace: 'pre-wrap' }}
-            >
-              {logText}
-            </div>
-          </div>
-        )}
       </div>
     </Modal>
   )

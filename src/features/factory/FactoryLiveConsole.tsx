@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import {
   Activity,
   AlertTriangle,
@@ -17,7 +17,8 @@ import {
   X,
 } from 'lucide-react'
 import { api } from '@/lib/api'
-import { streamPost } from '@/lib/stream'
+import { Chips } from '@/ui'
+import { runFactoryAction, useLiveTask, type FactoryAction, type SessionEvent } from './factoryRun'
 import type { FactoryTask } from '../../../server/lib/factory/types.ts'
 
 type LogEntry = {
@@ -27,6 +28,7 @@ type LogEntry = {
   title: string
   detail?: string
   tool?: string
+  callId?: string
   isError?: boolean
 }
 
@@ -39,90 +41,57 @@ type Props = {
   onOpenReview?: (task: FactoryTask) => void
 }
 
+// One persisted session event -> one console line. A tool-result is folded into the
+// tool line it answers, so a call and its output read together.
+function toLogEntries(events: SessionEvent[]): LogEntry[] {
+  const entries: LogEntry[] = []
+  events.forEach((ev, i) => {
+    const time = ev.createdAt ? fmtTime(new Date(ev.createdAt)) : ''
+    const id = `ev-${i}`
+    if (ev.type === 'tool') {
+      const input = typeof ev.input === 'object' ? JSON.stringify(ev.input, null, 2) : String(ev.input ?? '')
+      entries.push({ id, time, type: 'tool', title: `Ferramenta: ${ev.tool}`, detail: input, tool: ev.tool, callId: ev.id })
+    } else if (ev.type === 'tool-result') {
+      const call = [...entries].reverse().find(e => e.callId === ev.id)
+      if (!call) return
+      call.detail = `${call.detail}\n\n── saída ──\n${(ev.content ?? '').slice(0, 4000)}`
+      call.isError = ev.isError
+    } else if (ev.type === 'text' && ev.text) {
+      entries.push({ id, time, type: 'text', title: 'Saída do agente', detail: ev.text })
+    } else if (ev.type === 'error') {
+      entries.push({ id, time, type: 'error', title: 'Erro na execução', detail: ev.message, isError: true })
+    } else if (ev.type === 'status' && ev.message) {
+      entries.push({ id, time, type: 'status', title: ev.message })
+    }
+  })
+  return entries
+}
+
+function fmtTime(d = new Date()) {
+  return d.toTimeString().split(' ')[0]
+}
+
 export function FactoryLiveConsole({
-  task,
+  task: initialTask,
   onClose,
   onUpdate,
   initialAction = null,
   onOpenTrace,
   onOpenReview,
 }: Props) {
-  const [logs, setLogs] = useState<LogEntry[]>([])
-  const [runningAction, setRunningAction] = useState<string | null>(initialAction)
+  const [runningAction, setRunningAction] = useState<FactoryAction | null>(initialAction)
+  const { task, events, running: isRunning, refresh } = useLiveTask(initialTask, Boolean(runningAction))
+  // "Limpar" hides what is on screen; the session itself stays on the server
+  const [hiddenUpTo, setHiddenUpTo] = useState(0)
+  const allLogs = useMemo(() => toLogEntries(events), [events])
+  const logs = allLogs.slice(hiddenUpTo)
   const [filter, setFilter] = useState<'all' | 'tools' | 'status'>('all')
   const [autoScroll, setAutoScroll] = useState(true)
   const [copied, setCopied] = useState(false)
   const [expanded, setExpanded] = useState(false)
-  const [errorMessage, setErrorMessage] = useState<string | null>(task.error || null)
+  const [actionError, setActionError] = useState<string | null>(null)
+  const errorMessage = actionError ?? task.error ?? null
   const logContainerRef = useRef<HTMLDivElement | null>(null)
-
-  const fmtTime = (d = new Date()) => {
-    return d.toTimeString().split(' ')[0]
-  }
-
-  // Carrega histórico de eventos prévios se existirem
-  useEffect(() => {
-    let unmounted = false
-    api.get<any[]>(`/factory/tasks/${task.id}/session`)
-      .then(events => {
-        if (unmounted || !Array.isArray(events) || events.length === 0) return
-        const mapped: LogEntry[] = events.map((ev, i) => {
-          const time = ev.createdAt ? fmtTime(new Date(ev.createdAt)) : fmtTime()
-          if (ev.type === 'tool') {
-            return {
-              id: `hist-${i}`,
-              time,
-              type: 'tool',
-              title: `Execução de Ferramenta: ${ev.tool}`,
-              detail: typeof ev.input === 'object' ? JSON.stringify(ev.input, null, 2) : String(ev.input ?? ''),
-              tool: ev.tool,
-              isError: Boolean(ev.isError),
-            }
-          }
-          if (ev.type === 'status') {
-            return {
-              id: `hist-${i}`,
-              time,
-              type: 'status',
-              title: ev.message || 'Atualização de status',
-            }
-          }
-          if (ev.type === 'error') {
-            return {
-              id: `hist-${i}`,
-              time,
-              type: 'error',
-              title: 'Erro na execução',
-              detail: ev.message,
-              isError: true,
-            }
-          }
-          if (ev.type === 'text') {
-            return {
-              id: `hist-${i}`,
-              time,
-              type: 'text',
-              title: 'Saída do agente',
-              detail: ev.text,
-            }
-          }
-          return {
-            id: `hist-${i}`,
-            time,
-            type: 'status',
-            title: ev.type || 'Evento',
-            detail: ev.message || ev.text,
-          }
-        })
-        setLogs(prev => (prev.length === 0 ? mapped : prev))
-      })
-      .catch(() => {})
-
-    return () => {
-      unmounted = true
-    }
-  }, [task.id])
-
   const [stopping, setStopping] = useState(false)
 
   const stopExecution = async () => {
@@ -130,149 +99,37 @@ export function FactoryLiveConsole({
     setStopping(true)
     try {
       await api.post(`/factory/tasks/${task.id}/cancel`, {})
-      setLogs(prev => [
-        ...prev,
-        {
-          id: `stop-${Date.now()}`,
-          time: fmtTime(),
-          type: 'status',
-          title: 'Solicitação de cancelamento enviada ao servidor.',
-        },
-      ])
+      refresh()
       onUpdate()
     } catch (err) {
-      setErrorMessage((err as Error).message)
+      setActionError((err as Error).message)
     } finally {
       setStopping(false)
     }
   }
 
-  // Inicia ação sob demanda
+  // Progress arrives through the polled session; here only the outcome matters
   const executeAction = async (action: 'plan' | 'approve-plan') => {
     setRunningAction(action)
-    setErrorMessage(null)
-
-    const now = fmtTime()
-    const startMsg: LogEntry = {
-      id: `act-${Date.now()}`,
-      time: now,
-      type: 'status',
-      title: action === 'plan'
-        ? 'Iniciando análise arquitetural com Architect...'
-        : 'Iniciando esteira determinística de construção e testes...',
-    }
-    setLogs(prev => [...prev, startMsg])
-
+    setActionError(null)
     try {
-      await streamPost(
-        `/factory/tasks/${task.id}/${action}`,
-        (ev: any) => {
-          const evTime = fmtTime()
-          if (ev.type === 'status') {
-            setLogs(prev => [
-              ...prev,
-              {
-                id: `ev-${Date.now()}-${Math.random()}`,
-                time: evTime,
-                type: 'status',
-                title: ev.message,
-              },
-            ])
-          } else if (ev.type === 'tool') {
-            setLogs(prev => [
-              ...prev,
-              {
-                id: `ev-${Date.now()}-${Math.random()}`,
-                time: evTime,
-                type: 'tool',
-                title: `Ferramenta: ${ev.tool}`,
-                detail: typeof ev.input === 'object' ? JSON.stringify(ev.input, null, 2) : String(ev.input ?? ''),
-                tool: ev.tool,
-              },
-            ])
-          } else if (ev.type === 'text' && ev.text) {
-            setLogs(prev => {
-              const last = prev[prev.length - 1]
-              if (last && last.type === 'text') {
-                return [
-                  ...prev.slice(0, -1),
-                  { ...last, detail: (last.detail || '') + ev.text },
-                ]
-              }
-              return [
-                ...prev,
-                {
-                  id: `ev-${Date.now()}-${Math.random()}`,
-                  time: evTime,
-                  type: 'text',
-                  title: 'Raciocínio / Código',
-                  detail: ev.text,
-                },
-              ]
-            })
-          } else if (ev.type === 'error') {
-            setErrorMessage(ev.message)
-            setLogs(prev => [
-              ...prev,
-              {
-                id: `ev-${Date.now()}-${Math.random()}`,
-                time: evTime,
-                type: 'error',
-                title: 'Falha reportada',
-                detail: ev.message,
-                isError: true,
-              },
-            ])
-          } else if (ev.type === 'cancelled') {
-            setLogs(prev => [
-              ...prev,
-              {
-                id: `ev-${Date.now()}-${Math.random()}`,
-                time: evTime,
-                type: 'status',
-                title: ev.message || 'Execução interrompida pelo usuário',
-              },
-            ])
-            onUpdate()
-          } else if (ev.type === 'done') {
-            setLogs(prev => [
-              ...prev,
-              {
-                id: `ev-${Date.now()}-${Math.random()}`,
-                time: evTime,
-                type: 'done',
-                title: action === 'plan'
-                  ? 'Planejamento concluído com sucesso. Aguardando aprovação.'
-                  : 'Construção e testes concluídos com sucesso. Pronto para revisão.',
-              },
-            ])
-            onUpdate()
-          }
-        }
-      )
+      const outcome = await runFactoryAction(task.id, action, { onStarted: onUpdate })
+      if (outcome.error) setActionError(outcome.error)
     } catch (err) {
-      const msg = (err as Error).message
-      setErrorMessage(msg)
-      setLogs(prev => [
-        ...prev,
-        {
-          id: `ev-err-${Date.now()}`,
-          time: fmtTime(),
-          type: 'error',
-          title: 'Erro de comunicação',
-          detail: msg,
-          isError: true,
-        },
-      ])
+      setActionError((err as Error).message)
     } finally {
       setRunningAction(null)
+      refresh()
       onUpdate()
     }
   }
 
-  // Executa initialAction se fornecido na abertura
+  // Executa initialAction se fornecido na abertura. StrictMode monta o efeito duas vezes
+  // no dev; sem a trava o segundo POST leva 409 e a tela mostra erro com a execução rodando.
+  const startedRef = useRef(false)
   useEffect(() => {
-    if (initialAction) {
+    if (initialAction && !startedRef.current) {
+      startedRef.current = true
       executeAction(initialAction)
     }
   }, [])
@@ -300,7 +157,6 @@ export function FactoryLiveConsole({
     })
   }
 
-  const isRunning = Boolean(runningAction) || Boolean(task.executing) || ['planning', 'building', 'qa_security'].includes(task.state)
 
   return (
     <div
@@ -324,13 +180,13 @@ export function FactoryLiveConsole({
           maxHeight: '92vh',
           display: 'flex',
           flexDirection: 'column',
-          background: '#090d16',
-          border: '1px solid #232c3d',
-          borderRadius: 14,
-          boxShadow: '0 24px 60px rgba(0, 0, 0, 0.65)',
+          background: 'var(--surface)',
+          border: '1px solid var(--line)',
+          borderRadius: 'var(--r-lg)',
+          boxShadow: 'var(--shadow-pop)',
           overflow: 'hidden',
           transition: 'width 0.2s, height 0.2s',
-          color: '#f2f5fa',
+          color: 'var(--ink)',
         }}
       >
         {/* Cabeçalho do Console */}
@@ -340,25 +196,25 @@ export function FactoryLiveConsole({
             alignItems: 'center',
             justifyContent: 'space-between',
             padding: '12px 18px',
-            background: '#101622',
-            borderBottom: '1px solid #232c3d',
+            background: 'var(--surface-2)',
+            borderBottom: '1px solid var(--line)',
             gap: 12,
             flexWrap: 'wrap',
           }}
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
-            <Terminal size={18} style={{ color: isRunning ? '#5ad2dd' : '#8b9cb6' }} />
+            <Terminal size={18} style={{ color: isRunning ? 'var(--info)' : 'var(--muted)' }} />
             <div style={{ minWidth: 0 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <span style={{ fontSize: 14, fontWeight: 700, color: '#f2f5fa' }}>
+                <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--ink)' }}>
                   Console de Execução
                 </span>
                 <span
                   style={{
                     fontSize: 10,
-                    fontFamily: 'ui-monospace, monospace',
-                    background: '#192334',
-                    color: '#c084fc',
+                    fontFamily: 'var(--font-mono)',
+                    background: 'var(--surface-3)',
+                    color: 'var(--fx-architect)',
                     padding: '2px 6px',
                     borderRadius: 4,
                   }}
@@ -372,20 +228,11 @@ export function FactoryLiveConsole({
                       alignItems: 'center',
                       gap: 4,
                       fontSize: 11,
-                      color: '#4ade80',
-                      fontFamily: 'ui-monospace, monospace',
+                      color: 'var(--ok)',
+                      fontFamily: 'var(--font-mono)',
                     }}
                   >
-                    <span
-                      style={{
-                        width: 6,
-                        height: 6,
-                        borderRadius: '50%',
-                        background: '#4ade80',
-                        boxShadow: '0 0 8px #4ade80',
-                        animation: 'pulse 1.5s infinite',
-                      }}
-                    />
+                    <span className="live-dot" />
                     executando...
                   </span>
                 )}
@@ -393,7 +240,7 @@ export function FactoryLiveConsole({
               <div
                 style={{
                   fontSize: 12,
-                  color: '#8b9cb6',
+                  color: 'var(--muted)',
                   overflow: 'hidden',
                   textOverflow: 'ellipsis',
                   whiteSpace: 'nowrap',
@@ -415,9 +262,6 @@ export function FactoryLiveConsole({
                 onClick={stopExecution}
                 disabled={stopping}
                 style={{
-                  background: 'rgba(239, 68, 68, 0.15)',
-                  color: '#ef4444',
-                  border: '1px solid rgba(239, 68, 68, 0.4)',
                   fontSize: 11,
                   padding: '4px 8px',
                   display: 'flex',
@@ -489,63 +333,27 @@ export function FactoryLiveConsole({
             alignItems: 'center',
             justifyContent: 'space-between',
             padding: '8px 18px',
-            background: '#0d121c',
-            borderBottom: '1px solid #1a2230',
+            background: 'var(--surface-2)',
+            borderBottom: '1px solid var(--line)',
             fontSize: 12,
             gap: 12,
           }}
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <span style={{ color: '#8b9cb6', marginRight: 4 }}>Filtro:</span>
-            <button
-              type="button"
-              onClick={() => setFilter('all')}
-              style={{
-                background: filter === 'all' ? '#1f2b3e' : 'transparent',
-                color: filter === 'all' ? '#f2f5fa' : '#8b9cb6',
-                border: '1px solid #232c3d',
-                borderRadius: 4,
-                padding: '2px 8px',
-                cursor: 'pointer',
-                fontSize: 11,
-              }}
-            >
-              Todos ({logs.length})
-            </button>
-            <button
-              type="button"
-              onClick={() => setFilter('tools')}
-              style={{
-                background: filter === 'tools' ? '#1f2b3e' : 'transparent',
-                color: filter === 'tools' ? '#5ad2dd' : '#8b9cb6',
-                border: '1px solid #232c3d',
-                borderRadius: 4,
-                padding: '2px 8px',
-                cursor: 'pointer',
-                fontSize: 11,
-              }}
-            >
-              Ferramentas ({logs.filter(l => l.type === 'tool').length})
-            </button>
-            <button
-              type="button"
-              onClick={() => setFilter('status')}
-              style={{
-                background: filter === 'status' ? '#1f2b3e' : 'transparent',
-                color: filter === 'status' ? '#f2f5fa' : '#8b9cb6',
-                border: '1px solid #232c3d',
-                borderRadius: 4,
-                padding: '2px 8px',
-                cursor: 'pointer',
-                fontSize: 11,
-              }}
-            >
-              Status / Erros
-            </button>
+            <span style={{ color: 'var(--muted)', marginRight: 4 }}>Filtro:</span>
+            <Chips
+              options={[
+                { id: 'all', label: 'Todos', count: logs.length },
+                { id: 'tools', label: 'Ferramentas', count: logs.filter(l => l.type === 'tool').length },
+                { id: 'status', label: 'Status / Erros' },
+              ]}
+              value={filter}
+              onChange={setFilter}
+            />
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', color: '#8b9cb6' }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', color: 'var(--muted)' }}>
               <input
                 type="checkbox"
                 checked={autoScroll}
@@ -562,14 +370,14 @@ export function FactoryLiveConsole({
               title="Copiar logs completos"
               style={{ fontSize: 11, padding: '2px 8px', gap: 4 }}
             >
-              {copied ? <Check size={12} style={{ color: '#4ade80' }} /> : <Copy size={12} />}
+              {copied ? <Check size={12} style={{ color: 'var(--ok)' }} /> : <Copy size={12} />}
               {copied ? 'Copiado!' : 'Copiar'}
             </button>
 
             <button
               type="button"
               className="btn btn-ghost btn-sm"
-              onClick={() => setLogs([])}
+              onClick={() => setHiddenUpTo(allLogs.length)}
               title="Limpar visualização de logs"
               style={{ fontSize: 11, padding: '2px 8px', gap: 4 }}
             >
@@ -583,9 +391,9 @@ export function FactoryLiveConsole({
           <div
             style={{
               padding: '10px 18px',
-              background: 'rgba(255, 111, 103, 0.12)',
-              borderBottom: '1px solid rgba(255, 111, 103, 0.3)',
-              color: '#ff6f67',
+              background: 'var(--crit-soft)',
+              borderBottom: '1px solid color-mix(in srgb, var(--crit) 30%, transparent)',
+              color: 'var(--crit)',
               fontSize: 12,
               display: 'flex',
               alignItems: 'center',
@@ -593,7 +401,7 @@ export function FactoryLiveConsole({
             }}
           >
             <AlertTriangle size={15} />
-            <span style={{ flex: 1, fontFamily: 'ui-monospace, monospace' }}>{errorMessage}</span>
+            <span style={{ flex: 1, fontFamily: 'var(--font-mono)' }}>{errorMessage}</span>
           </div>
         )}
 
@@ -604,17 +412,17 @@ export function FactoryLiveConsole({
             flex: 1,
             overflowY: 'auto',
             padding: '14px 18px',
-            fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
+            fontFamily: 'var(--font-mono)',
             fontSize: 12,
             lineHeight: 1.6,
-            background: '#06080f',
+            background: 'var(--bg)',
             display: 'flex',
             flexDirection: 'column',
             gap: 8,
           }}
         >
           {filteredLogs.length === 0 ? (
-            <div style={{ textAlign: 'center', padding: '40px 0', color: '#57657a' }}>
+            <div style={{ textAlign: 'center', padding: '40px 0', color: 'var(--muted)' }}>
               Nenhum log registrado para esta sessão até o momento.
             </div>
           ) : (
@@ -631,36 +439,36 @@ export function FactoryLiveConsole({
                     padding: '8px 12px',
                     borderRadius: 6,
                     background: isError
-                      ? 'rgba(255, 111, 103, 0.08)'
+                      ? 'var(--crit-soft)'
                       : isDone
-                      ? 'rgba(74, 222, 128, 0.06)'
+                      ? 'var(--ok-soft)'
                       : isTool
-                      ? 'rgba(90, 210, 221, 0.05)'
-                      : 'rgba(255, 255, 255, 0.02)',
+                      ? 'var(--info-soft)'
+                      : 'var(--surface)',
                     borderLeft: isError
-                      ? '3px solid #ff6f67'
+                      ? '3px solid var(--crit)'
                       : isDone
-                      ? '3px solid #4ade80'
+                      ? '3px solid var(--ok)'
                       : isTool
-                      ? '3px solid #5ad2dd'
-                      : '3px solid #3b475c',
+                      ? '3px solid var(--info)'
+                      : '3px solid var(--line-hi)',
                   }}
                 >
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: '#8b9cb6', fontSize: 11 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--muted)', fontSize: 11 }}>
                     <span style={{ opacity: 0.6 }}>[{entry.time}]</span>
-                    {isTool && <Wrench size={11} style={{ color: '#5ad2dd' }} />}
-                    {isDone && <CheckCircle2 size={11} style={{ color: '#4ade80' }} />}
-                    {isError && <AlertTriangle size={11} style={{ color: '#ff6f67' }} />}
+                    {isTool && <Wrench size={11} style={{ color: 'var(--info)' }} />}
+                    {isDone && <CheckCircle2 size={11} style={{ color: 'var(--ok)' }} />}
+                    {isError && <AlertTriangle size={11} style={{ color: 'var(--crit)' }} />}
                     <span
                       style={{
                         fontWeight: 600,
                         color: isError
-                          ? '#ff6f67'
+                          ? 'var(--crit)'
                           : isDone
-                          ? '#4ade80'
+                          ? 'var(--ok)'
                           : isTool
-                          ? '#5ad2dd'
-                          : '#c084fc',
+                          ? 'var(--info)'
+                          : 'var(--fx-architect)',
                       }}
                     >
                       {entry.title}
@@ -672,9 +480,9 @@ export function FactoryLiveConsole({
                       style={{
                         margin: '6px 0 0',
                         padding: '6px 8px',
-                        background: '#090d16',
+                        background: 'var(--surface)',
                         borderRadius: 4,
-                        color: isText ? '#c8d4e4' : '#8b9cb6',
+                        color: isText ? 'var(--ink-2)' : 'var(--muted)',
                         whiteSpace: 'pre-wrap',
                         wordBreak: 'break-word',
                         fontSize: 11,
@@ -691,8 +499,8 @@ export function FactoryLiveConsole({
           )}
 
           {isRunning && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: '#5ad2dd', padding: '6px 0' }}>
-              <span style={{ animation: 'spin 1s linear infinite' }}>◓</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--info)', padding: '6px 0' }}>
+              <span className="spin" style={{ display: 'inline-block' }}>◓</span>
               <span>Processando etapa com o agente...</span>
             </div>
           )}
@@ -702,8 +510,8 @@ export function FactoryLiveConsole({
         <div
           style={{
             padding: '12px 18px',
-            background: '#101622',
-            borderTop: '1px solid #232c3d',
+            background: 'var(--surface-2)',
+            borderTop: '1px solid var(--line)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
@@ -711,23 +519,20 @@ export function FactoryLiveConsole({
             flexWrap: 'wrap',
           }}
         >
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: '#8b9cb6' }}>
-            <span>Worktree: <b className="mono" style={{ color: '#f2f5fa' }}>{task.branchName}</b></span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: 'var(--muted)' }}>
+            <span>Worktree: <b className="mono" style={{ color: 'var(--ink)' }}>{task.branchName}</b></span>
             <span>·</span>
-            <span>Provedor: <b style={{ color: '#c084fc' }}>{task.provider}</b></span>
+            <span>Provedor: <b style={{ color: 'var(--fx-architect)' }}>{task.provider}</b></span>
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             {isRunning && (
               <button
                 type="button"
-                className="btn btn-sm btn-danger"
+                className="btn btn-sm btn-danger-solid"
                 onClick={stopExecution}
                 disabled={stopping}
                 style={{
-                  background: '#ef4444',
-                  color: '#fff',
-                  border: 'none',
                   display: 'flex',
                   alignItems: 'center',
                   gap: 6,
@@ -759,7 +564,8 @@ export function FactoryLiveConsole({
               </button>
             )}
 
-            {(task.state === 'error' || errorMessage) && (
+            {/* Only from 'error': a failed adjust lands in review with its work intact */}
+            {task.state === 'error' && (
               <button
                 type="button"
                 className="btn btn-sm btn-primary"

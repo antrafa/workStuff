@@ -10,7 +10,7 @@ import {
   Terminal,
   XCircle,
 } from 'lucide-react'
-import type { ExecutionSpan, ExecutionSpanKind } from '../../../server/lib/factory/types.ts'
+import type { ExecutionSpan } from '../../../server/lib/factory/types.ts'
 
 type Props = {
   spans?: ExecutionSpan[]
@@ -22,32 +22,19 @@ function formatDuration(ms?: number): string {
   return `${(ms / 1000).toFixed(1)}s`
 }
 
-function getKindBadge(kind: ExecutionSpanKind) {
-  switch (kind) {
+// Cor do tipo de span: as mesmas variáveis --fx-* da fábrica toda (factory.css)
+function getKindBadge(span: ExecutionSpan) {
+  switch (span.kind) {
     case 'code':
-      return {
-        label: 'Código Determinístico',
-        icon: Code2,
-        bg: 'rgba(59, 130, 246, 0.15)',
-        color: '#60a5fa',
-        border: 'rgba(59, 130, 246, 0.3)',
-      }
+      return { label: 'Código Determinístico', icon: Code2, color: 'var(--fx-code)' }
     case 'gate':
-      return {
-        label: 'Portão de Aceitação',
-        icon: ShieldCheck,
-        bg: 'rgba(234, 179, 8, 0.15)',
-        color: '#facc15',
-        border: 'rgba(234, 179, 8, 0.3)',
-      }
+      return { label: 'Portão de Aceitação', icon: ShieldCheck, color: 'var(--fx-gates)' }
     case 'agent':
     default:
       return {
         label: 'Agente IA',
         icon: Cpu,
-        bg: 'rgba(168, 85, 247, 0.15)',
-        color: '#c084fc',
-        border: 'rgba(168, 85, 247, 0.3)',
+        color: span.agentId ? `var(--fx-${span.agentId})` : 'var(--fx-engineer)',
       }
   }
 }
@@ -99,7 +86,7 @@ export function TraceTimeline({ spans = [] }: Props) {
           const offsetPct = Math.max(0, Math.min(98, ((startTime - minTime) / totalDuration) * 100))
           const widthPct = Math.max(2, Math.min(100 - offsetPct, (duration / totalDuration) * 100))
 
-          const kindConfig = getKindBadge(span.kind)
+          const kindConfig = getKindBadge(span)
           const KindIcon = kindConfig.icon
           const isExpanded = expandedSpanId === span.id
 
@@ -108,7 +95,7 @@ export function TraceTimeline({ spans = [] }: Props) {
               key={span.id}
               className="card"
               style={{
-                borderColor: isExpanded ? 'var(--line-active)' : 'var(--line)',
+                borderColor: isExpanded ? 'var(--line-hi)' : 'var(--line)',
                 overflow: 'hidden',
                 transition: 'border-color 0.2s ease',
               }}
@@ -121,7 +108,7 @@ export function TraceTimeline({ spans = [] }: Props) {
                   cursor: 'pointer',
                   justifyContent: 'space-between',
                   alignItems: 'center',
-                  background: isExpanded ? 'var(--surface-hover)' : 'transparent',
+                  background: isExpanded ? 'var(--surface-2)' : 'transparent',
                 }}
                 onClick={() => toggleExpand(span.id)}
               >
@@ -129,10 +116,10 @@ export function TraceTimeline({ spans = [] }: Props) {
                   {isExpanded ? <ChevronDown size={14} className="muted" /> : <ChevronRight size={14} className="muted" />}
 
                   {/* Status Icon */}
-                  {span.status === 'success' && <CheckCircle2 size={16} style={{ color: 'var(--green)' }} />}
-                  {span.status === 'failed' && <XCircle size={16} style={{ color: 'var(--red)' }} />}
+                  {span.status === 'success' && <CheckCircle2 size={16} style={{ color: 'var(--ok)' }} />}
+                  {span.status === 'failed' && <XCircle size={16} style={{ color: 'var(--crit)' }} />}
                   {span.status === 'running' && (
-                    <Clock size={16} style={{ color: 'var(--accent)', animation: 'spin 2s linear infinite' }} />
+                    <Clock size={16} className="spin" style={{ color: 'var(--signal)' }} />
                   )}
 
                   {/* Nome do Span */}
@@ -146,9 +133,9 @@ export function TraceTimeline({ spans = [] }: Props) {
                       fontSize: 11,
                       padding: '2px 8px',
                       borderRadius: 12,
-                      background: kindConfig.bg,
+                      background: `color-mix(in srgb, ${kindConfig.color} 15%, transparent)`,
                       color: kindConfig.color,
-                      border: `1px solid ${kindConfig.border}`,
+                      border: `1px solid color-mix(in srgb, ${kindConfig.color} 30%, transparent)`,
                     }}
                   >
                     <KindIcon size={12} />
@@ -167,7 +154,7 @@ export function TraceTimeline({ spans = [] }: Props) {
               <div
                 style={{
                   height: 4,
-                  background: 'var(--surface-active)',
+                  background: 'var(--surface-3)',
                   position: 'relative',
                   width: '100%',
                 }}
@@ -178,14 +165,7 @@ export function TraceTimeline({ spans = [] }: Props) {
                     left: `${offsetPct}%`,
                     width: `${widthPct}%`,
                     height: '100%',
-                    background:
-                      span.status === 'failed'
-                        ? 'var(--red)'
-                        : span.kind === 'code'
-                          ? '#3b82f6'
-                          : span.kind === 'gate'
-                            ? '#eab308'
-                            : 'var(--accent)',
+                    background: span.status === 'failed' ? 'var(--crit)' : kindConfig.color,
                     borderRadius: 2,
                   }}
                 />
@@ -203,11 +183,8 @@ export function TraceTimeline({ spans = [] }: Props) {
                   }}
                 >
                   {span.error && (
-                    <div
-                      className="card card-pad"
-                      style={{ background: 'var(--red-subtle)', borderColor: 'var(--red-line)' }}
-                    >
-                      <span style={{ color: 'var(--red)', fontSize: 13 }}>{span.error}</span>
+                    <div className="callout callout-crit">
+                      {span.error}
                     </div>
                   )}
 
@@ -223,14 +200,14 @@ export function TraceTimeline({ spans = [] }: Props) {
                             key={idx}
                             className="card card-pad"
                             style={{
-                              background: 'var(--surface-active)',
+                              background: 'var(--surface-3)',
                               padding: 8,
                               fontSize: 12,
                             }}
                           >
                             <div className="row" style={{ justifyContent: 'space-between', marginBottom: 4 }}>
                               <span className="row" style={{ gap: 6, fontWeight: 600 }}>
-                                <Terminal size={13} style={{ color: 'var(--accent)' }} />
+                                <Terminal size={13} style={{ color: 'var(--signal)' }} />
                                 {tc.tool}
                               </span>
                               {tc.durationMs && <span className="muted">{formatDuration(tc.durationMs)}</span>}
@@ -263,7 +240,7 @@ export function TraceTimeline({ spans = [] }: Props) {
                         style={{
                           margin: 0,
                           fontSize: 11,
-                          background: 'var(--surface-active)',
+                          background: 'var(--surface-3)',
                           padding: 8,
                           borderRadius: 4,
                           overflowX: 'auto',

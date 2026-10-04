@@ -1,0 +1,71 @@
+/* Fábrica: cores por agente (categóricas, uma por raia da linha do tempo) e as poucas
+   peças que o design system não tem. Estado (ok/atenção/crítico) usa os tokens
+   semânticos de tokens.css, nunca estas cores. */
+:root,
+:root[data-theme='dark'] {
+  --fx-engineer: #c89bff;
+  --fx-code: #60a5fa;
+  --fx-architect: #c084fc;
+  --fx-implementer: #5ad2dd;
+  --fx-gates: #facc15;
+  --fx-tester: #4ade80;
+  --fx-reviewer: #94a3ff;
+}
+:root[data-theme='light'] {
+  --fx-engineer: #7c3aed;
+  --fx-code: #1d4ed8;
+  --fx-architect: #9333ea;
+  --fx-implementer: #0e7490;
+  --fx-gates: #a16207;
+  --fx-tester: #15803d;
+  --fx-reviewer: #4338ca;
+}
+
+@keyframes pulse {
+  50% {
+    opacity: 0.35;
+  }
+}
+
+.live-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--signal);
+  animation: pulse 1.2s ease-in-out infinite;
+  flex-shrink: 0;
+}
+
+.factory-log {
+  margin: 0;
+  padding: 12px;
+  max-height: 360px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--ink-2);
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+}
+
+.factory-card {
+  transition: border-color 0.12s;
+}
+.factory-card:hover {
+  border-color: var(--line-hi);
+}
+
+/* Secondary action of a card (delete): shown on hover or keyboard focus only */
+.factory-card .reveal-on-hover {
+  opacity: 0;
+  transition: opacity 0.12s;
+}
+.factory-card:hover .reveal-on-hover,
+.factory-card .reveal-on-hover:focus-visible {
+  opacity: 1;
+}

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { FolderOpen, GitPullRequest, Plus, Search, Cpu } from 'lucide-react'
-import { Modal } from '@/ui'
+import { Modal, Segmented } from '@/ui'
 import { api } from '@/lib/api'
 
 type Issue = {
@@ -9,7 +9,8 @@ type Issue = {
   number: number
   url: string
   repo: string
-  provider: string
+  provider: 'gitlab' | 'github'
+  body?: string
 }
 
 type SettingsResponse = {
@@ -29,10 +30,18 @@ export function NewTaskModal({ open, onClose, onCreated }: Props) {
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
   const [repoPath, setRepoPath] = useState('')
-  const [baseBranch, setBaseBranch] = useState('main')
-  const [provider, setProvider] = useState<'claude' | 'codex' | 'agy'>('agy')
+  const [baseBranch, setBaseBranch] = useState('')
+  // null until Configurações answers: the server then applies the configured provider
+  const [provider, setProvider] = useState<SettingsResponse['provider'] | null>(null)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [pickedIssue, setPickedIssue] = useState<Issue | null>(null)
+
+  const close = () => {
+    setError(null)
+    setPickedIssue(null)
+    onClose()
+  }
 
   // Carrega provedor configurado no workstuff
   useEffect(() => {
@@ -48,14 +57,16 @@ export function NewTaskModal({ open, onClose, onCreated }: Props) {
   // Issues remotas
   const [issues, setIssues] = useState<Issue[]>([])
   const [loadingIssues, setLoadingIssues] = useState(false)
+  const [issuesError, setIssuesError] = useState<string | null>(null)
   const [issueFilter, setIssueFilter] = useState('')
 
   useEffect(() => {
     if (open && tab === 'issues') {
       setLoadingIssues(true)
+      setIssuesError(null)
       api.get<Issue[]>('/factory/issues')
         .then(setIssues)
-        .catch(() => setIssues([]))
+        .catch(e => setIssuesError((e as Error).message))
         .finally(() => setLoadingIssues(false))
     }
   }, [open, tab])
@@ -69,9 +80,11 @@ export function NewTaskModal({ open, onClose, onCreated }: Props) {
     }
   }
 
+  // The issue body becomes the requirements the Architect reads; the link stays on the task
   const handleSelectIssue = (issue: Issue) => {
+    setPickedIssue(issue)
     setTitle(`[#${issue.number}] ${issue.title}`)
-    setDescription(`Origem: ${issue.url}\n\nDemanda importada da issue #${issue.number} de ${issue.repo}.`)
+    setDescription(issue.body?.trim() || `Demanda importada da issue #${issue.number} de ${issue.repo}.`)
     setTab('manual')
   }
 
@@ -88,15 +101,15 @@ export function NewTaskModal({ open, onClose, onCreated }: Props) {
       await api.post('/factory/tasks', {
         title,
         description,
-        baseBranch: baseBranch.trim() || 'main',
-        provider,
-        source: {
-          type: tab === 'issues' ? 'gitlab' : 'manual',
-          repoPath,
-        },
+        // empty: the server resolves the repo's default branch (main, master, develop...)
+        baseBranch: baseBranch.trim() || undefined,
+        provider: provider ?? undefined,
+        source: pickedIssue
+          ? { type: pickedIssue.provider, repoPath, issueIid: pickedIssue.number, issueUrl: pickedIssue.url }
+          : { type: 'manual', repoPath },
       })
       onCreated()
-      onClose()
+      close()
       setTitle('')
       setDescription('')
       setRepoPath('')
@@ -114,29 +127,28 @@ export function NewTaskModal({ open, onClose, onCreated }: Props) {
   if (!open) return null
 
   return (
-    <Modal onClose={onClose} title="Nova Tarefa na Fábrica">
+    <Modal onClose={close} title="Nova Tarefa na Fábrica">
       <div className="stack" style={{ minWidth: 480 }}>
         {/* Abas do Modal */}
-        <div className="row" style={{ borderBottom: '1px solid var(--line)', paddingBottom: 8 }}>
-          <button
-            type="button"
-            className={`btn btn-sm ${tab === 'manual' ? 'btn-primary' : ''}`}
-            onClick={() => setTab('manual')}
-          >
-            Tarefa Manual
-          </button>
-          <button
-            type="button"
-            className={`btn btn-sm ${tab === 'issues' ? 'btn-primary' : ''}`}
-            onClick={() => setTab('issues')}
-          >
-            <GitPullRequest size={14} /> Importar Issue Remota
-          </button>
-        </div>
+        <Segmented
+          options={[
+            { id: 'manual', label: 'Tarefa manual' },
+            { id: 'issues', label: 'Importar issue remota' },
+          ]}
+          value={tab}
+          onChange={setTab}
+        />
 
-        {error && (
-          <div className="card card-pad" style={{ background: 'var(--red-subtle)', borderColor: 'var(--red-line)' }}>
-            <span style={{ color: 'var(--red)' }}>{error}</span>
+        {error && <div className="callout callout-crit">{error}</div>}
+
+        {pickedIssue && tab === 'manual' && (
+          <div className="callout callout-info row" style={{ justifyContent: 'space-between' }}>
+            <span>
+              <GitPullRequest size={14} /> Vinculada à issue #{pickedIssue.number} de {pickedIssue.repo}
+            </span>
+            <button type="button" className="btn btn-sm" onClick={() => setPickedIssue(null)}>
+              Desvincular
+            </button>
           </div>
         )}
 
@@ -175,7 +187,7 @@ export function NewTaskModal({ open, onClose, onCreated }: Props) {
                 <span className="eyebrow">Branch Base</span>
                 <input
                   className="input"
-                  placeholder="main"
+                  placeholder="padrão do repositório"
                   value={baseBranch}
                   onChange={e => setBaseBranch(e.target.value)}
                 />
@@ -187,9 +199,10 @@ export function NewTaskModal({ open, onClose, onCreated }: Props) {
                 </span>
                 <select
                   className="input"
-                  value={provider}
-                  onChange={e => setProvider(e.target.value as any)}
+                  value={provider ?? ''}
+                  onChange={e => setProvider(e.target.value as SettingsResponse['provider'])}
                 >
+                  {provider === null && <option value="">Padrão de Configurações</option>}
                   <option value="agy">Antigravity (AGY)</option>
                   <option value="codex">Codex</option>
                   <option value="claude">Claude Code</option>
@@ -209,7 +222,7 @@ export function NewTaskModal({ open, onClose, onCreated }: Props) {
             </label>
 
             <div className="row" style={{ justifyContent: 'flex-end', marginTop: 12 }}>
-              <button type="button" className="btn" onClick={onClose} disabled={saving}>
+              <button type="button" className="btn" onClick={close} disabled={saving}>
                 Cancelar
               </button>
               <button type="submit" className="btn btn-primary" disabled={saving}>
@@ -230,7 +243,9 @@ export function NewTaskModal({ open, onClose, onCreated }: Props) {
               />
             </div>
 
-            {loadingIssues ? (
+            {issuesError ? (
+              <div className="callout callout-crit">Falha ao buscar issues: {issuesError}</div>
+            ) : loadingIssues ? (
               <div className="card card-pad muted" style={{ textAlign: 'center' }}>
                 Buscando issues nos repositórios conectados...
               </div>

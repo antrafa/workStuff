@@ -24,13 +24,12 @@ export function FactoryPhaseDots({ spans = [], state = 'intake' }: Props) {
                 height: 7,
                 borderRadius: '50%',
                 background: isSuccess
-                  ? '#4ade80'
+                  ? 'var(--ok)'
                   : isRunning
-                    ? '#6cb6ff'
+                    ? 'var(--info)'
                     : isFail
-                      ? '#ff6f67'
-                      : '#374151',
-                boxShadow: isRunning ? '0 0 8px #6cb6ff' : undefined,
+                      ? 'var(--crit)'
+                      : 'var(--line-hi)',
                 transition: 'all 0.2s ease',
               }}
             />
@@ -60,13 +59,12 @@ export function FactoryPhaseDots({ spans = [], state = 'intake' }: Props) {
               height: 7,
               borderRadius: '50%',
               background: isError
-                ? '#ff6f67'
+                ? 'var(--crit)'
                 : isPast
-                  ? '#4ade80'
+                  ? 'var(--ok)'
                   : isCurrent
-                    ? '#6cb6ff'
-                    : '#232c3d',
-              boxShadow: isCurrent ? '0 0 6px #6cb6ff' : undefined,
+                    ? 'var(--info)'
+                    : 'var(--line-hi)',
             }}
           />
         )

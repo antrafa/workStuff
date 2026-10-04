@@ -1,11 +1,13 @@
 import { useState, useRef, useEffect } from 'react'
 import {
-  BookOpen, Bot, Cpu, FolderOpen, Play, ShieldAlert, Sparkles, Square, Terminal, Wrench
+  BookOpen, Bot, Cpu, ExternalLink, FolderOpen, Play, ShieldAlert, Sparkles, Square, Terminal, Wrench
 } from 'lucide-react'
 import { Link } from 'react-router'
-import { Markdown } from '@/ui'
+import { Markdown, Modal } from '@/ui'
+import { DevRunbookDoc } from '../devRunbooks/DevRunbookDoc'
 import { api } from '@/lib/api'
 import { streamPost } from '@/lib/stream'
+import type { SessionEvent } from './factoryRun'
 import type { SpecializedAgentId } from '../../../server/lib/factory/types.ts'
 
 const AGENT_CARDS: Array<{
@@ -14,7 +16,8 @@ const AGENT_CARDS: Array<{
   role: string
   icon: typeof Bot
   placeholder: string
-  runbooks: Array<{ title: string; file: string }>
+  // when: em que momento do trabalho do agente o runbook ajuda (aparece como dica no botão)
+  runbooks: Array<{ title: string; file: string; when: string }>
 }> = [
   {
     id: 'architect',
@@ -23,31 +26,32 @@ const AGENT_CARDS: Array<{
     icon: Sparkles,
     placeholder: 'Ex.: Analise a arquitetura do módulo de autenticação e elabore um plano para suportar autenticação OAuth2 sem quebrar clientes legados...',
     runbooks: [
-      { title: 'Pre-flight Check do Repositório', file: 'factory/agentes-preflight.md' },
-      { title: 'Mapeamento de Arquitetura e Dependências', file: 'factory/analise-dependencias.md' },
+      { title: 'Pre-flight do repositório', file: 'factory/agentes-preflight.md', when: 'Antes de delegar: repo limpo, base atualizada, build verde' },
+      { title: 'Mapa de arquitetura e dependências', file: 'factory/analise-dependencias.md', when: 'Antes de planejar: o que o projeto usa e o que mudou' },
     ],
   },
   {
     id: 'implementer',
     name: 'Implementer',
-    role: 'Implementação de código e refatoração na pasta do projeto',
+    role: 'Propõe a implementação ou refatoração em texto, sem alterar a pasta do projeto',
     icon: Wrench,
     placeholder: 'Ex.: Adicione tratamento de retry com backoff exponencial no cliente HTTP da pasta src/lib/api...',
     runbooks: [
-      { title: 'Sincronização e Rebase de Branch', file: 'factory/sincronizar-branch.md' },
-      { title: 'Criação e Isolamento de Git Worktree', file: 'factory/isolamento-worktree.md' },
-      { title: 'Diagnóstico e Resolução de Conflitos de Rebase', file: 'factory/rebase-conflitos.md' },
+      { title: 'Worktree isolada', file: 'factory/isolamento-worktree.md', when: 'Reproduzir a tarefa à mão sem mexer no seu checkout' },
+      { title: 'Atualizar branch com a base', file: 'factory/sincronizar-branch.md', when: 'A base andou enquanto o agente trabalhava' },
+      { title: 'Conflitos de rebase', file: 'factory/rebase-conflitos.md', when: 'O rebase parou com conflito' },
+      { title: 'Reverter alteração fora do escopo', file: 'factory/reverter-fora-escopo.md', when: 'O agente mexeu em arquivo que não devia' },
     ],
   },
   {
     id: 'tester',
     name: 'Tester',
-    role: 'Identificação de cenários de teste, escrita de testes automatizados e validação de QA',
+    role: 'Identifica cenários de teste e propõe os testes automatizados, sem alterar a pasta do projeto',
     icon: Terminal,
     placeholder: 'Ex.: Crie testes unitários para a rota de upload cobrindo arquivos vazios, formatos inválidos e sucesso...',
     runbooks: [
-      { title: 'Validação Manual de Portões de Aceitação', file: 'factory/portoes-aceitacao.md' },
-      { title: 'Execução de Testes e Validação de QA', file: 'factory/testes-isolados.md' },
+      { title: 'Portões de aceitação', file: 'factory/portoes-aceitacao.md', when: 'Conferir à mão os mesmos portões que a esteira aplica' },
+      { title: 'Portão de testes reprovado', file: 'factory/testes-isolados.md', when: 'Reproduzir e isolar a falha de teste na worktree' },
     ],
   },
   {
@@ -57,8 +61,10 @@ const AGENT_CARDS: Array<{
     icon: ShieldAlert,
     placeholder: 'Ex.: Revise os arquivos da pasta src/auth em busca de falhas de segurança, vazamento de tokens e problemas de concorrência...',
     runbooks: [
-      { title: 'Auditoria de Segurança e Verificação Pré-MR', file: 'factory/auditoria-seguranca.md' },
-      { title: 'Publicação Remota e Preparação de Merge Request', file: 'factory/publicar-mr.md' },
+      { title: 'Inspecionar a entrega', file: 'factory/inspecionar-entrega.md', when: 'Antes de aprovar: o que o agente realmente mudou' },
+      { title: 'Auditoria de segurança', file: 'factory/auditoria-seguranca.md', when: 'Segredo, arquivo indevido ou dependência vulnerável no diff' },
+      { title: 'Publicar a branch para MR', file: 'factory/publicar-mr.md', when: 'Enviar a branch ao remoto para abrir o MR' },
+      { title: 'Merge local falhou', file: 'factory/merge-local-falhou.md', when: 'A aprovação com merge local deu erro' },
     ],
   },
 ]
@@ -71,6 +77,7 @@ export function StandaloneAgentTab() {
   const [running, setRunning] = useState(false)
   const [output, setOutput] = useState('')
   const [error, setError] = useState<string | null>(null)
+  const [openRunbook, setOpenRunbook] = useState<{ title: string; file: string } | null>(null)
   const abortRef = useRef<AbortController | null>(null)
 
   useEffect(() => {
@@ -79,6 +86,8 @@ export function StandaloneAgentTab() {
         if (res?.provider) setProvider(res.provider)
       })
       .catch(() => {})
+    // Leaving the tab ends the run: this stream owns the CLI process (unlike pipeline runs)
+    return () => abortRef.current?.abort()
   }, [])
 
   const activeMeta = AGENT_CARDS.find(a => a.id === selectedAgent)!
@@ -107,9 +116,9 @@ export function StandaloneAgentTab() {
     try {
       await streamPost(
         '/factory/agents/run',
-        (ev: any) => {
-          if (ev.type === 'text') setOutput(prev => prev + ev.text)
-          if (ev.type === 'error') setError(ev.message)
+        (ev: SessionEvent) => {
+          if (ev.type === 'text') setOutput(prev => prev + (ev.text ?? ''))
+          if (ev.type === 'error') setError(ev.message ?? 'Falha na execução do agente.')
         },
         abortRef.current.signal,
         {
@@ -146,18 +155,18 @@ export function StandaloneAgentTab() {
                 className="card card-pad stack"
                 style={{
                   cursor: 'pointer',
-                  borderColor: isSelected ? 'var(--accent)' : undefined,
-                  background: isSelected ? 'var(--surface-active)' : undefined,
+                  borderColor: isSelected ? 'var(--signal-line)' : undefined,
+                  background: isSelected ? 'var(--signal-soft)' : undefined,
                   padding: 14,
                 }}
                 onClick={() => setSelectedAgent(agent.id)}
               >
                 <div className="row" style={{ justifyContent: 'space-between' }}>
                   <span className="row" style={{ gap: 6, fontWeight: 600 }}>
-                    <Icon size={16} style={{ color: isSelected ? 'var(--accent)' : 'var(--muted)' }} />
+                    <Icon size={16} style={{ color: isSelected ? 'var(--signal)' : 'var(--muted)' }} />
                     {agent.name}
                   </span>
-                  {isSelected && <span style={{ color: 'var(--accent)' }}>✓</span>}
+                  {isSelected && <span style={{ color: 'var(--signal)' }}>✓</span>}
                 </div>
                 <span className="muted" style={{ fontSize: 12, lineHeight: 1.4 }}>
                   {agent.role}
@@ -216,37 +225,14 @@ export function StandaloneAgentTab() {
           />
         </label>
 
-        {activeMeta.runbooks && activeMeta.runbooks.length > 0 && (
-          <div className="col" style={{ gap: 8, padding: '10px 12px', background: 'var(--surface-subtle)', borderRadius: 'var(--radius)', fontSize: 12 }}>
-            <span className="row" style={{ gap: 6, color: 'var(--muted)', alignItems: 'center', fontWeight: 500 }}>
-              <BookOpen size={14} style={{ color: 'var(--accent)' }} />
-              <span>Procedimentos operacionais recomendados para <b>{activeMeta.name}</b>:</span>
-            </span>
-            <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
-              {activeMeta.runbooks.map(rb => (
-                <Link
-                  key={rb.file}
-                  to={`/dev-runbooks?file=${encodeURIComponent(rb.file)}`}
-                  className="btn btn-ghost btn-sm"
-                  style={{ fontSize: 11, padding: '3px 8px' }}
-                >
-                  {rb.title} →
-                </Link>
-              ))}
-            </div>
-          </div>
-        )}
-
         {error && (
-          <div className="card card-pad" style={{ background: 'var(--red-subtle)', borderColor: 'var(--red-line)' }}>
-            <span style={{ color: 'var(--red)' }}>{error}</span>
-          </div>
+          <div className="callout callout-crit">{error}</div>
         )}
 
         <div className="row" style={{ justifyContent: 'flex-end', marginTop: 4 }}>
           {running ? (
-            <button type="button" className="btn" onClick={handleStop} style={{ borderColor: 'var(--red)' }}>
-              <Square size={14} style={{ color: 'var(--red)' }} /> Interromper
+            <button type="button" className="btn btn-danger" onClick={handleStop}>
+              <Square size={14} /> Interromper
             </button>
           ) : (
             <button type="submit" className="btn btn-primary">
@@ -255,6 +241,43 @@ export function StandaloneAgentTab() {
           )}
         </div>
       </form>
+
+      {/* Runbooks do agente: rodam aqui mesmo, na pasta do repositório alvo */}
+      <section className="card card-pad stack" style={{ gap: 10 }}>
+        <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
+          <span className="row" style={{ gap: 6, alignItems: 'center', fontWeight: 600 }}>
+            <BookOpen size={15} style={{ color: 'var(--signal)' }} /> Runbooks do {activeMeta.name}
+          </span>
+          <Link to="/dev-runbooks" className="btn btn-ghost btn-sm" style={{ fontSize: 11 }}>
+            Todos os runbooks <ExternalLink size={11} />
+          </Link>
+        </div>
+        <span className="muted" style={{ fontSize: 12 }}>
+          {repoPath
+            ? <>Os comandos rodam em <b className="mono">{repoPath}</b>. Leitura roda direto; o que altera o repositório pede confirmação.</>
+            : 'Escolha o repositório alvo acima para os comandos já abrirem apontando para ele.'}
+        </span>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: 8 }}>
+          {activeMeta.runbooks.map(rb => (
+            <button
+              key={rb.file}
+              type="button"
+              className="btn"
+              style={{ flexDirection: 'column', alignItems: 'flex-start', gap: 2, height: 'auto', padding: '8px 10px', textAlign: 'left' }}
+              onClick={() => setOpenRunbook(rb)}
+            >
+              <span style={{ fontWeight: 600, fontSize: 12.5 }}>{rb.title}</span>
+              <span className="muted" style={{ fontSize: 11.5, whiteSpace: 'normal' }}>{rb.when}</span>
+            </button>
+          ))}
+        </div>
+      </section>
+
+      {openRunbook && (
+        <Modal title={openRunbook.title} onClose={() => setOpenRunbook(null)} width={900}>
+          <DevRunbookDoc file={openRunbook.file} initialValues={repoPath ? { projeto: repoPath } : {}} />
+        </Modal>
+      )}
 
       {/* Terminal de Saída do Agente */}
       {output && (

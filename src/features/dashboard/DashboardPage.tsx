@@ -29,6 +29,7 @@ import { fetchChecks, type Check } from '@/features/doctor/api'
 import { fetchServices, type Services } from '@/features/local/api'
 import type { FactoryTask } from '../../../server/lib/factory/types.ts'
 import { FactoryStatusChip } from '@/features/factory/timeline/FactoryStatusChip'
+import { isTaskRunning } from '../factory/factoryRun'
 
 export default function DashboardPage() {
   const navigate = useNavigate()
@@ -87,9 +88,7 @@ export default function DashboardPage() {
   }, [])
 
   // Cálculos da Fábrica
-  const executingTasks = tasks.filter(
-    t => Boolean(t.executing) || ['planning', 'building', 'qa_security'].includes(t.state)
-  )
+  const executingTasks = tasks.filter(isTaskRunning)
   const waitingApprovalTasks = tasks.filter(t => t.state === 'waiting_approval')
   const reviewTasks = tasks.filter(t => t.state === 'review')
   const doneTasks = tasks.filter(t => t.state === 'done')
@@ -313,7 +312,7 @@ export default function DashboardPage() {
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                 {tasks.slice(0, 4).map(task => {
-                  const isTaskExecuting = Boolean(task.executing) || ['planning', 'building', 'qa_security'].includes(task.state)
+                  const isTaskExecuting = isTaskRunning(task)
                   return (
                     <div
                       key={task.id}
@@ -354,7 +353,7 @@ export default function DashboardPage() {
                       </div>
 
                       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                        <FactoryStatusChip status={task.state} />
+                        <FactoryStatusChip state={task.state} executing={task.executing} />
                         {task.state === 'waiting_approval' && (
                           <span className="badge badge-warn" style={{ fontSize: 11 }}>
                             Aguardando aprovação
