@@ -1,36 +1,39 @@
-# Criação e Isolamento de Git Worktree da Fábrica
+# Criar uma worktree isolada para reproduzir uma tarefa
 
-Procedimento para provisionamento e preparação manual de uma Git Worktree isolada para o agente Implementer ou para reprodução local de tarefas da Fábrica de Software. Permite criar uma árvore de trabalho independente a partir de uma branch dedicada sem alterar o checkout do repositório principal.
+Cria, à mão, o mesmo isolamento que a Fábrica usa: uma pasta separada com uma branch própria saindo de `origin/<base>`, sem tocar no checkout em que você está trabalhando.
 
-### Parâmetros
-- `projeto`: Diretório do repositório Git local
-- `branch_base`: Nome da branch base de comparação (ex.: `main` ou `master`)
-- `branch_fabrica`: Nome da branch dedicada da tarefa (ex.: `factory/tarefa-01`)
-- `caminho_worktree`: Caminho absoluto ou relativo do diretório da worktree (ex.: `../worktrees/tarefa-01`)
+**Quando usar:** para reproduzir localmente o que um agente fez, testar uma ideia sem sujar sua branch, ou rodar o Implementer avulso numa pasta descartável.
 
-### Procedimento
+### Antes de começar
+- `projeto`: pasta do repositório **principal**.
+- `branch_base`: branch de onde sair (ex.: `main`).
+- `branch_fabrica`: nome da nova branch. Use um nome que diga a entrega (`teste/retry-http`). Evite o prefixo `factory/`, reservado para as tarefas da esteira.
+- `caminho_worktree`: pasta nova, caminho completo sem `~` (ex.: `/home/<você>/worktrees/retry-http`). Ela **não pode existir** ainda.
 
-1. Verifique o status da árvore de trabalho atual:
+### 1. Estado atual
 ```bash
 git status -s
+git worktree list
 ```
+> A worktree não depende do seu checkout estar limpo, mas confira que `caminho_worktree` não aparece na lista.
 
-2. Consulte as worktrees atualmente registradas no repositório:
-```bash
-git worktree list --porcelain
-```
-
-3. Baixe e atualize as referências mais recentes da branch base:
+### 2. Base atualizada
 ```bash
 git fetch origin {{branch_base}}
 ```
 
-4. Crie a worktree isolada apontando para a nova branch da tarefa baseada no topo da branch base remota:
+### 3. Crie a worktree com a branch nova
 ```bash
 git worktree add -b {{branch_fabrica}} {{caminho_worktree}} origin/{{branch_base}}
 ```
+> `a branch named ... already exists`: escolha outro nome ou, se quiser reaproveitar a branch, use `git worktree add {{caminho_worktree}} {{branch_fabrica}}`.
+> `is already checked out at`: essa branch já está em outra worktree; uma branch só pode estar em uma worktree por vez.
 
-5. Confirme a criação da nova worktree na lista do repositório:
+### 4. Confirme
 ```bash
 git worktree list
 ```
+
+### Depois de criar
+- A worktree **não** tem `node_modules`. A Fábrica cria um link simbólico para o `node_modules` do repositório principal; à mão, rode `npm ci` com `projeto` apontando para a worktree.
+- Para remover quando terminar: runbook *Descartar uma tarefa da Fábrica manualmente*, passos 3 a 5.

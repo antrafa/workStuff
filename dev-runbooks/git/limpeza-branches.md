@@ -1,30 +1,43 @@
-# Limpeza de Branches Locais Mergeadas
+# Limpeza de branches locais já incorporadas
 
-Procedimento para identificar e deletar branches locais que já foram incorporadas na branch principal (`main` ou `master`), liberando espaço e mantendo a lista de branches limpa.
+Apaga branches locais cujo conteúdo já está na base, e descobre as que perderam a branch remota. Lista longa de branches esconde as que ainda importam.
 
-### Parâmetros
-- `projeto`: Diretório do repositório Git local
-- `branch_base`: Nome da branch principal (ex.: `main` ou `master`)
-- `branch`: Nome da branch local a ser removida (ex.: `feature/login-sso`)
+**Quando usar:** `git branch` não cabe mais na tela, ou você não sabe mais quais branches têm trabalho pendente.
 
-### Procedimento
+### Antes de começar
+- `projeto`: pasta do repositório.
+- `branch_base`: branch principal (ex.: `main`).
+- `branch`: preencha só no passo 5, com a branch escolhida.
 
-1. Verifique o status da working tree para garantir que não há alterações pendentes:
+### 1. Base local atualizada
+`--merged` compara com a sua base **local**; base atrasada esconde branches que já poderiam sair.
 ```bash
-git status -s
-```
-
-2. Atualize as referências remotas e remova referências a branches já deletadas no servidor:
-```bash
+git status -sb
 git fetch -p origin
 ```
+> `fetch -p` também apaga as referências `origin/*` de branches já removidas no servidor.
 
-3. Liste todas as branches locais que já foram mergeadas na branch principal:
+### 2. Branches já incorporadas na base
 ```bash
-git branch --merged {{branch_base}}
+git branch --merged origin/{{branch_base}}
 ```
+> Pode apagar qualquer uma desta lista, exceto a própria base e branches de longa duração (`develop`, `release/*`).
 
-4. Remova a branch local selecionada com segurança (`-d` garante que só apaga se mergeada):
+### 3. Branches cuja remota sumiu
+```bash
+git branch -vv
+```
+> `[origin/x: gone]`: o MR foi mergeado (ou a branch apagada) no servidor. Se usou *squash merge*, ela **não** aparece no passo 2, porque os commits mudaram de hash; confira que o MR foi mesmo mergeado.
+
+### 4. Branches com trabalho que não está na base
+```bash
+git branch --no-merged origin/{{branch_base}}
+```
+> Estas têm commits únicos. Não apague sem olhar `git log origin/{{branch_base}}..<branch>`.
+
+### 5. Apague a branch escolhida
+`-d` recusa apagar branch com commit não incorporado (`not fully merged`), o que protege contra perda.
 ```bash
 git branch -d {{branch}}
 ```
+> Recusou e você tem certeza (ex.: squash merge)? A remoção forçada é `git branch -D`. Recuperação, se precisar: runbook *Recuperar trabalho perdido*.

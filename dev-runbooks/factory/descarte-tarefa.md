@@ -1,35 +1,51 @@
-# Descarte e Recuperação de Tarefa de Fábrica
+# Descartar uma tarefa da Fábrica manualmente
 
-Procedimento de contingência para remoção forçada e limpeza atômica de uma tarefa da Fábrica de Software com erro irrecuperável ou cancelada pelo usuário. Garante a desalocação completa da Git Worktree e exclusão da branch temporária sem deixar resíduos no disco ou no repositório principal.
+Remove a worktree e a branch de uma tarefa que travou, falhou sem conserto ou foi cancelada, quando a exclusão pela tela da Fábrica não limpou tudo (pasta presa, branch que sobrou, erro de "already checked out").
 
-### Parâmetros
-- `projeto`: Diretório do repositório Git local
-- `caminho_worktree`: Caminho da pasta da worktree a remover (ex.: `~/.workstuff/worktrees/repo/fac-12345`)
-- `branch_fabrica`: Nome da branch temporária da fábrica a deletar (ex.: `factory/fac-12345`)
+**Quando usar:** a tela da Fábrica falhou ao excluir a tarefa, ou `git worktree list` ainda mostra a worktree de uma tarefa que já não existe.
 
-### Procedimento
+**Prefira a tela:** o botão de excluir tarefa da Fábrica faz exatamente isto. Use o runbook só quando ele falhar.
 
-1. Liste todas as worktrees registradas para confirmar o caminho e branch vinculada à tarefa:
+**Irreversível:** commits que só existem na branch da tarefa somem da lista de branches. Ainda dá para recuperar por algumas semanas via `git reflog` (runbook *Recuperar trabalho perdido*), mas não conte com isso.
+
+### Antes de começar
+- `projeto`: pasta do repositório **principal** (não a worktree).
+- `caminho_worktree`: caminho **completo** da worktree, sem `~` (copie da saída do passo 1). Padrão da Fábrica: `/home/<você>/.workstuff/worktrees/<repo>/<id-da-tarefa>`.
+- `branch_fabrica`: `factory/<id-da-tarefa>`.
+
+### 1. Confirme a worktree e a branch da tarefa
 ```bash
 git worktree list
 ```
+> Localize a linha cujo caminho termina no id da tarefa e confira que a branch entre colchetes é `factory/<id>`. Se for outra branch, **pare**: o caminho está errado.
 
-2. Remova forçadamente o vínculo da worktree da tarefa cancelada:
+### 2. Veja se há trabalho que vale guardar
+```bash
+git log --oneline {{branch_fabrica}} --not --remotes
+```
+> Commits listados não estão em nenhuma branch remota: existem só aqui. Se algum vale a pena, publique antes (`git push -u origin {{branch_fabrica}}`) ou crie uma branch com outro nome a partir dela.
+
+### 3. Remova a worktree
+`--force` é necessário porque a Fábrica deixa `node_modules` como link simbólico e arquivos não commitados dentro dela.
 ```bash
 git worktree remove --force {{caminho_worktree}}
 ```
+> `is not a working tree`: a pasta já foi apagada à mão; o passo 4 limpa o registro órfão.
 
-3. Execute a poda administrativa dos metadados de worktrees excluídas:
+### 4. Limpe registros de worktrees cuja pasta não existe mais
 ```bash
 git worktree prune -v
 ```
 
-4. Exclua a branch local temporária da tarefa:
+### 5. Apague a branch da tarefa
+`-D` apaga mesmo sem merge; é o esperado para tarefa descartada.
 ```bash
 git branch -D {{branch_fabrica}}
 ```
 
-5. Confirme que o status do repositório principal permanece limpo e consistente:
+### 6. Confirme
 ```bash
-git status -s
+git worktree list
+git branch --list 'factory/*'
 ```
+> A tarefa não pode aparecer em nenhuma das duas listas.

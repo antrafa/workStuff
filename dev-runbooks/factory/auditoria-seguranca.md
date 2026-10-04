@@ -1,29 +1,48 @@
-# Auditoria de Segurança e Verificação Pré-MR
+# Auditoria de segurança antes do MR
 
-Procedimento de auditoria e inspeção de segurança para a branch desenvolvida na Fábrica de Software, seguindo o padrão de revisão do agente Reviewer. Valida que nenhum segredo ou credencial foi comitado, nenhum arquivo temporário foi exposto e nenhuma vulnerabilidade crítica foi introduzida nas dependências.
+Procura, no que a tarefa adicionou, os problemas que mais vazam para produção: credencial no código, arquivo que não devia ser versionado e dependência nova com vulnerabilidade conhecida. Complementa a revisão do Reviewer; não a substitui.
 
-### Parâmetros
-- `projeto`: Diretório do repositório Git local
-- `branch_base`: Nome da branch base de comparação (ex.: `main` ou `master`)
+**Quando usar:** antes de aprovar uma tarefa ou publicar a branch, sempre que o diff tocar configuração, autenticação, integração externa ou `package.json`.
 
-### Procedimento
+### Antes de começar
+- `projeto`: pasta da **worktree da tarefa** (`~/.workstuff/worktrees/<repo>/<tarefa>`, caminho completo) ou do repositório com a branch da tarefa em checkout.
+- `branch_base`: branch base da tarefa (ex.: `main`).
+- Todos os passos são leitura.
 
-1. Liste todos os commits criados na tarefa em comparação com a branch base:
+### 1. Quais arquivos entraram
 ```bash
-git log {{branch_base}}..HEAD --oneline
+git diff --stat origin/{{branch_base}}...HEAD
+git diff --name-status origin/{{branch_base}}...HEAD
 ```
+> Sinal de alerta na lista: `.env`, `*.pem`, `*.key`, `id_rsa`, `*.p12`, `*.sqlite`, dumps (`*.sql`, `*.bak`), `node_modules/`, `dist/`, arquivos de log. Qualquer um deles: **reprove** e use o runbook *Reverter alteração fora do escopo*.
 
-2. Inspecione detalhadamente o diff completo à procura de credenciais, chaves de API, tokens ou funções inseguras:
-```bash
-git diff {{branch_base}}...HEAD
-```
-
-3. Verifique o status da árvore de trabalho para confirmar que nenhum arquivo temporário (`.env`, logs, dumps) ficou pendente:
+### 2. Arquivos novos ainda não commitados
+A esteira commita a worktree inteira na aprovação; o que está solto aqui vai junto.
 ```bash
 git status -s
+git ls-files --others --exclude-standard
 ```
 
-4. Execute uma auditoria de segurança das dependências do projeto para detectar vulnerabilidades conhecidas:
+### 3. Padrões de segredo nas linhas adicionadas
 ```bash
-npm audit
+git diff -G 'password|passwd|secret|token|api[_-]?key|BEGIN [A-Z ]*PRIVATE KEY|AKIA[0-9A-Z]{16}' --stat origin/{{branch_base}}...HEAD
+git diff -G 'password|passwd|secret|token|api[_-]?key|BEGIN [A-Z ]*PRIVATE KEY|AKIA[0-9A-Z]{16}' origin/{{branch_base}}...HEAD
 ```
+> O primeiro mostra **quais arquivos** têm linha casando com o padrão; o segundo mostra o diff desses arquivos. Leia cada ocorrência: nome de variável (`tokenExpirado`) é falso positivo; valor literal (`apiKey = 'sk-...'`) é vazamento. Segredo real commitado precisa ser **revogado**, não só apagado: ele continua no histórico da branch.
+
+### 4. Construções perigosas introduzidas
+```bash
+git diff -G 'eval\(|new Function\(|child_process|exec\(|innerHTML|dangerouslySetInnerHTML|shell=True' origin/{{branch_base}}...HEAD
+```
+> Não é proibido por si, mas cada ocorrência precisa de entrada controlada. Concatenação de texto do usuário em comando, SQL ou HTML é bloqueio do MR.
+
+### 5. Dependências novas e vulnerabilidades (projetos Node)
+```bash
+git diff origin/{{branch_base}}...HEAD -- package.json
+npm audit --omit=dev
+```
+> Dependência nova sem justificativa no plano: questione. `high`/`critical` introduzida pela tarefa: reprove; pré-existente: registre e siga.
+
+### Veredito
+- **Aprovar:** nenhum arquivo sensível, nenhum segredo literal, dependências justificadas.
+- **Reprovar:** qualquer segredo literal ou arquivo sensível. Informe o arquivo e a linha na revisão.

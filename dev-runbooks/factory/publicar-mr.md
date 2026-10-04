@@ -1,30 +1,41 @@
-# Publicação Remota e Preparação de Merge Request
+# Publicar a branch da tarefa para abrir o MR
 
-Procedimento para o agente Reviewer ou operador humano validar e publicar a branch de desenvolvimento da Fábrica de Software no repositório remoto configurado (GitLab ou GitHub), deixando o código pronto para abertura de Merge Request ou Pull Request.
+Envia a branch da tarefa ao remoto depois de conferir que o que vai subir é exatamente a entrega revisada: sem arquivo solto, sem commit estranho, sem atraso grande em relação à base.
 
-### Parâmetros
-- `projeto`: Diretório do repositório Git local ou da worktree
-- `branch_base`: Nome da branch base remota (ex.: `main` ou `master`)
-- `branch_fabrica`: Nome da branch local da fábrica a publicar (ex.: `factory/fac-123456789`)
+**Quando usar:** a tarefa foi aprovada e você vai abrir o MR/PR à mão, ou a publicação automática da Fábrica falhou.
 
-### Procedimento
+### Antes de começar
+- `projeto`: pasta da **worktree da tarefa** (caminho completo).
+- `branch_base`: branch de destino do MR.
+- `branch_fabrica`: `factory/<id-da-tarefa>`. Se o time exige outro padrão de nome no remoto, renomeie antes (`git branch -m`).
+- Publicar é ação **externa**: dispara pipeline e fica visível para o time.
 
-1. Inspecione o último commit gerado na tarefa e seu resumo de arquivos modificados:
-```bash
-git log -n 1 --stat
-```
-
-2. Exiba o balanço consolidado de adições e remoções frente à branch base:
-```bash
-git diff --stat {{branch_base}}...HEAD
-```
-
-3. Confirme que a árvore de trabalho está totalmente limpa e commitada:
+### 1. Tudo commitado
 ```bash
 git status -s
 ```
+> Linhas aqui não vão no push. Se fazem parte da entrega, commite; se não, descarte.
 
-4. Envie a branch local para o servidor remoto com vinculação de rastreamento:
+### 2. Os commits que vão subir
+```bash
+git log --oneline origin/{{branch_base}}..HEAD
+git diff --stat origin/{{branch_base}}...HEAD
+```
+> Confira se a lista de arquivos bate com o que foi revisado. Arquivo inesperado: volte ao runbook *Inspecionar a entrega*.
+
+### 3. A base andou desde que a tarefa começou?
+```bash
+git fetch origin {{branch_base}}
+git log --oneline HEAD..origin/{{branch_base}}
+```
+> Commits listados: a base avançou. Se forem muitos ou tocarem os mesmos arquivos, rode antes o runbook *Atualizar branch com a base* para o MR não nascer com conflito.
+
+### 4. Publique
 ```bash
 git push -u origin {{branch_fabrica}}
 ```
+> `rejected (non-fast-forward)`: já existe uma branch com esse nome no remoto com outro histórico. **Não** force. Confira quem a criou e escolha outro nome.
+> A saída do GitLab/GitHub traz o link para abrir o MR.
+
+### Descrição do MR
+Use o resumo do Reviewer e responda: o que mudou, por quê, e como validar. Declare o que ficou fora do escopo.

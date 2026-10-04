@@ -1,39 +1,47 @@
-# Limpeza e Diagnóstico de Worktrees da Fábrica
+# Limpeza geral de worktrees e branches da Fábrica
 
-Procedimento para identificar, inspecionar e limpar worktrees temporárias e referências órfãs criadas pela esteira da Fábrica de Software em `~/.workstuff/worktrees/`, além de remover branches locais de tarefas já finalizadas ou descartadas.
+Encontra o lixo que a esteira deixa com o tempo: worktrees de tarefas já concluídas ou excluídas, registros de worktree cuja pasta sumiu e branches `factory/*` sem dono. Para remover **uma** tarefa específica, use *Descartar uma tarefa da Fábrica manualmente*.
 
-### Parâmetros
-- `projeto`: Diretório do repositório Git local
-- `branch_fabrica`: Nome da branch de fábrica local a ser removida (ex.: `factory/fac-123456789`)
+**Quando usar:** disco enchendo em `~/.workstuff/worktrees/`, lista de branches poluída, ou erro `already checked out` ao criar tarefa.
 
-### Procedimento
+### Antes de começar
+- `projeto`: pasta do repositório **principal**.
+- `branch_base`: branch principal (ex.: `main`).
+- `branch_fabrica`: preencha só no passo 5, com a branch que decidiu apagar.
 
-1. Verifique o status da working tree para garantir que não há modificações pendentes no checkout atual:
-```bash
-git status -s
-```
-
-2. Liste todas as worktrees ativas vinculadas a este repositório com seus respectivos diretórios e branches:
+### 1. Worktrees registradas
 ```bash
 git worktree list
 ```
+> Linhas com caminho em `.workstuff/worktrees/` são da Fábrica. Compare os ids com as tarefas ainda abertas na tela da Fábrica: as que não têm tarefa são lixo.
 
-3. Exiba os detalhes completos das worktrees no formato detalhado (porcelain) para identificar diretórios bloqueados ou inacessíveis:
+### 2. Registros órfãos e travados
 ```bash
 git worktree list --porcelain
 ```
+> `prunable`: a pasta não existe mais (o passo 3 limpa). `locked`: alguém travou de propósito; não mexa sem saber o motivo.
 
-4. Remova com segurança as referências de metadados das worktrees cujas pastas físicas já foram excluídas do disco:
+### 3. Limpe os registros órfãos
 ```bash
 git worktree prune -v
 ```
 
-5. Liste todas as branches locais criadas pela Fábrica de Software:
+### 4. Branches da Fábrica e o que já foi incorporado
 ```bash
-git branch --list 'factory/*'
+git branch --list 'factory/*' -vv
+git branch --merged {{branch_base}} --list 'factory/*'
 ```
+> A segunda lista são branches cujo conteúdo já está na base: pode apagar com segurança. Branch fora dela tem commit que não foi para a base; confirme que a tarefa foi descartada antes.
 
-6. Remova a branch de fábrica selecionada (garantindo que já foi incorporada ou descartada):
+### 5. Apague a branch escolhida
+`-d` só apaga se já estiver incorporada; recusa com `not fully merged` caso contrário (aí use o runbook de descarte, que usa `-D`).
 ```bash
 git branch -d {{branch_fabrica}}
+```
+> `checked out at`: a worktree dela ainda existe. Remova a worktree primeiro (runbook de descarte, passo 3).
+
+### 6. Confirme
+```bash
+git worktree list
+git branch --list 'factory/*'
 ```

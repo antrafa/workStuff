@@ -1,29 +1,41 @@
-# Sincronização de Branch com Upstream
+# Atualizar sua branch com a base (rebase)
 
-Procedimento para atualizar a branch de desenvolvimento local com os últimos commits da branch principal (`main`/`master`) utilizando rebase limpo para manter histórico linear.
+Traz os commits novos da base para a sua branch reaplicando os seus por cima, o que deixa o histórico linear e o MR sem commits de merge.
 
-### Parâmetros
-- `projeto`: Diretório do repositório Git
-- `branch_base`: Branch principal de referência (ex.: `main` ou `master`)
+**Quando usar:** sua branch de feature está atrás da base e você vai abrir ou atualizar o MR.
 
-### Procedimento
+**Não use se:** a branch é compartilhada com outra pessoa. Rebase reescreve os commits; quem já tem a branch vai ter conflito no próximo pull. Nesse caso use `git merge origin/<base>`.
 
-1. Verifique se há arquivos modificados ou unstaged na branch atual:
+### Antes de começar
+- `projeto`: pasta do repositório.
+- `branch_base`: branch de referência (ex.: `main`).
+
+### 1. Working tree limpa
 ```bash
 git status -s
 ```
+> Rebase não começa com alteração pendente. Commite ou use stash.
 
-2. Busque os commits mais recentes do remoto sem alterar sua árvore de trabalho:
+### 2. O que a base tem de novo
 ```bash
 git fetch origin {{branch_base}}
+git log --oneline HEAD..origin/{{branch_base}}
 ```
+> Vazio: você já está atualizado, pare aqui.
 
-3. Inspecione quais commits a branch principal tem que ainda não estão na sua branch:
+### 3. Seus commits que serão reaplicados
 ```bash
-git log HEAD..origin/{{branch_base}} --oneline
+git log --oneline origin/{{branch_base}}..HEAD
 ```
 
-4. Aplique o rebase da sua branch sobre a base mais recente:
+### 4. Rebase
 ```bash
 git rebase origin/{{branch_base}}
+```
+> Parou com conflito: runbook *Conflitos de rebase* (serve para qualquer branch, não só da Fábrica).
+
+### 5. Publicar a branch reescrita
+Se a branch já estava no remoto, o push normal é recusado. `--force-with-lease` só sobrescreve se ninguém tiver publicado nada novo desde o seu último fetch:
+```bash
+git push --force-with-lease
 ```
