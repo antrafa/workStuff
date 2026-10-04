@@ -6,6 +6,8 @@
 import assert from 'node:assert/strict'
 import type { FactoryTaskState } from './types.ts'
 
+export { RUNNING_STATES } from './types.ts'
+
 export type ExecutionKind = 'plan' | 'build' | 'adjust'
 
 type Execution = {
@@ -16,8 +18,6 @@ type Execution = {
 
 const running = new Map<string, Execution>()
 
-// States that only make sense while a process is actually executing.
-export const RUNNING_STATES: FactoryTaskState[] = ['planning', 'building', 'qa_security']
 
 export class ExecutionCancelledError extends Error {
   constructor() {

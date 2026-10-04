@@ -12,9 +12,11 @@ import type { DiffStat } from './types.ts'
 
 const git = (dir: string, args: string[], timeoutMs = 30_000) => run('git', ['-C', dir, ...args], timeoutMs)
 
+// Symlinked from the user's repo so builds and tests start fast in the worktree.
+const DEP_DIRS = ['node_modules', '.venv', 'venv']
+
 export function linkWorkspaceDependencies(repoPath: string, worktreePath: string): void {
-  const depDirs = ['node_modules', '.venv', 'venv']
-  for (const dir of depDirs) {
+  for (const dir of DEP_DIRS) {
     const src = join(repoPath, dir)
     const dest = join(worktreePath, dir)
     if (existsSync(src) && !existsSync(dest)) {
@@ -28,8 +30,7 @@ export function linkWorkspaceDependencies(repoPath: string, worktreePath: string
 }
 
 function unlinkSafeDependencies(worktreePath: string): void {
-  const depDirs = ['node_modules', '.venv', 'venv']
-  for (const dir of depDirs) {
+  for (const dir of DEP_DIRS) {
     const target = join(worktreePath, dir)
     try {
       if (existsSync(target) || lstatSync(target).isSymbolicLink()) {
@@ -158,9 +159,12 @@ export async function commitWorktree(
   message: string,
 ): Promise<string | null> {
   if (!existsSync(worktreePath)) return null
-  await git(worktreePath, ['add', '-A'])
-  const status = (await git(worktreePath, ['status', '--porcelain'])).trim()
-  if (!status) {
+  // A `node_modules/` ignore rule matches directories only, not our symlink: without the
+  // exclusion `git add -A` commits the link and it ends up in the MR.
+  await git(worktreePath, ['add', '-A', '--', '.', ...DEP_DIRS.map(d => `:(exclude)${d}`)])
+  // Staged changes only: the untracked dependency symlink always shows up in `status`
+  const staged = (await git(worktreePath, ['diff', '--cached', '--name-only'])).trim()
+  if (!staged) {
     return (await git(worktreePath, ['rev-parse', 'HEAD'])).trim()
   }
   await git(worktreePath, ['commit', '-m', message])
@@ -220,7 +224,7 @@ if (import.meta.main && process.argv.includes('--selfcheck')) {
     sh('config', 'user.name', 'Workstuff Test')
     sh('config', 'user.email', 'test@workstuff.local')
     writeFileSync(join(repoDir, 'README.md'), '# Repo de Teste\n')
-    writeFileSync(join(repoDir, '.gitignore'), 'node_modules\n.venv\n')
+    writeFileSync(join(repoDir, '.gitignore'), 'node_modules/\n.venv/\n')
     sh('add', 'README.md', '.gitignore')
     sh('commit', '-m', 'chore: commit inicial')
 
@@ -239,13 +243,14 @@ if (import.meta.main && process.argv.includes('--selfcheck')) {
     writeFileSync(join(worktreePath, 'app.ts'), 'console.log("hello world")\n')
     const commitHash = await commitWorktree(worktreePath, 'feat: adiciona app.ts')
     assert.ok(commitHash, 'commit gerado')
+    assert.equal(await commitWorktree(worktreePath, 'nada novo'), commitHash, 'sem mudança staged, não tenta commit vazio')
 
     // Verificação de diff
     const { diff, stat } = await getWorktreeDiff(worktreePath, 'main')
     assert.ok(diff.includes('hello world'), 'diff contem adicoes')
     assert.equal(stat.filesChanged, 1)
     assert.equal(stat.insertions, 1)
-    assert.deepEqual(stat.files, ['app.ts'])
+    assert.deepEqual(stat.files, ['app.ts'], 'symlink de node_modules fora do commit')
 
     // Remoção da worktree e garantia de que o node_modules original NÃO foi apagado
     await removeWorktree(repoDir, worktreePath, branchName)

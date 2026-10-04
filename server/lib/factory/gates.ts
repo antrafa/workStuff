@@ -3,7 +3,7 @@
 // Autoteste: node server/lib/factory/gates.ts --selfcheck
 
 import assert from 'node:assert/strict'
-import { existsSync, readFileSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { spawn } from 'node:child_process'
@@ -63,16 +63,17 @@ export async function gateDiffNotEmpty(worktreePath: string, baseBranch = 'main'
   }
 }
 
-// 2. Gate: Valida se os arquivos declarados pelo agente realmente existem fisicamente no disco
-export function gateArtifactsExist(worktreePath: string, claimedFiles: string[]): ArtifactsGateResult {
+// 2. Gate: Valida se os arquivos declarados pelo agente existem no disco ou aparecem no diff
+// (um arquivo apagado de propósito não existe mais, mas está no diff).
+export function gateArtifactsExist(worktreePath: string, claimedFiles: string[], changedFiles: string[] = []): ArtifactsGateResult {
   const missingFiles: string[] = []
   const foundFiles: string[] = []
 
   for (const rel of claimedFiles) {
-    const clean = rel.trim().replace(/^[./\\]+/, '')
+    // Strips only "./" and "/" prefixes: ".github/..." keeps its dot
+    const clean = rel.trim().replace(/^(\.\/|\/)+/, '')
     if (!clean) continue
-    const full = join(worktreePath, clean)
-    if (existsSync(full)) {
+    if (existsSync(join(worktreePath, clean)) || changedFiles.includes(clean)) {
       foundFiles.push(clean)
     } else {
       missingFiles.push(clean)
@@ -96,7 +97,8 @@ export function gateArtifactsExist(worktreePath: string, claimedFiles: string[])
 }
 
 // 3. Gate: Executa testes determinísticos do projeto via código TypeScript (não IA)
-export async function gateTestsPass(worktreePath: string, timeoutMs = 60_000, signal?: AbortSignal): Promise<TestsGateResult> {
+// 10 min: `mvn test` in a real Java project rarely fits the old 60s and a timeout reads as a failure
+export async function gateTestsPass(worktreePath: string, timeoutMs = 10 * 60_000, signal?: AbortSignal): Promise<TestsGateResult> {
   const t0 = Date.now()
 
   // Detecta comando de teste baseado nos arquivos presentes
@@ -227,6 +229,11 @@ if (import.meta.main && process.argv.includes('--selfcheck')) {
     const artOk = gateArtifactsExist(tmp, ['app.ts'])
     assert.equal(artOk.passed, true)
     assert.deepEqual(artOk.foundFiles, ['app.ts'])
+
+    mkdirSync(join(tmp, '.github'))
+    writeFileSync(join(tmp, '.github', 'ci.yml'), 'on: push')
+    assert.equal(gateArtifactsExist(tmp, ['./.github/ci.yml', '/app.ts']).passed, true, 'ponto inicial preservado')
+    assert.equal(gateArtifactsExist(tmp, ['old.ts'], ['old.ts']).passed, true, 'arquivo apagado que está no diff passa')
 
     const artFail = gateArtifactsExist(tmp, ['app.ts', 'missing.ts'])
     assert.equal(artFail.passed, false)

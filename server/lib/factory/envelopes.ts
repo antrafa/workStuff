@@ -12,14 +12,17 @@ import type {
   SecurityFinding,
 } from './types.ts'
 
-// Extrai bloco JSON em markdown se presente
+const FENCE = /```(?:json)?\s*([\s\S]*?)\s*```/g
+
+// The envelope is the LAST parseable fenced block: the prose before it may carry
+// its own code samples (a plan with a ```ts snippet, for instance).
 export function extractJsonFromMarkdown(text: string): any | null {
-  const match = text.match(/```(?:json)?\s*([\s\S]*?)\s*```/)
-  if (match) {
+  const blocks = [...text.matchAll(FENCE)].reverse()
+  for (const m of blocks) {
     try {
-      return JSON.parse(match[1])
+      return JSON.parse(m[1])
     } catch {
-      // tenta parse normal abaixo
+      // not the envelope, try the previous block
     }
   }
   try {
@@ -29,13 +32,30 @@ export function extractJsonFromMarkdown(text: string): any | null {
   }
 }
 
+// The prose the agent wrote around the envelope (the envelope block removed).
+function proseWithoutEnvelope(text: string): string {
+  const last = [...text.matchAll(FENCE)].findLast(m => {
+    try {
+      JSON.parse(m[1])
+      return true
+    } catch {
+      return false
+    }
+  })
+  if (!last || last.index === undefined) return text.trim()
+  return (text.slice(0, last.index) + text.slice(last.index + last[0].length)).trim()
+}
+
 // 1. Envelope de Planejamento (Architect -> Implementer)
+// `plan` keeps the full markdown the Architect wrote: the JSON `plan` field is only a
+// summary, and handing the summary to the Implementer throws the real plan away.
 export function parsePlanEnvelope(text: string): PlanEnvelope {
   const parsed = extractJsonFromMarkdown(text)
   if (parsed && typeof parsed === 'object') {
+    const prose = proseWithoutEnvelope(text)
     return {
       status: parsed.status === 'error' ? 'error' : 'ok',
-      plan: typeof parsed.plan === 'string' ? parsed.plan : text,
+      plan: prose || (typeof parsed.plan === 'string' ? parsed.plan : text),
       targetFiles: Array.isArray(parsed.targetFiles) ? parsed.targetFiles.map(String) : [],
       risks: Array.isArray(parsed.risks) ? parsed.risks.map(String) : [],
       testScenarios: Array.isArray(parsed.testScenarios) ? parsed.testScenarios.map(String) : [],
@@ -44,21 +64,12 @@ export function parsePlanEnvelope(text: string): PlanEnvelope {
 
   // Fallback heurístico a partir do markdown livre
   const targetFiles: string[] = []
-  const risks: string[] = []
-  const testScenarios: string[] = []
-
   const fileMatches = text.matchAll(/(?:arquivo|file|path):\s*`?([a-zA-Z0-9_\-./]+\.[a-zA-Z0-9]+)`?/gi)
   for (const m of fileMatches) {
     if (!targetFiles.includes(m[1])) targetFiles.push(m[1])
   }
 
-  return {
-    status: 'ok',
-    plan: text,
-    targetFiles,
-    risks,
-    testScenarios,
-  }
+  return { status: 'ok', plan: text, targetFiles, risks: [], testScenarios: [] }
 }
 
 // 2. Envelope de Construção (Implementer -> Gates/Tester)
@@ -105,13 +116,15 @@ export function parseTestEnvelope(text: string, deterministicPassed = true): Tes
   }
 }
 
+const SEVERITIES = ['low', 'medium', 'high', 'critical']
+
 // 4. Envelope de Revisão (Reviewer -> Human Review)
 export function parseReviewEnvelope(text: string): ReviewEnvelope {
   const parsed = extractJsonFromMarkdown(text)
   if (parsed && typeof parsed === 'object') {
     const findings: SecurityFinding[] = Array.isArray(parsed.findings)
       ? parsed.findings.map((f: any) => ({
-          severity: f.severity || 'low',
+          severity: SEVERITIES.includes(f.severity) ? f.severity : 'low',
           description: String(f.description || f),
           file: f.file ? String(f.file) : undefined,
           line: typeof f.line === 'number' ? f.line : undefined,
@@ -250,12 +263,19 @@ export function formatReviewPrompt(
 }
 
 // Autoteste
-if (process.argv.includes('--selfcheck')) {
+if (import.meta.main && process.argv.includes('--selfcheck')) {
   const samplePlanJson = '```json\n{"status":"ok","plan":"passo 1","targetFiles":["a.ts"],"risks":["r1"],"testScenarios":["s1"]}\n```'
   const planEnv = parsePlanEnvelope(samplePlanJson)
   assert.equal(planEnv.status, 'ok')
   assert.deepEqual(planEnv.targetFiles, ['a.ts'])
   assert.deepEqual(planEnv.risks, ['r1'])
+
+  // Plan with a code sample before the envelope: envelope found, full prose kept as the plan
+  const richPlan = '## Plano\n\n1. Criar helper\n\n```ts\nexport const x = 1\n```\n\n```json\n{"status":"ok","plan":"resumo","targetFiles":["b.ts"]}\n```'
+  const richEnv = parsePlanEnvelope(richPlan)
+  assert.deepEqual(richEnv.targetFiles, ['b.ts'], 'envelope é o último bloco')
+  assert.ok(richEnv.plan.includes('1. Criar helper') && richEnv.plan.includes('export const x'), 'plano completo preservado')
+  assert.ok(!richEnv.plan.includes('targetFiles'), 'envelope fora do texto do plano')
 
   const sampleBuildJson = '```json\n{"status":"ok","changedFiles":["a.ts"],"commitMessage":"feat: x","summary":"ok"}\n```'
   const buildEnv = parseBuildEnvelope(sampleBuildJson)

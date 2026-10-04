@@ -8,7 +8,7 @@ import { defaultFactoryStore } from '../lib/factory/store.ts'
 import { createWorktree, getWorktreeDiff, removeWorktree, commitWorktree, mergeWorktreeLocal, pushWorktreeBranch } from '../lib/factory/worktree.ts'
 import { SPECIALIZED_AGENTS } from '../lib/factory/agents.ts'
 import { runFactoryAgent } from '../lib/factory/runner.ts'
-import type { FactoryTask, SpecializedAgentId } from '../lib/factory/types.ts'
+import type { FactoryTask, FactoryTaskState, SpecializedAgentId } from '../lib/factory/types.ts'
 import { listSources, resolveToken } from '../lib/repos/sources.ts'
 import { call, type Conn } from '../lib/repos/providers.ts'
 import { readSettings } from '../lib/settingsStore.ts'
@@ -67,7 +67,13 @@ async function runExecution(
   // The SSE abort signal is intentionally ignored: closing the console or the
   // tab only stops *watching*; stopping the run is an explicit action.
   const sse = openSse(res)
-  const ctx: ExecContext = { taskId, signal, send: sse.send }
+  // Status lines are persisted too: the session file is what every console reads,
+  // so a console opened mid-run (or reopened) shows the same progress as the stream.
+  const send = (event: object) => {
+    sse.send(event)
+    if ((event as { type?: string }).type === 'status') defaultFactoryStore.appendSessionEvent(taskId, event).catch(() => {})
+  }
+  const ctx: ExecContext = { taskId, signal, send }
 
   try {
     await work(ctx)
@@ -79,7 +85,9 @@ async function runExecution(
     if (current) {
       await defaultFactoryStore.saveTask({
         ...current,
-        state: cancelled ? stateAfterCancel(kind) : 'error',
+        // A failed adjust goes back to review: the committed work is intact, and from 'error'
+        // the UI offers "retry", which calls approve-plan and rebuilds the worktree from scratch.
+        state: cancelled || kind === 'adjust' ? stateAfterCancel(kind) : 'error',
         error: cancelled ? undefined : msg,
         updatedAt: new Date().toISOString(),
       })
@@ -112,12 +120,23 @@ async function runAgentStep(
           id: event.id,
           tool: event.tool,
           input: event.input,
+          startedAt: new Date().toISOString(),
         }).catch(() => {})
+      } else if (event.type === 'tool-result') {
+        defaultFactoryStore.completeToolCall(ctx.taskId, event.id, { output: event.content, isError: event.isError }).catch(() => {})
       }
     },
   })
   if (result.stopped || ctx.signal.aborted) throw new ExecutionCancelledError()
   return result
+}
+
+// Each action only makes sense from some states; anything else is a stale button
+// or a double click, and running it would rebuild a worktree or merge the wrong thing.
+function refuseState(res: Response, task: FactoryTask, allowed: FactoryTaskState[], action: string): boolean {
+  if (allowed.includes(task.state) && !isExecuting(task.id)) return false
+  res.status(409).json({ error: `não é possível ${action} com a tarefa no estado "${task.state}"` })
+  return true
 }
 
 // A task stuck in a running state with no live execution (server restarted,
@@ -176,6 +195,29 @@ factoryRouter.get('/tasks/:id/session', async (req, res) => {
   } catch (e) {
     res.status(500).json({ error: (e as Error).message })
   }
+})
+
+// Live session (SSE, GET so the browser's EventSource can reconnect on its own):
+// first a snapshot of everything recorded, then each new event as it is written.
+// Closing it only stops watching; the execution is not tied to this connection.
+factoryRouter.get('/tasks/:id/events', async (req, res) => {
+  const id = req.params.id as string
+  const sse = openSse(res)
+  // getSession reads the file synchronously when called, so reading and subscribing
+  // happen in the same tick: nothing written in between is lost or duplicated.
+  const snapshotRead = defaultFactoryStore.getSession(id)
+  const queued: unknown[] = []
+  let live = false
+  const unfollow = defaultFactoryStore.followSession(id, e => (live ? sse.send(e as object) : queued.push(e)))
+  sse.send({ type: 'snapshot', events: await snapshotRead })
+  for (const e of queued) sse.send(e as object)
+  live = true
+  // Comment line every 25s so proxies do not drop an idle stream
+  const heartbeat = setInterval(() => res.write(': ping\n\n'), 25_000)
+  res.on('close', () => {
+    clearInterval(heartbeat)
+    unfollow()
+  })
 })
 
 // Atualização de configurações da tarefa (ex: trocar provedor ou modelo)
@@ -256,7 +298,7 @@ factoryRouter.post('/pick-folder', async (_req, res) => {
 // Busca issues abertas de fontes conectadas no workstuff
 factoryRouter.get('/issues', async (_req, res) => {
   const sources = listSources()
-  const issues: Array<{ id: string; title: string; number: number; url: string; repo: string; provider: string; repoPath?: string }> = []
+  const issues: Array<{ id: string; title: string; number: number; url: string; repo: string; provider: string; body?: string }> = []
 
   for (const s of sources) {
     try {
@@ -277,6 +319,7 @@ factoryRouter.get('/issues', async (_req, res) => {
                 url: item.html_url,
                 repo: `${owner}/${repo}`,
                 provider: 'github',
+                body: item.body ?? undefined,
               })
             }
           }
@@ -293,6 +336,7 @@ factoryRouter.get('/issues', async (_req, res) => {
               url: item.web_url,
               repo: s.basePath,
               provider: 'gitlab',
+              body: item.description ?? undefined,
             })
           }
         }
@@ -334,6 +378,7 @@ factoryRouter.post('/tasks/:id/plan', async (req, res) => {
     res.status(404).json({ error: 'tarefa nao encontrada' })
     return
   }
+  if (refuseState(res, task, ['intake', 'waiting_approval', 'error'], 'planejar')) return
 
   await runExecution(task.id, 'plan', res, async ctx => {
     await defaultFactoryStore.saveTask({ ...task, state: 'planning', error: undefined, updatedAt: new Date().toISOString() })
@@ -375,6 +420,11 @@ factoryRouter.post('/tasks/:id/approve-plan', async (req, res) => {
   const task = await defaultFactoryStore.getTask(req.params.id as string)
   if (!task) {
     res.status(404).json({ error: 'tarefa nao encontrada' })
+    return
+  }
+  if (refuseState(res, task, ['waiting_approval', 'error'], 'aprovar o plano')) return
+  if (!task.plan) {
+    res.status(409).json({ error: 'a tarefa ainda não tem plano aprovado; rode o planejamento antes' })
     return
   }
 
@@ -421,26 +471,7 @@ factoryRouter.post('/tasks/:id/approve-plan', async (req, res) => {
     const buildEnv = parseBuildEnvelope(implementerResult.text)
     await defaultFactoryStore.finishSpan(task.id, spanImplementer, { status: 'success', envelope: buildEnv })
 
-    // 3. Acceptance gate: claimed artifacts must exist on disk
-    if (buildEnv.changedFiles && buildEnv.changedFiles.length > 0) {
-      throwIfCancelled(signal)
-      const spanArtifactsGate = await defaultFactoryStore.startSpan(task.id, {
-        name: 'Portão de Aceitação: Existência de Arquivos',
-        phase: 'qa_security',
-        kind: 'gate',
-      })
-      const artifactsGate = gateArtifactsExist(worktreePath, buildEnv.changedFiles)
-      if (!artifactsGate.passed) {
-        await defaultFactoryStore.finishSpan(task.id, spanArtifactsGate, {
-          status: 'failed',
-          error: artifactsGate.reason,
-        })
-        throw new Error(`Portão de aceitação falhou: ${artifactsGate.reason}`)
-      }
-      await defaultFactoryStore.finishSpan(task.id, spanArtifactsGate, { status: 'success' })
-    }
-
-    // 4. Acceptance gate: diff must not be empty
+    // 3. Acceptance gate: diff must not be empty
     throwIfCancelled(signal)
     ctx.send({ type: 'status', message: 'Portão de Aceitação: validando alterações no repositório...' })
     const spanDiffGate = await defaultFactoryStore.startSpan(task.id, {
@@ -455,7 +486,22 @@ factoryRouter.post('/tasks/:id/approve-plan', async (req, res) => {
     }
     await defaultFactoryStore.finishSpan(task.id, spanDiffGate, { status: 'success' })
 
-    // 4. Acceptance gate: deterministic test suite
+    // 4. Acceptance gate: files the Implementer claims to have touched exist or are in the diff
+    if (buildEnv.changedFiles.length > 0) {
+      const spanArtifactsGate = await defaultFactoryStore.startSpan(task.id, {
+        name: 'Portão de Aceitação: Existência de Arquivos',
+        phase: 'qa_security',
+        kind: 'gate',
+      })
+      const artifactsGate = gateArtifactsExist(worktreePath, buildEnv.changedFiles, diffGate.filesChanged)
+      if (!artifactsGate.passed) {
+        await defaultFactoryStore.finishSpan(task.id, spanArtifactsGate, { status: 'failed', error: artifactsGate.reason })
+        throw new Error(`Portão de aceitação falhou: ${artifactsGate.reason}`)
+      }
+      await defaultFactoryStore.finishSpan(task.id, spanArtifactsGate, { status: 'success' })
+    }
+
+    // 5. Acceptance gate: deterministic test suite
     currentTask = { ...((await defaultFactoryStore.getTask(task.id)) ?? currentTask), state: 'qa_security', updatedAt: new Date().toISOString() }
     await defaultFactoryStore.saveTask(currentTask)
     ctx.send({ type: 'status', message: 'Portão de Testes: executando suíte determinística do projeto...' })
@@ -501,18 +547,17 @@ factoryRouter.post('/tasks/:id/approve-plan', async (req, res) => {
       details: { command: testGateResult.command, output: testGateResult.output },
     })
 
-    // 5. Code phase: commit & diff
+    // 6. Code phase: commit the implementation
     throwIfCancelled(signal)
     const spanCommit = await defaultFactoryStore.startSpan(task.id, {
-      name: 'Git Commit e Cálculo de Diff',
+      name: 'Git Commit da Implementação',
       phase: 'qa_security',
       kind: 'code',
     })
-    await commitWorktree(worktreePath, buildEnv.commitMessage || `feat(${task.id}): ${task.title}`)
-    const { diff, stat } = await getWorktreeDiff(worktreePath, task.baseBranch)
+    const implementationHead = await commitWorktree(worktreePath, buildEnv.commitMessage || `feat(${task.id}): ${task.title}`)
     await defaultFactoryStore.finishSpan(task.id, spanCommit, { status: 'success' })
 
-    // 6. Agent phase: Tester
+    // 7. Agent phase: Tester (may write new tests in the worktree)
     ctx.send({ type: 'status', message: 'Tester: avaliando cobertura e cenários de teste...' })
     const spanTester = await defaultFactoryStore.startSpan(task.id, {
       name: 'Avaliação de QA e Cobertura',
@@ -534,7 +579,28 @@ factoryRouter.post('/tasks/:id/approve-plan', async (req, res) => {
     const testEnv = parseTestEnvelope(testAgentResult.text, testGateResult.passed)
     await defaultFactoryStore.finishSpan(task.id, spanTester, { status: 'success', envelope: testEnv })
 
-    // 7. Agent phase: Reviewer
+    // Tests the Tester wrote are part of the delivery: commit them, and the code (not the
+    // agent's own report) decides whether the suite still passes with them.
+    throwIfCancelled(signal)
+    const testsHead = await commitWorktree(worktreePath, `test(${task.id}): testes da demanda`)
+    if (testsHead !== implementationHead) {
+      ctx.send({ type: 'status', message: 'Portão de Testes: re-executando a suíte com os testes novos...' })
+      const spanRetest = await defaultFactoryStore.startSpan(task.id, {
+        name: 'Portão: Testes com a Cobertura Nova',
+        phase: 'qa_security',
+        kind: 'gate',
+      })
+      testGateResult = await gateTestsPass(worktreePath, undefined, signal)
+      throwIfCancelled(signal)
+      await defaultFactoryStore.finishSpan(task.id, spanRetest, {
+        status: testGateResult.passed ? 'success' : 'failed',
+        error: testGateResult.passed ? undefined : testGateResult.reason,
+        details: { command: testGateResult.command, output: testGateResult.output },
+      })
+    }
+    const { diff, stat } = await getWorktreeDiff(worktreePath, task.baseBranch)
+
+    // 8. Agent phase: Reviewer
     ctx.send({ type: 'status', message: 'Reviewer: auditando segurança e gerando resumo do MR...' })
     const spanReviewer = await defaultFactoryStore.startSpan(task.id, {
       name: 'Auditoria de Segurança e Resumo do MR',
@@ -558,7 +624,8 @@ factoryRouter.post('/tasks/:id/approve-plan', async (req, res) => {
       diffContent: diff,
       diffStat: stat,
       qaReport: {
-        passed: testEnv.testSuitePassed,
+        // Agent proposes, code disposes: a failed suite is never overridden by the agent's report
+        passed: testGateResult.passed && testEnv.testSuitePassed,
         summary: testEnv.details || testAgentResult.text,
         output: testGateResult.output,
       },
@@ -582,6 +649,7 @@ factoryRouter.post('/tasks/:id/adjust', async (req, res) => {
     res.status(404).json({ error: 'tarefa ou worktree nao encontrada' })
     return
   }
+  if (refuseState(res, task, ['review', 'error'], 'pedir ajuste')) return
   const worktreePath = task.worktreePath
 
   const feedback = String(req.body?.feedback ?? '').trim()
@@ -603,11 +671,15 @@ factoryRouter.post('/tasks/:id/adjust', async (req, res) => {
 
     await runAgentStep(ctx, {
       agentId: 'implementer',
+      // Each CLI run starts with no memory: restate the task and plan, or the
+      // Implementer edits blind with only the feedback sentence.
       prompt: [
-        `O desenvolvedor solicitou os seguintes ajustes no código da worktree:`,
+        `Demanda: ${task.title}`,
+        task.plan ? `Plano aprovado:\n${task.plan}` : '',
+        `A implementação já está commitada na worktree atual. O desenvolvedor revisou e pediu os seguintes ajustes:`,
         `"${feedback}"`,
         `Altere os arquivos necessários na pasta atual e certifique-se de que a implementação atende ao pedido.`,
-      ].join('\n\n'),
+      ].filter(Boolean).join('\n\n'),
       cwd: worktreePath,
       provider: task.provider,
       model: task.model,
@@ -630,6 +702,11 @@ factoryRouter.post('/tasks/:id/adjust', async (req, res) => {
         passed: testGateResult.passed,
         summary: testGateResult.passed ? 'Todos os testes passaram após o ajuste.' : 'Houve falha nos testes.',
         output: testGateResult.output,
+      },
+      // The Reviewer did not see the adjusted code: say so instead of showing an old verdict as current
+      securityReport: task.securityReport && {
+        ...task.securityReport,
+        summary: `Revisão feita antes do ajuste "${feedback.slice(0, 120)}"; o código ajustado não foi revisado pelo Reviewer.\n\n${task.securityReport.summary}`,
       },
       updatedAt: new Date().toISOString(),
     }
@@ -676,9 +753,11 @@ factoryRouter.post('/tasks/:id/finish', async (req, res) => {
       res.status(404).json({ error: 'tarefa nao encontrada' })
       return
     }
+    if (refuseState(res, task, ['review'], 'finalizar')) return
 
     const mode = req.body?.mode || 'local_merge'
     let prUrl = task.prUrl
+    let warning: string | undefined
 
     if (mode === 'local_merge') {
       await mergeWorktreeLocal(task.source.repoPath, task.branchName, task.baseBranch)
@@ -695,7 +774,8 @@ factoryRouter.post('/tasks/:id/finish', async (req, res) => {
       // 2. Busca conexão Git ativa para tentar criar o Pull/Merge Request oficial
       const sources = listSources()
       const src = sources.find(s => {
-        if (task.source.repoPath.includes(s.id) || (task.source.remoteUrl && s.basePath && task.source.remoteUrl.includes(s.basePath))) {
+        const remote = task.source.remoteUrl || task.source.issueUrl
+        if (task.source.repoPath.includes(s.id) || (remote && s.basePath && remote.includes(s.basePath))) {
           return true
         }
         return false
@@ -706,7 +786,9 @@ factoryRouter.post('/tasks/:id/finish', async (req, res) => {
           const token = await resolveToken(src.provider, src.tokenSource, src.id)
           const conn: Conn = { provider: src.provider, url: src.url, token }
           const title = task.title
-          const description = task.handoffs?.review?.mrDescription || task.securityReport?.summary || task.description
+          const summary = task.handoffs?.review?.mrDescription || task.securityReport?.summary || task.description
+          // Closes the originating issue when the MR is merged (GitLab and GitHub both read it)
+          const description = task.source.issueIid ? `${summary}\n\nCloses #${task.source.issueIid}` : summary
 
           const apiBase = conn.provider === 'gitlab'
             ? `${conn.url}/api/v4`
@@ -736,6 +818,8 @@ factoryRouter.post('/tasks/:id/finish', async (req, res) => {
             if (resp.ok) {
               const data = await resp.json() as { web_url?: string }
               prUrl = data.web_url
+            } else {
+              warning = `Branch enviada, mas o GitLab recusou o MR (HTTP ${resp.status}): ${(await resp.text()).slice(0, 300)}`
             }
           } else if (src.provider === 'github') {
             const parts = src.basePath.split('/').filter(Boolean)
@@ -755,12 +839,16 @@ factoryRouter.post('/tasks/:id/finish', async (req, res) => {
               if (resp.ok) {
                 const data = await resp.json() as { html_url?: string }
                 prUrl = data.html_url
+              } else {
+                warning = `Branch enviada, mas o GitHub recusou o PR (HTTP ${resp.status}): ${(await resp.text()).slice(0, 300)}`
               }
             }
           }
-        } catch {
-          // Se falhar a abertura automática, a branch remota já está no servidor
+        } catch (e) {
+          warning = `Branch enviada, mas a abertura do MR falhou: ${(e as Error).message}`
         }
+      } else {
+        warning = `Branch ${task.branchName} enviada, mas nenhuma conexão de Repositórios corresponde a este projeto; abra o MR manualmente.`
       }
     }
 
@@ -777,7 +865,7 @@ factoryRouter.post('/tasks/:id/finish', async (req, res) => {
     }
     await defaultFactoryStore.saveTask(updatedTask)
 
-    res.json(updatedTask)
+    res.json({ ...updatedTask, warning })
   } catch (e) {
     res.status(500).json({ error: (e as Error).message })
   }
@@ -823,6 +911,8 @@ factoryRouter.post('/agents/run', async (req, res) => {
       agentId,
       prompt,
       cwd: repoPath,
+      // This is the user's own checkout, not a worktree: every agent only reads here
+      readOnly: true,
       provider: b.provider,
       model: b.model,
       signal: sse.signal,
@@ -832,5 +922,7 @@ factoryRouter.post('/agents/run', async (req, res) => {
     sse.send({ type: 'done', text: result.text, durationMs: result.durationMs })
   } catch (e) {
     sse.send({ type: 'error', message: (e as Error).message })
+  } finally {
+    sse.end()
   }
 })

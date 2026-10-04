@@ -11,6 +11,10 @@ export type FactoryTaskState =
   | 'canceled'          // Descartada pelo desenvolvedor
   | 'error'             // Erro durante a execução
 
+// States that only make sense while a process is executing. Plain value in this
+// types file so the web app can import it without pulling server code.
+export const RUNNING_STATES: FactoryTaskState[] = ['planning', 'building', 'qa_security']
+
 export type SpecializedAgentId = 'architect' | 'implementer' | 'tester' | 'reviewer'
 
 export type ExecutionSpanKind = 'code' | 'agent' | 'gate'
@@ -21,6 +25,7 @@ export type ToolCallSpan = {
   input?: unknown
   output?: string
   isError?: boolean
+  startedAt?: string
   durationMs?: number
 }
 
