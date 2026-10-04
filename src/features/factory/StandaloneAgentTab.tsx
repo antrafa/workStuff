@@ -1,7 +1,8 @@
 import { useState, useRef, useEffect } from 'react'
 import {
-  Bot, Cpu, FolderOpen, Play, ShieldAlert, Sparkles, Square, Terminal, Wrench
+  BookOpen, Bot, Cpu, FolderOpen, Play, ShieldAlert, Sparkles, Square, Terminal, Wrench
 } from 'lucide-react'
+import { Link } from 'react-router'
 import { Markdown } from '@/ui'
 import { api } from '@/lib/api'
 import { streamPost } from '@/lib/stream'
@@ -13,6 +14,8 @@ const AGENT_CARDS: Array<{
   role: string
   icon: typeof Bot
   placeholder: string
+  runbookTitle: string
+  runbookFile: string
 }> = [
   {
     id: 'architect',
@@ -20,6 +23,8 @@ const AGENT_CARDS: Array<{
     role: 'Análise de requisitos, arquitetura de software, mapeamento de riscos e planejamento técnico',
     icon: Sparkles,
     placeholder: 'Ex.: Analise a arquitetura do módulo de autenticação e elabore um plano para suportar autenticação OAuth2 sem quebrar clientes legados...',
+    runbookTitle: 'Pre-flight Check do Repositório',
+    runbookFile: 'factory/agentes-preflight.md',
   },
   {
     id: 'implementer',
@@ -27,6 +32,8 @@ const AGENT_CARDS: Array<{
     role: 'Implementação de código e refatoração na pasta do projeto',
     icon: Wrench,
     placeholder: 'Ex.: Adicione tratamento de retry com backoff exponencial no cliente HTTP da pasta src/lib/api...',
+    runbookTitle: 'Sincronização e Rebase de Branch',
+    runbookFile: 'factory/sincronizar-branch.md',
   },
   {
     id: 'tester',
@@ -34,6 +41,8 @@ const AGENT_CARDS: Array<{
     role: 'Identificação de cenários de teste, escrita de testes automatizados e validação de QA',
     icon: Terminal,
     placeholder: 'Ex.: Crie testes unitários para a rota de upload cobrindo arquivos vazios, formatos inválidos e sucesso...',
+    runbookTitle: 'Validação Manual de Portões de Aceitação',
+    runbookFile: 'factory/portoes-aceitacao.md',
   },
   {
     id: 'reviewer',
@@ -41,6 +50,8 @@ const AGENT_CARDS: Array<{
     role: 'Revisão de código em busca de bugs, problemas de segurança e inconsistências',
     icon: ShieldAlert,
     placeholder: 'Ex.: Revise os arquivos da pasta src/auth em busca de falhas de segurança, vazamento de tokens e problemas de concorrência...',
+    runbookTitle: 'Auditoria de Segurança e Verificação Pré-MR',
+    runbookFile: 'factory/auditoria-seguranca.md',
   },
 ]
 
@@ -196,6 +207,18 @@ export function StandaloneAgentTab() {
             required
           />
         </label>
+
+        {activeMeta.runbookTitle && (
+          <div className="row" style={{ alignItems: 'center', justifyContent: 'space-between', padding: '8px 12px', background: 'var(--surface-subtle)', borderRadius: 'var(--radius)', fontSize: 12 }}>
+            <span className="row" style={{ gap: 6, color: 'var(--muted)', alignItems: 'center' }}>
+              <BookOpen size={14} style={{ color: 'var(--accent)' }} />
+              <span>Procedimento operacional sugerido: <b>{activeMeta.runbookTitle}</b></span>
+            </span>
+            <Link to="/dev-runbooks" className="btn btn-ghost btn-sm" style={{ fontSize: 11 }}>
+              Abrir nos Runbooks →
+            </Link>
+          </div>
+        )}
 
         {error && (
           <div className="card card-pad" style={{ background: 'var(--red-subtle)', borderColor: 'var(--red-line)' }}>

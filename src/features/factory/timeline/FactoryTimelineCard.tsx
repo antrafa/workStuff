@@ -93,7 +93,7 @@ export function FactoryTimelineCard({ task, onOpenTrace, onDelete }: Props) {
   }).filter(l => l.dots.length > 0 || spans.length === 0)
 
   // Marca último dot se estiver rodando
-  const isRunning = task.state === 'planning' || task.state === 'building' || task.state === 'qa_security'
+  const isRunning = task.state === 'planning' || task.state === 'building' || task.state === 'qa_security' || Boolean(task.executing)
   if (isRunning) {
     const allDots = lanes.flatMap(l => l.dots)
     if (allDots.length > 0) {

@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import {
   ArrowLeft,
   ChevronDown,
@@ -7,6 +7,7 @@ import {
   Cpu,
   GitBranch,
   Play,
+  RefreshCw,
   ShieldCheck,
   Square,
   Terminal,
@@ -48,6 +49,7 @@ function fmtDuration(ms?: number | null): string {
 }
 
 export function FactoryTraceVisualizer({ task, onBack, onUpdate }: Props) {
+  const [liveTask, setLiveTask] = useState<FactoryTask>(task)
   const [selectedSpanId, setSelectedSpanId] = useState<string | null>(null)
   const [sessionEvents, setSessionEvents] = useState<any[]>([])
   const [loadingEvents, setLoadingEvents] = useState(false)
@@ -61,15 +63,66 @@ export function FactoryTraceVisualizer({ task, onBack, onUpdate }: Props) {
   const [processing, setProcessing] = useState(false)
   const [statusMessage, setStatusMessage] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [stopping, setStopping] = useState(false)
+  const [autoRefresh, setAutoRefresh] = useState(true)
+  const [isRefreshing, setIsRefreshing] = useState(false)
+  const [_lastRefreshedAt, setLastRefreshedAt] = useState<Date>(new Date())
+  const [currentTime, setCurrentTime] = useState(Date.now())
+  const [autoScroll, setAutoScroll] = useState(true)
+  const eventsEndRef = useRef<HTMLDivElement | null>(null)
 
-  // Carrega eventos detalhados da sessão
+  // Sincroniza liveTask quando a prop task mudar
+  useEffect(() => {
+    setLiveTask(task)
+  }, [task])
+
+  const isExecuting = processing || Boolean(liveTask.executing) || ['planning', 'building', 'qa_security'].includes(liveTask.state)
+
+  // Timer em tempo real durante a execução para atualizar duração e escala temporal
+  useEffect(() => {
+    if (!isExecuting) return
+    const timer = setInterval(() => {
+      setCurrentTime(Date.now())
+    }, 1000)
+    return () => clearInterval(timer)
+  }, [isExecuting])
+
+  const refreshData = async (silent = false) => {
+    if (!silent) setIsRefreshing(true)
+    try {
+      const [events, updatedTask] = await Promise.all([
+        api.get<any[]>(`/factory/tasks/${liveTask.id}/session`).catch(() => null),
+        api.get<FactoryTask>(`/factory/tasks/${liveTask.id}`).catch(() => null),
+      ])
+      if (Array.isArray(events)) {
+        setSessionEvents(events)
+      }
+      if (updatedTask) {
+        setLiveTask(updatedTask)
+      }
+      setLastRefreshedAt(new Date())
+    } finally {
+      if (!silent) setIsRefreshing(false)
+      setLoadingEvents(false)
+    }
+  }
+
+  // Carga inicial dos eventos da sessão
   useEffect(() => {
     setLoadingEvents(true)
-    api.get<any[]>(`/factory/tasks/${task.id}/session`)
-      .then(setSessionEvents)
-      .catch(() => setSessionEvents([]))
-      .finally(() => setLoadingEvents(false))
-  }, [task.id])
+    refreshData(true)
+  }, [liveTask.id])
+
+  // Polling periódico para atualização em tempo real:
+  // 1.5s durante execução; 8s quando inativo
+  useEffect(() => {
+    if (!autoRefresh) return
+    const intervalMs = isExecuting ? 1500 : 8000
+    const timer = setInterval(() => {
+      refreshData(true)
+    }, intervalMs)
+    return () => clearInterval(timer)
+  }, [autoRefresh, isExecuting, liveTask.id])
 
   // Consolidação de eventos de texto contínuos para evitar fragmentação de tokens
   const consolidatedEvents = useMemo(() => {
@@ -96,6 +149,13 @@ export function FactoryTraceVisualizer({ task, onBack, onUpdate }: Props) {
     })
   }, [consolidatedEvents, eventFilter])
 
+  // Auto-scroll nos eventos da execução
+  useEffect(() => {
+    if (autoScroll && eventsEndRef.current) {
+      eventsEndRef.current.scrollIntoView({ behavior: 'smooth' })
+    }
+  }, [displayedEvents.length, autoScroll])
+
   const toggleAccordion = (key: string) => {
     setOpenAccordions(prev => ({ ...prev, [key]: !prev[key] }))
   }
@@ -120,7 +180,7 @@ export function FactoryTraceVisualizer({ task, onBack, onUpdate }: Props) {
       id: 'architect',
       name: 'Architect',
       role: 'Planejamento Arquitetural',
-      model: task.model || 'gemini-3.8',
+      model: liveTask.model || 'gemini-3.8',
       contextPct: 4,
       color: '#c084fc',
       icon: Cpu,
@@ -129,15 +189,15 @@ export function FactoryTraceVisualizer({ task, onBack, onUpdate }: Props) {
       id: 'implementer',
       name: 'Implementer',
       role: 'Construção & Codificação',
-      model: task.model || 'gemini-3.8',
+      model: liveTask.model || 'gemini-3.8',
       contextPct: 8,
       color: '#5ad2dd',
       icon: Wrench,
     },
     {
       id: 'gates',
-      name: 'Portões',
       role: 'Portões Mecânicos de Aceitação',
+      name: 'Portões',
       color: '#facc15',
       icon: ShieldCheck,
     },
@@ -145,7 +205,7 @@ export function FactoryTraceVisualizer({ task, onBack, onUpdate }: Props) {
       id: 'tester',
       name: 'Tester',
       role: 'Avaliação de Testes & QA',
-      model: task.model || 'gemini-3.8',
+      model: liveTask.model || 'gemini-3.8',
       color: '#4ade80',
       icon: Terminal,
     },
@@ -153,19 +213,18 @@ export function FactoryTraceVisualizer({ task, onBack, onUpdate }: Props) {
       id: 'reviewer',
       name: 'Reviewer',
       role: 'Auditoria de Segurança & MR',
-      model: task.model || 'gemini-3.8',
+      model: liveTask.model || 'gemini-3.8',
       color: '#94a3ff',
       icon: ShieldCheck,
     },
   ]
 
   // Monta lista de fases e blocos a partir dos spans gravados ou dos estados padrão
-  const spans = task.spans ?? []
-  const taskStartTime = new Date(task.createdAt).getTime()
-  const now = Date.now()
-  const taskEndTime = task.state === 'done' || task.state === 'review'
-    ? (task.updatedAt ? new Date(task.updatedAt).getTime() : now)
-    : now
+  const spans = liveTask.spans ?? []
+  const taskStartTime = new Date(liveTask.createdAt).getTime()
+  const taskEndTime = liveTask.state === 'done' || liveTask.state === 'review'
+    ? (liveTask.updatedAt ? new Date(liveTask.updatedAt).getTime() : currentTime)
+    : currentTime
   const totalDurationMs = Math.max(taskEndTime - taskStartTime, 5000)
 
   // Seleciona span ativo padrão se nenhum estiver selecionado
@@ -180,16 +239,15 @@ export function FactoryTraceVisualizer({ task, onBack, onUpdate }: Props) {
     { label: fmtDuration(totalDurationMs), pct: 98 },
   ]
 
-  const [stopping, setStopping] = useState(false)
-
   const handleCancelExecution = async () => {
     if (stopping) return
     setStopping(true)
     setError(null)
     setStatusMessage('Solicitando cancelamento ao servidor...')
     try {
-      await api.post(`/factory/tasks/${task.id}/cancel`, {})
-      setStatusMessage('Execução interrompida.')
+      await api.post(`/factory/tasks/${liveTask.id}/cancel`, {})
+      setStatusMessage('Execução interrompida pelo usuário.')
+      await refreshData(true)
       onUpdate()
     } catch (err) {
       setError((err as Error).message)
@@ -198,8 +256,6 @@ export function FactoryTraceVisualizer({ task, onBack, onUpdate }: Props) {
     }
   }
 
-  const isExecuting = processing || Boolean(task.executing) || ['planning', 'building', 'qa_security'].includes(task.state)
-
   // Disparar ação de aprovação/construção
   const handleApprovePlan = async () => {
     setProcessing(true)
@@ -207,22 +263,51 @@ export function FactoryTraceVisualizer({ task, onBack, onUpdate }: Props) {
     setStatusMessage('Iniciando construção na worktree...')
     try {
       await streamPost(
-        `/factory/tasks/${task.id}/approve-plan`,
+        `/factory/tasks/${liveTask.id}/approve-plan`,
         (e: any) => {
-          if (e.type === 'status') setStatusMessage(e.message)
-          if (e.type === 'error') setError(e.message)
-          if (e.type === 'cancelled') {
-            setStatusMessage(e.message || 'Execução interrompida.')
+          if (e.type === 'status') {
+            setStatusMessage(e.message)
+            setSessionEvents(prev => [...prev, { type: 'status', message: e.message, createdAt: new Date().toISOString() }])
+          } else if (e.type === 'tool') {
+            setSessionEvents(prev => [
+              ...prev,
+              {
+                type: 'tool',
+                tool: e.tool,
+                input: e.input,
+                id: e.id,
+                createdAt: new Date().toISOString(),
+              },
+            ])
+            api.get<FactoryTask>(`/factory/tasks/${liveTask.id}`).then(t => t && setLiveTask(t)).catch(() => {})
+          } else if (e.type === 'text') {
+            setSessionEvents(prev => {
+              const last = prev[prev.length - 1]
+              if (last && last.type === 'text') {
+                return [...prev.slice(0, -1), { ...last, text: (last.text || '') + e.text }]
+              }
+              return [...prev, { type: 'text', text: e.text, createdAt: new Date().toISOString() }]
+            })
+          } else if (e.type === 'error') {
+            setError(e.message)
+            setSessionEvents(prev => [...prev, { type: 'error', message: e.message, isError: true, createdAt: new Date().toISOString() }])
+          } else if (e.type === 'cancelled') {
+            setStatusMessage(e.message || 'Execução interrompida pelo usuário.')
+            setSessionEvents(prev => [...prev, { type: 'status', message: e.message || 'Execução interrompida.', createdAt: new Date().toISOString() }])
+            refreshData(true)
+            onUpdate()
+          } else if (e.type === 'done') {
+            setStatusMessage('Construção e testes concluídos com sucesso!')
+            refreshData(true)
             onUpdate()
           }
-          if (e.type === 'done') onUpdate()
         }
       )
     } catch (err) {
       setError((err as Error).message)
     } finally {
       setProcessing(false)
-      setStatusMessage(null)
+      refreshData(true)
       onUpdate()
     }
   }
@@ -234,22 +319,51 @@ export function FactoryTraceVisualizer({ task, onBack, onUpdate }: Props) {
     setStatusMessage('Iniciando planejamento arquitetural...')
     try {
       await streamPost(
-        `/factory/tasks/${task.id}/plan`,
+        `/factory/tasks/${liveTask.id}/plan`,
         (e: any) => {
-          if (e.type === 'status') setStatusMessage(e.message)
-          if (e.type === 'error') setError(e.message)
-          if (e.type === 'cancelled') {
-            setStatusMessage(e.message || 'Execução interrompida.')
+          if (e.type === 'status') {
+            setStatusMessage(e.message)
+            setSessionEvents(prev => [...prev, { type: 'status', message: e.message, createdAt: new Date().toISOString() }])
+          } else if (e.type === 'tool') {
+            setSessionEvents(prev => [
+              ...prev,
+              {
+                type: 'tool',
+                tool: e.tool,
+                input: e.input,
+                id: e.id,
+                createdAt: new Date().toISOString(),
+              },
+            ])
+            api.get<FactoryTask>(`/factory/tasks/${liveTask.id}`).then(t => t && setLiveTask(t)).catch(() => {})
+          } else if (e.type === 'text') {
+            setSessionEvents(prev => {
+              const last = prev[prev.length - 1]
+              if (last && last.type === 'text') {
+                return [...prev.slice(0, -1), { ...last, text: (last.text || '') + e.text }]
+              }
+              return [...prev, { type: 'text', text: e.text, createdAt: new Date().toISOString() }]
+            })
+          } else if (e.type === 'error') {
+            setError(e.message)
+            setSessionEvents(prev => [...prev, { type: 'error', message: e.message, isError: true, createdAt: new Date().toISOString() }])
+          } else if (e.type === 'cancelled') {
+            setStatusMessage(e.message || 'Execução interrompida pelo usuário.')
+            setSessionEvents(prev => [...prev, { type: 'status', message: e.message || 'Execução interrompida.', createdAt: new Date().toISOString() }])
+            refreshData(true)
+            onUpdate()
+          } else if (e.type === 'done') {
+            setStatusMessage('Planejamento concluído com sucesso!')
+            refreshData(true)
             onUpdate()
           }
-          if (e.type === 'done') onUpdate()
         }
       )
     } catch (err) {
       setError((err as Error).message)
     } finally {
       setProcessing(false)
-      setStatusMessage(null)
+      refreshData(true)
       onUpdate()
     }
   }
@@ -292,12 +406,60 @@ export function FactoryTraceVisualizer({ task, onBack, onUpdate }: Props) {
 
           <span style={{ fontSize: 13, color: '#8b9cb6' }}>
             Fábrica de Software &gt; execuções &gt;{' '}
-            <b style={{ color: '#c084fc', fontFamily: 'ui-monospace, monospace' }}>{task.id}</b>
+            <b style={{ color: '#c084fc', fontFamily: 'ui-monospace, monospace' }}>{liveTask.id}</b>
             {activeSpan && <span> &gt; <b style={{ color: '#5ad2dd' }}>{activeSpan.name}</b></span>}
           </span>
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+          {/* Botão de Atualização Manual */}
+          <button
+            type="button"
+            className="btn btn-sm"
+            onClick={() => refreshData(false)}
+            disabled={isRefreshing}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
+              background: '#131a26',
+              border: '1px solid #232c3d',
+              fontSize: 12,
+              color: '#8b9cb6',
+            }}
+            title="Atualizar dados e eventos agora"
+          >
+            <RefreshCw size={12} className={isRefreshing ? 'spin' : ''} />
+            Atualizar
+          </button>
+
+          {/* Toggle de Auto-refresh */}
+          <button
+            type="button"
+            className="btn btn-sm"
+            onClick={() => setAutoRefresh(v => !v)}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
+              background: autoRefresh ? 'rgba(74, 222, 128, 0.1)' : '#131a26',
+              border: `1px solid ${autoRefresh ? 'rgba(74, 222, 128, 0.3)' : '#232c3d'}`,
+              fontSize: 12,
+              color: autoRefresh ? '#4ade80' : '#8b9cb6',
+            }}
+            title={autoRefresh ? 'Auto-refresh ativo (1.5s durante execução). Clique para pausar.' : 'Auto-refresh pausado. Clique para ativar.'}
+          >
+            <span
+              style={{
+                width: 6,
+                height: 6,
+                borderRadius: '50%',
+                background: autoRefresh ? '#4ade80' : '#8b9cb6',
+              }}
+            />
+            Auto-refresh: {autoRefresh ? (isExecuting ? '1.5s' : 'Ativo') : 'Pausado'}
+          </button>
+
           {isExecuting && (
             <button
               type="button"
@@ -332,7 +494,7 @@ export function FactoryTraceVisualizer({ task, onBack, onUpdate }: Props) {
               }}
             />
             <span style={{ fontSize: 12, color: isExecuting ? '#4ade80' : '#8b9cb6', fontFamily: 'ui-monospace, monospace', fontWeight: 600 }}>
-              {isExecuting ? 'live' : 'inativo'}
+              {isExecuting ? 'executando em background' : 'inativo'}
             </span>
           </div>
         </div>
@@ -359,24 +521,66 @@ export function FactoryTraceVisualizer({ task, onBack, onUpdate }: Props) {
             textOverflow: 'ellipsis',
             whiteSpace: 'nowrap',
           }}
-          title={task.title}
+          title={liveTask.title}
         >
-          {task.title}
+          {liveTask.title}
         </span>
 
-        <FactoryStatusChip status={task.state} />
+        <FactoryStatusChip status={liveTask.state} />
 
         <span style={{ fontSize: 12, color: '#8b9cb6', fontFamily: 'ui-monospace, monospace' }}>
-          iniciado em {new Date(task.createdAt).toLocaleTimeString()}
+          iniciado em {new Date(liveTask.createdAt).toLocaleTimeString()}
         </span>
 
         <div style={{ display: 'inline-flex', gap: 8, marginLeft: 'auto', flexWrap: 'wrap' }}>
           <FactoryStatChip kind="cost" value={0.0} />
           <FactoryStatChip kind="runtime" value={totalDurationMs} />
-          <FactoryStatChip kind="model" value={task.model || task.provider} />
+          <FactoryStatChip kind="model" value={liveTask.model || liveTask.provider} />
           <FactoryStatChip kind="tools" value={spans.reduce((a, s) => a + (s.toolCalls?.length ?? 0), 0)} />
         </div>
       </div>
+
+      {/* Banner de Execução Contínua em Background */}
+      {isExecuting && (
+        <div
+          style={{
+            margin: '14px 20px 0',
+            padding: '10px 16px',
+            borderRadius: 8,
+            background: 'linear-gradient(90deg, rgba(74, 222, 128, 0.12) 0%, rgba(90, 210, 221, 0.08) 100%)',
+            border: '1px solid rgba(74, 222, 128, 0.3)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: 12,
+            fontSize: 12,
+            color: '#f2f5fa',
+            flexWrap: 'wrap',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <span
+              style={{
+                width: 8,
+                height: 8,
+                borderRadius: '50%',
+                background: '#4ade80',
+                boxShadow: '0 0 8px #4ade80',
+                animation: 'pulse 1.2s infinite',
+                flexShrink: 0,
+              }}
+            />
+            <span>
+              <strong>Execução contínua no servidor:</strong> O processo roda desacoplado em background. O visualizador sincroniza eventos e progresso automaticamente a cada 1.5s.
+            </span>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0, color: '#8b9cb6', fontFamily: 'ui-monospace, monospace' }}>
+            <span>Tempo ativo: <strong style={{ color: '#4ade80' }}>{fmtDuration(totalDurationMs)}</strong></span>
+            <span>|</span>
+            <span>{displayedEvents.length} eventos</span>
+          </div>
+        </div>
+      )}
 
       {error && (
         <div style={{ margin: '14px 20px 0', padding: 12, borderRadius: 8, background: 'rgba(255, 111, 103, 0.15)', border: '1px solid rgba(255, 111, 103, 0.45)', color: '#ff6f67', fontSize: 13 }}>
@@ -541,7 +745,7 @@ export function FactoryTraceVisualizer({ task, onBack, onUpdate }: Props) {
                   {/* Blocos de Fase da Raia */}
                   {laneSpans.map(span => {
                     const sStart = new Date(span.startedAt).getTime()
-                    const sEnd = span.finishedAt ? new Date(span.finishedAt).getTime() : now
+                    const sEnd = span.finishedAt ? new Date(span.finishedAt).getTime() : currentTime
                     const sDur = span.durationMs ?? (sEnd - sStart)
                     const startPct = Math.max(0, Math.min(88, ((sStart - taskStartTime) / totalDurationMs) * 100))
                     const widthPct = Math.max(10, Math.min(100 - startPct, (sDur / totalDurationMs) * 100))
@@ -621,18 +825,18 @@ export function FactoryTraceVisualizer({ task, onBack, onUpdate }: Props) {
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <GitBranch size={16} style={{ color: '#5ad2dd' }} />
           <span style={{ fontSize: 13, color: '#aabdd5' }}>
-            Worktree isolada: <b className="mono" style={{ color: '#f2f5fa' }}>{task.branchName}</b>
+            Worktree isolada: <b className="mono" style={{ color: '#f2f5fa' }}>{liveTask.branchName}</b>
           </span>
         </div>
 
         <div style={{ display: 'flex', gap: 10 }}>
-          {task.state === 'intake' && (
+          {liveTask.state === 'intake' && (
             <button type="button" className="btn btn-sm btn-primary" onClick={handleStartPlan} disabled={processing}>
               <Play size={14} /> {processing ? 'Analisando...' : 'Iniciar Planejamento com Architect'}
             </button>
           )}
 
-          {task.state === 'waiting_approval' && (
+          {liveTask.state === 'waiting_approval' && (
             <button type="button" className="btn btn-sm btn-primary" onClick={handleApprovePlan} disabled={processing}>
               <Play size={14} /> {processing ? 'Construindo...' : 'Aprovar Plano e Iniciar Construção'}
             </button>
@@ -734,13 +938,13 @@ export function FactoryTraceVisualizer({ task, onBack, onUpdate }: Props) {
                 </button>
                 {openAccordions.request && (
                   <div style={{ padding: 14, fontSize: 13, color: '#aabdd5', lineHeight: 1.5 }}>
-                    {task.description || task.title}
+                    {liveTask.description || liveTask.title}
                   </div>
                 )}
               </div>
 
               {/* Acordeão: Descrição & Plano Técnico */}
-              {task.plan && (
+              {liveTask.plan && (
                 <div style={{ borderRadius: 8, border: '1px solid #222b3d', background: '#0a0e16', overflow: 'hidden' }}>
                   <button
                     type="button"
@@ -766,7 +970,7 @@ export function FactoryTraceVisualizer({ task, onBack, onUpdate }: Props) {
                   </button>
                   {openAccordions.description && (
                     <div style={{ padding: 14, maxHeight: 300, overflowY: 'auto' }}>
-                      <Markdown>{task.plan}</Markdown>
+                      <Markdown>{liveTask.plan}</Markdown>
                     </div>
                   )}
                 </div>
@@ -801,19 +1005,19 @@ export function FactoryTraceVisualizer({ task, onBack, onUpdate }: Props) {
                     <div style={{ padding: 10, borderRadius: 6, background: '#131a26', borderLeft: '3px solid #4ade80', fontSize: 12 }}>
                       <div style={{ fontWeight: 600, color: '#f2f5fa' }}>Portão 1: Verificação de Alterações Git (Diff Not Empty)</div>
                       <div style={{ color: '#8b9cb6', marginTop: 2 }}>
-                        {task.diffStat ? `${task.diffStat.filesChanged} arquivos modificados (+${task.diffStat.insertions} / -${task.diffStat.deletions})` : 'Validado na worktree'}
+                        {liveTask.diffStat ? `${liveTask.diffStat.filesChanged} arquivos modificados (+${liveTask.diffStat.insertions} / -${liveTask.diffStat.deletions})` : 'Validado na worktree'}
                       </div>
                     </div>
 
                     <div style={{ padding: 10, borderRadius: 6, background: '#131a26', borderLeft: '3px solid #4ade80', fontSize: 12 }}>
                       <div style={{ fontWeight: 600, color: '#f2f5fa' }}>Portão 2: Suíte Determinística de Testes (Tests Pass)</div>
-                      {task.qaReport?.output && (
+                      {liveTask.qaReport?.output && (
                         <pre style={{ margin: '6px 0 0', padding: 8, background: '#06080f', borderRadius: 4, fontSize: 11, maxHeight: 120, overflowY: 'auto' }}>
-                          {task.qaReport.output}
+                          {liveTask.qaReport.output}
                         </pre>
                       )}
                       <div style={{ color: '#8b9cb6', marginTop: 2 }}>
-                        {task.qaReport?.passed ? 'Todos os testes passaram com código de saída 0.' : 'Nenhuma falha reportada.'}
+                        {liveTask.qaReport?.passed ? 'Todos os testes passaram com código de saída 0.' : 'Nenhuma falha reportada.'}
                       </div>
                     </div>
                   </div>
@@ -821,7 +1025,7 @@ export function FactoryTraceVisualizer({ task, onBack, onUpdate }: Props) {
               </div>
 
               {/* Acordeão: Envelopes de Handoff */}
-              {task.handoffs && Object.keys(task.handoffs).length > 0 && (
+              {liveTask.handoffs && Object.keys(liveTask.handoffs).length > 0 && (
                 <div style={{ borderRadius: 8, border: '1px solid #222b3d', background: '#0a0e16', overflow: 'hidden' }}>
                   <button
                     type="button"
@@ -848,7 +1052,7 @@ export function FactoryTraceVisualizer({ task, onBack, onUpdate }: Props) {
                   {openAccordions.outputs && (
                     <div style={{ padding: 14 }}>
                       <pre style={{ margin: 0, padding: 10, background: '#06080f', borderRadius: 6, fontSize: 11, maxHeight: 220, overflowY: 'auto', color: '#5ad2dd' }}>
-                        {JSON.stringify(task.handoffs, null, 2)}
+                        {JSON.stringify(liveTask.handoffs, null, 2)}
                       </pre>
                     </div>
                   )}
@@ -887,11 +1091,51 @@ export function FactoryTraceVisualizer({ task, onBack, onUpdate }: Props) {
               >
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                   <span>Eventos da Execução ({displayedEvents.length})</span>
+                  {isExecuting && (
+                    <span
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: 4,
+                        padding: '2px 6px',
+                        borderRadius: 10,
+                        background: 'rgba(74, 222, 128, 0.15)',
+                        border: '1px solid rgba(74, 222, 128, 0.3)',
+                        color: '#4ade80',
+                        fontSize: 10,
+                        fontWeight: 600,
+                      }}
+                    >
+                      <span style={{ width: 5, height: 5, borderRadius: '50%', background: '#4ade80', animation: 'pulse 1.2s infinite' }} />
+                      tempo real
+                    </span>
+                  )}
                   {loadingEvents && <span style={{ fontSize: 11, color: '#8b9cb6' }}>carregando...</span>}
                 </div>
 
-                <div style={{ display: 'flex', gap: 4 }}>
-                  <button
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <label
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 5,
+                      fontSize: 11,
+                      color: autoScroll ? '#5ad2dd' : '#8b9cb6',
+                      cursor: 'pointer',
+                      userSelect: 'none',
+                    }}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={autoScroll}
+                      onChange={e => setAutoScroll(e.target.checked)}
+                      style={{ cursor: 'pointer', accentColor: '#5ad2dd' }}
+                    />
+                    Auto-rolagem
+                  </label>
+
+                  <div style={{ display: 'flex', gap: 4 }}>
+                    <button
                     type="button"
                     onClick={() => setEventFilter('all')}
                     style={{
@@ -953,8 +1197,9 @@ export function FactoryTraceVisualizer({ task, onBack, onUpdate }: Props) {
                   </button>
                 </div>
               </div>
+            </div>
 
-              {/* Lista Formatada de Eventos */}
+            {/* Lista Formatada de Eventos */}
               <div style={{ flex: 1, overflowY: 'auto', padding: 10, display: 'flex', flexDirection: 'column', gap: 8 }}>
                 {displayedEvents.length === 0 ? (
                   <div style={{ padding: 28, textAlign: 'center', color: '#8b9cb6', fontSize: 12 }}>
@@ -1087,6 +1332,7 @@ export function FactoryTraceVisualizer({ task, onBack, onUpdate }: Props) {
                     )
                   })
                 )}
+                <div ref={eventsEndRef} />
               </div>
             </div>
           </div>

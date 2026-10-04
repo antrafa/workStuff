@@ -6,7 +6,9 @@ import {
   Factory,
   Plus,
   RefreshCw,
+  Terminal,
 } from 'lucide-react'
+import { Link } from 'react-router'
 import { Page, Async, Empty } from '@/ui'
 import { api } from '@/lib/api'
 import { useAsync } from '@/lib/useAsync'
@@ -26,13 +28,14 @@ export default function FactoryPage() {
 
   const tasksLoader = useAsync(() => api.get<FactoryTask[]>('/factory/tasks'))
 
-  // Periodic light refresh every 6 seconds when tasks are running
+  // Periodic light refresh when tasks are running or visualizer is open
   useEffect(() => {
     const hasActive = tasksLoader.data?.some(
-      t => t.state === 'planning' || t.state === 'building' || t.state === 'qa_security'
+      t => Boolean(t.executing) || t.state === 'planning' || t.state === 'building' || t.state === 'qa_security'
     )
-    if (!hasActive) return
+    if (!hasActive && !visualizerTask) return
 
+    const intervalMs = hasActive ? 2500 : 8000
     const interval = setInterval(() => {
       tasksLoader.reload()
       if (visualizerTask) {
@@ -40,7 +43,7 @@ export default function FactoryPage() {
           .then(setVisualizerTask)
           .catch(() => {})
       }
-    }, 6000)
+    }, intervalMs)
 
     return () => clearInterval(interval)
   }, [tasksLoader.data, visualizerTask])
@@ -90,6 +93,9 @@ export default function FactoryPage() {
       hint="Desenvolvimento com múltiplos agentes, rastreamento visual em linha do tempo, isolamento estrito via Git Worktrees e portões mecânicos de aceitação."
       actions={
         <div className="row" style={{ gap: 8 }}>
+          <Link to="/dev-runbooks" className="btn btn-sm" title="Abrir Runbooks de Desenvolvimento e Fábrica">
+            <Terminal size={14} /> Runbooks da Fábrica
+          </Link>
           <button type="button" className="btn btn-sm" onClick={handleRefresh} title="Atualizar tarefas">
             <RefreshCw size={14} /> Atualizar
           </button>

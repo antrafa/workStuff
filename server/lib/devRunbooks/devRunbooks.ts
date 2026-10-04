@@ -190,6 +190,11 @@ export function classify(line: string, values: Record<string, string>): Classifi
       const isDelete = args.some(a => a === '-d' || a === '-D' || a.startsWith('--delete'))
       return isDelete ? { kind: 'write', bin, args, action: 'remover branch' } : { kind: 'read', bin, args }
     }
+    if (sub === 'worktree') {
+      const op = args[1] ?? 'list'
+      if (op === 'list') return { kind: 'read', bin, args }
+      return { kind: 'write', bin, args, action: `git worktree ${op}` }
+    }
     if (sub === 'fetch') {
       const isPrune = args.some(a => a === '-p' || a === '--prune')
       return isPrune ? { kind: 'write', bin, args, action: 'limpar referências remotas' } : { kind: 'read', bin, args }
@@ -281,6 +286,12 @@ if (import.meta.main && process.argv.includes('--selfcheck')) {
   assert.equal(classify(steps[3].line, {}).kind, 'write')
   assert.equal(classify(steps[4].line, {}).kind, 'write')
   assert.equal(classify(steps[5].line, {}).kind, 'blocked')
+
+  // Testa classificação de git worktree
+  assert.equal(classify('git worktree list', {}).kind, 'read')
+  assert.equal(classify('git worktree list --porcelain', {}).kind, 'read')
+  assert.equal(classify('git worktree prune -v', {}).kind, 'write')
+  assert.equal(classify('git worktree remove temp', {}).kind, 'write')
 
   // Testa rejeição de operadores de shell
   assert.equal(classify('git status; rm -rf .', {}).kind, 'blocked')
