@@ -194,6 +194,9 @@ export async function mergeWorktreeLocal(
       await git(repoPath, ['checkout', targetBranch])
     }
     await git(repoPath, ['merge', '--no-ff', branchName, '-m', `Merge branch '${branchName}' via workstuff fabrica`])
+  } catch (err) {
+    await git(repoPath, ['merge', '--abort']).catch(() => {})
+    throw err
   } finally {
     // Se o usuário estava em outra branch diferente de targetBranch, restaura
     if (currentBranch && currentBranch !== targetBranch) {

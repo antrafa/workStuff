@@ -10,6 +10,7 @@ import {
   Minimize2,
   Play,
   RotateCw,
+  Square,
   Terminal,
   Trash2,
   Wrench,
@@ -122,6 +123,30 @@ export function FactoryLiveConsole({
     }
   }, [task.id])
 
+  const [stopping, setStopping] = useState(false)
+
+  const stopExecution = async () => {
+    if (stopping) return
+    setStopping(true)
+    try {
+      await api.post(`/factory/tasks/${task.id}/cancel`, {})
+      setLogs(prev => [
+        ...prev,
+        {
+          id: `stop-${Date.now()}`,
+          time: fmtTime(),
+          type: 'status',
+          title: 'Solicitação de cancelamento enviada ao servidor.',
+        },
+      ])
+      onUpdate()
+    } catch (err) {
+      setErrorMessage((err as Error).message)
+    } finally {
+      setStopping(false)
+    }
+  }
+
   // Inicia ação sob demanda
   const executeAction = async (action: 'plan' | 'approve-plan') => {
     setRunningAction(action)
@@ -198,6 +223,17 @@ export function FactoryLiveConsole({
                 isError: true,
               },
             ])
+          } else if (ev.type === 'cancelled') {
+            setLogs(prev => [
+              ...prev,
+              {
+                id: `ev-${Date.now()}-${Math.random()}`,
+                time: evTime,
+                type: 'status',
+                title: ev.message || 'Execução interrompida pelo usuário',
+              },
+            ])
+            onUpdate()
           } else if (ev.type === 'done') {
             setLogs(prev => [
               ...prev,
@@ -264,7 +300,7 @@ export function FactoryLiveConsole({
     })
   }
 
-  const isRunning = Boolean(runningAction)
+  const isRunning = Boolean(runningAction) || Boolean(task.executing) || ['planning', 'building', 'qa_security'].includes(task.state)
 
   return (
     <div
@@ -372,6 +408,28 @@ export function FactoryLiveConsole({
 
           {/* Botões de Ação na Barra */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            {isRunning && (
+              <button
+                type="button"
+                className="btn btn-sm btn-danger"
+                onClick={stopExecution}
+                disabled={stopping}
+                style={{
+                  background: 'rgba(239, 68, 68, 0.15)',
+                  color: '#ef4444',
+                  border: '1px solid rgba(239, 68, 68, 0.4)',
+                  fontSize: 11,
+                  padding: '4px 8px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 4,
+                }}
+                title="Interromper a execução atual"
+              >
+                <Square size={12} fill="currentColor" /> {stopping ? 'Parando...' : 'Parar'}
+              </button>
+            )}
+
             {onOpenTrace && (
               <button
                 type="button"
@@ -660,6 +718,25 @@ export function FactoryLiveConsole({
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            {isRunning && (
+              <button
+                type="button"
+                className="btn btn-sm btn-danger"
+                onClick={stopExecution}
+                disabled={stopping}
+                style={{
+                  background: '#ef4444',
+                  color: '#fff',
+                  border: 'none',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 6,
+                }}
+              >
+                <Square size={13} fill="currentColor" /> {stopping ? 'Parando...' : 'Parar Execução'}
+              </button>
+            )}
+
             {task.state === 'intake' && (
               <button
                 type="button"

@@ -117,6 +117,8 @@ export type FactoryTask = {
     issueUrl?: string
   }
   state: FactoryTaskState
+  // Not persisted: filled by the API from the in-memory execution registry
+  executing?: boolean
   baseBranch: string
   branchName: string
   worktreePath?: string

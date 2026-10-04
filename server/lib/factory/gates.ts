@@ -1,5 +1,5 @@
 // Portões Mecânicos de Aceitação (Gates) determinísticos para a Fábrica.
-// Inspirado em "Agent Proposes, Code Disposes" do Super Simple Software Factory.
+// Inspirado no padrão "Agent Proposes, Code Disposes".
 // Autoteste: node server/lib/factory/gates.ts --selfcheck
 
 import assert from 'node:assert/strict'
@@ -96,7 +96,7 @@ export function gateArtifactsExist(worktreePath: string, claimedFiles: string[])
 }
 
 // 3. Gate: Executa testes determinísticos do projeto via código TypeScript (não IA)
-export async function gateTestsPass(worktreePath: string, timeoutMs = 60_000): Promise<TestsGateResult> {
+export async function gateTestsPass(worktreePath: string, timeoutMs = 60_000, signal?: AbortSignal): Promise<TestsGateResult> {
   const t0 = Date.now()
 
   // Detecta comando de teste baseado nos arquivos presentes
@@ -132,23 +132,58 @@ export async function gateTestsPass(worktreePath: string, timeoutMs = 60_000): P
 
   return new Promise(resolve => {
     let output = ''
+    let settled = false
+    const command = `${cmd.bin} ${cmd.args.join(' ')}`
     const child = spawn(cmd.bin, cmd.args, {
       cwd: worktreePath,
       shell: true,
+      // Own process group so we can stop the shell AND the test runner it spawns
+      detached: process.platform !== 'win32',
       env: { ...process.env, CI: 'true' },
     })
 
+    const killTree = () => {
+      try {
+        if (child.pid && process.platform !== 'win32') process.kill(-child.pid, 'SIGTERM')
+        else child.kill('SIGTERM')
+      } catch {
+        // already gone
+      }
+    }
+
+    const finish = (result: TestsGateResult) => {
+      if (settled) return
+      settled = true
+      clearTimeout(timer)
+      signal?.removeEventListener('abort', onAbort)
+      resolve(result)
+    }
+
     const timer = setTimeout(() => {
-      child.kill('SIGTERM')
-      resolve({
+      killTree()
+      finish({
         passed: false,
-        command: `${cmd!.bin} ${cmd!.args.join(' ')}`,
+        command,
         output: output + '\n[Timeout após ' + Math.round(timeoutMs / 1000) + 's]',
         exitCode: -1,
         durationMs: Date.now() - t0,
         reason: 'Tempo limite de execução de testes excedido.',
       })
     }, timeoutMs)
+
+    const onAbort = () => {
+      killTree()
+      finish({
+        passed: false,
+        command,
+        output: output + '\n[Interrompido pelo usuário]',
+        exitCode: -1,
+        durationMs: Date.now() - t0,
+        reason: 'Execução de testes interrompida pelo usuário.',
+      })
+    }
+    if (signal?.aborted) onAbort()
+    else signal?.addEventListener('abort', onAbort, { once: true })
 
     child.stdout.on('data', chunk => {
       output += chunk.toString('utf-8')
@@ -158,10 +193,9 @@ export async function gateTestsPass(worktreePath: string, timeoutMs = 60_000): P
     })
 
     child.on('error', err => {
-      clearTimeout(timer)
-      resolve({
+      finish({
         passed: false,
-        command: `${cmd!.bin} ${cmd!.args.join(' ')}`,
+        command,
         output: `${output}\n${err.message}`,
         exitCode: 1,
         durationMs: Date.now() - t0,
@@ -169,23 +203,23 @@ export async function gateTestsPass(worktreePath: string, timeoutMs = 60_000): P
       })
     })
 
-    child.on('close', code => {
-      clearTimeout(timer)
-      const exitCode = code ?? 0
-      resolve({
-        passed: exitCode === 0,
-        command: `${cmd!.bin} ${cmd!.args.join(' ')}`,
+    child.on('close', (code, sig) => {
+      // code is null when the process was killed by a signal: that is never a pass
+      const exitCode = code ?? -1
+      finish({
+        passed: code === 0,
+        command,
         output: output.trim(),
         exitCode,
         durationMs: Date.now() - t0,
-        reason: exitCode !== 0 ? `Testes falharam com código ${exitCode}` : undefined,
+        reason: code === 0 ? undefined : sig ? `Testes encerrados pelo sinal ${sig}` : `Testes falharam com código ${exitCode}`,
       })
     })
   })
 }
 
 // Autoteste
-if (process.argv.includes('--selfcheck')) {
+if (import.meta.main && process.argv.includes('--selfcheck')) {
   const tmp = mkdtempSync(join(tmpdir(), 'workstuff-gates-test-'))
   try {
     // 1. Teste de artifacts

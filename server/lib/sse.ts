@@ -14,7 +14,7 @@ export function openSse(res: Response) {
   return {
     signal: abort.signal,
     send: (event: object) => {
-      if (!res.writableEnded) res.write(`data: ${JSON.stringify(event)}\n\n`)
+      if (!res.writableEnded && !res.destroyed) res.write(`data: ${JSON.stringify(event)}\n\n`)
     },
     end: () => res.end(),
   }

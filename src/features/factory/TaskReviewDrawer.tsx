@@ -13,6 +13,7 @@ import {
   Play,
   RotateCw,
   ShieldAlert,
+  Square,
   Terminal,
   Trash2,
 } from 'lucide-react'
@@ -46,6 +47,7 @@ export function TaskReviewDrawer({ task, onClose, onUpdate }: Props) {
   const isError = task.state === 'error' || Boolean(task.error)
   const isAuthError =
     task.error && /authenticate|oauth|expired|unauthorized|401|api_key|token/i.test(task.error)
+  const isExecuting = processing || Boolean(task.executing) || ['planning', 'building', 'qa_security'].includes(task.state)
 
   const handleProviderChange = async (newProvider: 'claude' | 'codex' | 'agy') => {
     setTaskProvider(newProvider)
@@ -54,6 +56,22 @@ export function TaskReviewDrawer({ task, onClose, onUpdate }: Props) {
       onUpdate()
     } catch (err) {
       setError((err as Error).message)
+    }
+  }
+
+  const [stopping, setStopping] = useState(false)
+
+  const handleCancelExecution = async () => {
+    if (stopping) return
+    setStopping(true)
+    try {
+      await api.post(`/factory/tasks/${task.id}/cancel`, {})
+      setStatusMessage('Solicitação de cancelamento enviada ao servidor.')
+      onUpdate()
+    } catch (err) {
+      setError((err as Error).message)
+    } finally {
+      setStopping(false)
     }
   }
 
@@ -70,6 +88,10 @@ export function TaskReviewDrawer({ task, onClose, onUpdate }: Props) {
         (e: any) => {
           if (e.type === 'status') setStatusMessage(e.message)
           if (e.type === 'text') setLogText(prev => prev + e.text)
+          if (e.type === 'cancelled') {
+            setStatusMessage(e.message || 'Execução interrompida pelo usuário.')
+            onUpdate()
+          }
           if (e.type === 'done') {
             setStatusMessage('Plano técnico gerado com sucesso!')
             onUpdate()
@@ -98,6 +120,10 @@ export function TaskReviewDrawer({ task, onClose, onUpdate }: Props) {
         (e: any) => {
           if (e.type === 'status') setStatusMessage(e.message)
           if (e.type === 'text') setLogText(prev => prev + e.text)
+          if (e.type === 'cancelled') {
+            setStatusMessage(e.message || 'Execução interrompida pelo usuário.')
+            onUpdate()
+          }
           if (e.type === 'done') {
             setStatusMessage('Construção, portões de teste e auditoria finalizados!')
             onUpdate()
@@ -127,6 +153,10 @@ export function TaskReviewDrawer({ task, onClose, onUpdate }: Props) {
         (e: any) => {
           if (e.type === 'status') setStatusMessage(e.message)
           if (e.type === 'text') setLogText(prev => prev + e.text)
+          if (e.type === 'cancelled') {
+            setStatusMessage(e.message || 'Execução interrompida pelo usuário.')
+            onUpdate()
+          }
           if (e.type === 'done') {
             setStatusMessage('Ajustes aplicados com sucesso!')
             setFeedback('')
@@ -278,9 +308,54 @@ export function TaskReviewDrawer({ task, onClose, onUpdate }: Props) {
           </div>
         )}
 
-        {statusMessage && (
-          <div className="card card-pad row" style={{ background: 'var(--surface-active)', fontSize: 13 }}>
-            <span className="mono">{statusMessage}</span>
+        {(statusMessage || isExecuting) && (
+          <div
+            className="card card-pad row"
+            style={{
+              background: 'var(--surface-active)',
+              fontSize: 13,
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              border: isExecuting ? '1px solid rgba(90, 210, 221, 0.4)' : undefined,
+            }}
+          >
+            <div className="row" style={{ gap: 8, alignItems: 'center' }}>
+              {isExecuting && (
+                <span
+                  style={{
+                    width: 8,
+                    height: 8,
+                    borderRadius: '50%',
+                    background: '#5ad2dd',
+                    boxShadow: '0 0 8px #5ad2dd',
+                    animation: 'pulse 1.2s infinite',
+                  }}
+                />
+              )}
+              <span className="mono">{statusMessage || 'Execução em andamento...'}</span>
+            </div>
+
+            {isExecuting && (
+              <button
+                type="button"
+                className="btn btn-sm btn-danger"
+                onClick={handleCancelExecution}
+                disabled={stopping}
+                style={{
+                  background: 'rgba(239, 68, 68, 0.15)',
+                  color: '#ef4444',
+                  borderColor: 'rgba(239, 68, 68, 0.4)',
+                  fontSize: 12,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 5,
+                  padding: '3px 10px',
+                }}
+                title="Interromper execução atual"
+              >
+                <Square size={12} fill="currentColor" /> {stopping ? 'Parando...' : 'Parar'}
+              </button>
+            )}
           </div>
         )}
 
@@ -455,9 +530,30 @@ export function TaskReviewDrawer({ task, onClose, onUpdate }: Props) {
                 <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
                   <span className="eyebrow">Saída em Tempo Real dos Agentes</span>
                   {processing && (
-                    <span className="badge" style={{ color: '#5ad2dd', borderColor: '#5ad2dd' }}>
-                      executando...
-                    </span>
+                    <div className="row" style={{ gap: 6, alignItems: 'center' }}>
+                      <span className="badge" style={{ color: '#5ad2dd', borderColor: '#5ad2dd' }}>
+                        executando...
+                      </span>
+                      <button
+                        type="button"
+                        className="btn btn-sm btn-danger"
+                        onClick={handleCancelExecution}
+                        disabled={stopping}
+                        style={{
+                          background: 'rgba(239, 68, 68, 0.15)',
+                          color: '#ef4444',
+                          border: '1px solid rgba(239, 68, 68, 0.4)',
+                          fontSize: 11,
+                          padding: '2px 8px',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 4,
+                        }}
+                        title="Interromper execução da tarefa"
+                      >
+                        <Square size={10} fill="currentColor" /> {stopping ? 'Parando...' : 'Parar'}
+                      </button>
+                    </div>
                   )}
                 </div>
                 {statusMessage && (

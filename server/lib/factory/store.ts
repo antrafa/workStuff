@@ -137,6 +137,23 @@ export function createFactoryStore(baseDir: string = join(DATA_DIR, 'factory')) 
       writeTasks(tasks)
     },
 
+    async failRunningSpans(taskId: string, error: string): Promise<void> {
+      const tasks = readTasks()
+      const task = tasks.find(t => t.id === taskId)
+      if (!task?.spans) return
+      const now = new Date()
+      let changed = false
+      for (const span of task.spans) {
+        if (span.status !== 'running') continue
+        span.status = 'failed'
+        span.error = error
+        span.finishedAt = now.toISOString()
+        span.durationMs = now.getTime() - new Date(span.startedAt).getTime()
+        changed = true
+      }
+      if (changed) writeTasks(tasks)
+    },
+
     async appendSessionEvent(taskId: string, event: unknown): Promise<void> {
       ensureDirs()
       const file = join(sessionsDir, `${taskId}.json`)

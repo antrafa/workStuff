@@ -8,6 +8,7 @@ import {
   GitBranch,
   Play,
   ShieldCheck,
+  Square,
   Terminal,
   User,
   Wrench,
@@ -179,6 +180,26 @@ export function FactoryTraceVisualizer({ task, onBack, onUpdate }: Props) {
     { label: fmtDuration(totalDurationMs), pct: 98 },
   ]
 
+  const [stopping, setStopping] = useState(false)
+
+  const handleCancelExecution = async () => {
+    if (stopping) return
+    setStopping(true)
+    setError(null)
+    setStatusMessage('Solicitando cancelamento ao servidor...')
+    try {
+      await api.post(`/factory/tasks/${task.id}/cancel`, {})
+      setStatusMessage('Execução interrompida.')
+      onUpdate()
+    } catch (err) {
+      setError((err as Error).message)
+    } finally {
+      setStopping(false)
+    }
+  }
+
+  const isExecuting = processing || Boolean(task.executing) || ['planning', 'building', 'qa_security'].includes(task.state)
+
   // Disparar ação de aprovação/construção
   const handleApprovePlan = async () => {
     setProcessing(true)
@@ -190,6 +211,10 @@ export function FactoryTraceVisualizer({ task, onBack, onUpdate }: Props) {
         (e: any) => {
           if (e.type === 'status') setStatusMessage(e.message)
           if (e.type === 'error') setError(e.message)
+          if (e.type === 'cancelled') {
+            setStatusMessage(e.message || 'Execução interrompida.')
+            onUpdate()
+          }
           if (e.type === 'done') onUpdate()
         }
       )
@@ -213,6 +238,10 @@ export function FactoryTraceVisualizer({ task, onBack, onUpdate }: Props) {
         (e: any) => {
           if (e.type === 'status') setStatusMessage(e.message)
           if (e.type === 'error') setError(e.message)
+          if (e.type === 'cancelled') {
+            setStatusMessage(e.message || 'Execução interrompida.')
+            onUpdate()
+          }
           if (e.type === 'done') onUpdate()
         }
       )
@@ -268,20 +297,44 @@ export function FactoryTraceVisualizer({ task, onBack, onUpdate }: Props) {
           </span>
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <span
-            style={{
-              width: 8,
-              height: 8,
-              borderRadius: '50%',
-              background: '#4ade80',
-              boxShadow: '0 0 10px #4ade80',
-              animation: 'pulse 1.5s infinite',
-            }}
-          />
-          <span style={{ fontSize: 12, color: '#4ade80', fontFamily: 'ui-monospace, monospace', fontWeight: 600 }}>
-            live
-          </span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          {isExecuting && (
+            <button
+              type="button"
+              className="btn btn-sm btn-danger"
+              onClick={handleCancelExecution}
+              disabled={stopping}
+              style={{
+                background: 'rgba(239, 68, 68, 0.15)',
+                color: '#ef4444',
+                border: '1px solid rgba(239, 68, 68, 0.4)',
+                fontSize: 12,
+                display: 'flex',
+                alignItems: 'center',
+                gap: 5,
+                padding: '4px 10px',
+              }}
+              title="Interromper execução atual"
+            >
+              <Square size={12} fill="currentColor" /> {stopping ? 'Parando...' : 'Parar Execução'}
+            </button>
+          )}
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <span
+              style={{
+                width: 8,
+                height: 8,
+                borderRadius: '50%',
+                background: isExecuting ? '#4ade80' : '#8b9cb6',
+                boxShadow: isExecuting ? '0 0 10px #4ade80' : 'none',
+                animation: isExecuting ? 'pulse 1.5s infinite' : 'none',
+              }}
+            />
+            <span style={{ fontSize: 12, color: isExecuting ? '#4ade80' : '#8b9cb6', fontFamily: 'ui-monospace, monospace', fontWeight: 600 }}>
+              {isExecuting ? 'live' : 'inativo'}
+            </span>
+          </div>
         </div>
       </div>
 
@@ -582,6 +635,25 @@ export function FactoryTraceVisualizer({ task, onBack, onUpdate }: Props) {
           {task.state === 'waiting_approval' && (
             <button type="button" className="btn btn-sm btn-primary" onClick={handleApprovePlan} disabled={processing}>
               <Play size={14} /> {processing ? 'Construindo...' : 'Aprovar Plano e Iniciar Construção'}
+            </button>
+          )}
+
+          {isExecuting && (
+            <button
+              type="button"
+              className="btn btn-sm btn-danger"
+              onClick={handleCancelExecution}
+              disabled={stopping}
+              style={{
+                background: '#ef4444',
+                color: '#fff',
+                border: 'none',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 6,
+              }}
+            >
+              <Square size={13} fill="currentColor" /> {stopping ? 'Parando...' : 'Parar Execução'}
             </button>
           )}
         </div>

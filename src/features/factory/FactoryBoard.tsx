@@ -9,8 +9,10 @@ import {
   Play,
   RotateCw,
   ShieldAlert,
+  Square,
   Terminal,
 } from 'lucide-react'
+import { api } from '@/lib/api'
 import type { FactoryTask } from '../../../server/lib/factory/types.ts'
 import { FactoryLiveConsole } from './FactoryLiveConsole'
 
@@ -24,11 +26,26 @@ type Props = {
 export function FactoryBoard({ tasks, onSelectTask, onUpdate, onOpenTrace }: Props) {
   const [consoleTask, setConsoleTask] = useState<FactoryTask | null>(null)
   const [consoleAction, setConsoleAction] = useState<'plan' | 'approve-plan' | null>(null)
+  const [stoppingTaskId, setStoppingTaskId] = useState<string | null>(null)
 
   const handleOpenConsole = (task: FactoryTask, action: 'plan' | 'approve-plan' | null = null, e?: React.MouseEvent) => {
     if (e) e.stopPropagation()
     setConsoleTask(task)
     setConsoleAction(action)
+  }
+
+  const handleStopTask = async (task: FactoryTask, e: React.MouseEvent) => {
+    e.stopPropagation()
+    if (stoppingTaskId === task.id) return
+    setStoppingTaskId(task.id)
+    try {
+      await api.post(`/factory/tasks/${task.id}/cancel`, {})
+      onUpdate()
+    } catch (err) {
+      console.error('Falha ao parar tarefa:', err)
+    } finally {
+      setStoppingTaskId(null)
+    }
   }
 
   // Filtragem por colunas
@@ -116,7 +133,7 @@ export function FactoryBoard({ tasks, onSelectTask, onUpdate, onOpenTrace }: Pro
                   </div>
                 ) : (
                   col.items.map(task => {
-                    const isTaskRunning = task.state === 'planning' || task.state === 'building' || task.state === 'qa_security'
+                    const isTaskRunning = task.state === 'planning' || task.state === 'building' || task.state === 'qa_security' || Boolean(task.executing)
                     const hasError = task.state === 'error' || Boolean(task.error)
                     const isWaitingApproval = task.state === 'waiting_approval'
 
@@ -243,21 +260,40 @@ export function FactoryBoard({ tasks, onSelectTask, onUpdate, onOpenTrace }: Pro
                           )}
 
                           {isTaskRunning && (
-                            <button
-                              type="button"
-                              className="btn btn-sm"
-                              style={{
-                                width: '100%',
-                                justifyContent: 'center',
-                                gap: 6,
-                                borderColor: '#5ad2dd',
-                                color: '#5ad2dd',
-                              }}
-                              onClick={e => handleOpenConsole(task, null, e)}
-                            >
-                              <Activity size={13} style={{ animation: 'spin 2s linear infinite' }} />
-                              Acompanhar Execução
-                            </button>
+                            <div className="row" style={{ gap: 6 }}>
+                              <button
+                                type="button"
+                                className="btn btn-sm"
+                                style={{
+                                  flex: 1,
+                                  justifyContent: 'center',
+                                  gap: 6,
+                                  borderColor: '#5ad2dd',
+                                  color: '#5ad2dd',
+                                }}
+                                onClick={e => handleOpenConsole(task, null, e)}
+                              >
+                                <Activity size={13} style={{ animation: 'spin 2s linear infinite' }} />
+                                Acompanhar
+                              </button>
+                              <button
+                                type="button"
+                                className="btn btn-sm"
+                                style={{
+                                  borderColor: 'rgba(239, 68, 68, 0.4)',
+                                  color: '#ef4444',
+                                  background: 'rgba(239, 68, 68, 0.1)',
+                                  padding: '0 10px',
+                                  gap: 4,
+                                }}
+                                title="Interromper execução da tarefa"
+                                onClick={e => handleStopTask(task, e)}
+                                disabled={stoppingTaskId === task.id}
+                              >
+                                <Square size={11} fill="currentColor" />
+                                {stoppingTaskId === task.id ? 'Parando...' : 'Parar'}
+                              </button>
+                            </div>
                           )}
 
                           {task.state === 'review' && (
