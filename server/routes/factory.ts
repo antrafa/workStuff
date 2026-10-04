@@ -5,14 +5,15 @@ import { openInEditor, pickFolder } from '../lib/desktop.ts'
 import { openSse } from '../lib/sse.ts'
 import { repoInfo } from '../lib/review/git.ts'
 import { defaultFactoryStore } from '../lib/factory/store.ts'
-import { createWorktree, getWorktreeDiff, removeWorktree, commitWorktree, mergeWorktreeLocal, pushWorktreeBranch } from '../lib/factory/worktree.ts'
+import { getWorktreeDiff, removeWorktree, mergeWorktreeLocal, pushWorktreeBranch } from '../lib/factory/worktree.ts'
 import { SPECIALIZED_AGENTS } from '../lib/factory/agents.ts'
 import { runFactoryAgent } from '../lib/factory/runner.ts'
-import type { FactoryTask, FactoryTaskState, SpecializedAgentId } from '../lib/factory/types.ts'
+import { adjustTask, buildTask, planTask, type ExecContext } from '../lib/factory/pipeline.ts'
+import { type FactoryTask, type FactoryTaskState, type SpecializedAgentId } from '../lib/factory/types.ts'
 import { listSources, resolveToken } from '../lib/repos/sources.ts'
 import { call, type Conn } from '../lib/repos/providers.ts'
 import { readSettings } from '../lib/settingsStore.ts'
-import { gateArtifactsExist, gateDiffNotEmpty, gateTestsPass } from '../lib/factory/gates.ts'
+import { isProviderId } from '../lib/aiProviders.ts'
 import {
   beginExecution,
   cancelExecution,
@@ -20,22 +21,10 @@ import {
   isExecuting,
   waitForIdle,
   stateAfterCancel,
-  throwIfCancelled,
   RUNNING_STATES,
   ExecutionCancelledError,
   type ExecutionKind,
 } from '../lib/factory/executions.ts'
-import {
-  formatPlanPrompt,
-  formatBuildPrompt,
-  formatRepairPrompt,
-  formatTestPrompt,
-  formatReviewPrompt,
-  parsePlanEnvelope,
-  parseBuildEnvelope,
-  parseTestEnvelope,
-  parseReviewEnvelope,
-} from '../lib/factory/envelopes.ts'
 
 export const factoryRouter = Router()
 
@@ -43,12 +32,6 @@ export const factoryRouter = Router()
 // Every agent pipeline runs through runExecution: it owns the AbortSignal
 // (registry, not the HTTP connection), always closes the SSE stream, and turns
 // a user stop into a resumable state instead of a generic error.
-
-type ExecContext = {
-  taskId: string
-  signal: AbortSignal
-  send: (event: object) => void
-}
 
 async function runExecution(
   taskId: string,
@@ -101,36 +84,6 @@ async function runExecution(
   }
 }
 
-// Runs one agent step: refuses to start if already cancelled, records events
-// and tool calls uniformly, and converts a stopped CLI into a cancellation
-// (spawnCli resolves with stopped=true instead of rejecting).
-async function runAgentStep(
-  ctx: ExecContext,
-  options: Omit<Parameters<typeof runFactoryAgent>[0], 'signal' | 'onEvent'>,
-) {
-  throwIfCancelled(ctx.signal)
-  const result = await runFactoryAgent({
-    ...options,
-    signal: ctx.signal,
-    onEvent: event => {
-      ctx.send(event)
-      defaultFactoryStore.appendSessionEvent(ctx.taskId, event).catch(() => {})
-      if (event.type === 'tool') {
-        defaultFactoryStore.recordToolCall(ctx.taskId, {
-          id: event.id,
-          tool: event.tool,
-          input: event.input,
-          startedAt: new Date().toISOString(),
-        }).catch(() => {})
-      } else if (event.type === 'tool-result') {
-        defaultFactoryStore.completeToolCall(ctx.taskId, event.id, { output: event.content, isError: event.isError }).catch(() => {})
-      }
-    },
-  })
-  if (result.stopped || ctx.signal.aborted) throw new ExecutionCancelledError()
-  return result
-}
-
 // Each action only makes sense from some states; anything else is a stale button
 // or a double click, and running it would rebuild a worktree or merge the wrong thing.
 function refuseState(res: Response, task: FactoryTask, allowed: FactoryTaskState[], action: string): boolean {
@@ -151,6 +104,20 @@ async function reconcileTask(task: FactoryTask): Promise<FactoryTask> {
     return { ...((await defaultFactoryStore.getTask(task.id)) ?? fixed), executing: false }
   }
   return { ...task, executing }
+}
+
+// Provider and model become CLI arguments later: validate them here, at the boundary.
+const MODEL_ID = /^[\w.:/-]{1,200}$/
+function taskOptions(b: Record<string, any>, current?: FactoryTask): Pick<FactoryTask, 'provider' | 'model' | 'verifyCommand'> {
+  if (b.provider !== undefined && !isProviderId(b.provider)) throw new Error('provedor inválido: use claude, agy ou codex')
+  if (b.model && !MODEL_ID.test(String(b.model))) throw new Error('id de modelo inválido')
+  const settings = readSettings()
+  return {
+    provider: b.provider ?? current?.provider ?? settings.provider,
+    model: b.model !== undefined ? String(b.model) || undefined : current?.model ?? settings.model,
+    // The developer's own command, run inside the jail like the autodetected one
+    verifyCommand: b.verifyCommand !== undefined ? String(b.verifyCommand).trim() || undefined : current?.verifyCommand,
+  }
 }
 
 // Retorna configurações ativas do workstuff (provedor padrão, modelo, esforço)
@@ -233,14 +200,13 @@ factoryRouter.patch('/tasks/:id', async (req, res) => {
       ...task,
       title: b.title !== undefined ? String(b.title).trim() : task.title,
       description: b.description !== undefined ? String(b.description).trim() : task.description,
-      provider: b.provider || task.provider,
-      model: b.model !== undefined ? b.model : task.model,
+      ...taskOptions(b, task),
       updatedAt: new Date().toISOString(),
     }
     await defaultFactoryStore.saveTask(updated)
     res.json(updated)
   } catch (e) {
-    res.status(500).json({ error: (e as Error).message })
+    res.status(400).json({ error: (e as Error).message })
   }
 })
 
@@ -253,7 +219,7 @@ factoryRouter.post('/tasks', async (req, res) => {
       return
     }
 
-    const settings = readSettings()
+    const options = taskOptions(b)
     const info = await repoInfo(b.source.repoPath).catch(() => null)
     const baseBranch = b.baseBranch || info?.defaultBase || info?.current || 'main'
     const id = `fac-${Date.now()}`
@@ -272,8 +238,7 @@ factoryRouter.post('/tasks', async (req, res) => {
       state: 'intake',
       baseBranch,
       branchName: `factory/${id}`,
-      provider: b.provider || settings.provider || 'claude',
-      model: b.model || settings.model,
+      ...options,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
       spans: [],
@@ -371,51 +336,32 @@ factoryRouter.post('/tasks/:id/cancel', async (req, res) => {
   }
 })
 
-// Planning phase with the Architect (SSE)
+// Planning: Analyst specifies, Architect plans (SSE). Answers to the Analyst's questions come in the body.
 factoryRouter.post('/tasks/:id/plan', async (req, res) => {
   const task = await defaultFactoryStore.getTask(req.params.id as string)
   if (!task) {
     res.status(404).json({ error: 'tarefa nao encontrada' })
     return
   }
-  if (refuseState(res, task, ['intake', 'waiting_approval', 'error'], 'planejar')) return
+  if (refuseState(res, task, ['intake', 'waiting_clarification', 'waiting_approval', 'error'], 'planejar')) return
+  const answers = String(req.body?.answers ?? '').trim()
+  if (task.state === 'waiting_clarification' && !answers) {
+    res.status(400).json({ error: 'responda às dúvidas do Analyst antes de planejar de novo' })
+    return
+  }
+  const questions = task.handoffs?.spec?.openQuestions ?? []
+  const clarifications = answers
+    ? [task.clarifications, `Perguntas:\n${questions.map(q => `- ${q}`).join('\n')}\nRespostas:\n${answers}`].filter(Boolean).join('\n\n')
+    : task.clarifications
 
   await runExecution(task.id, 'plan', res, async ctx => {
-    await defaultFactoryStore.saveTask({ ...task, state: 'planning', error: undefined, updatedAt: new Date().toISOString() })
-
-    const spanPlan = await defaultFactoryStore.startSpan(task.id, {
-      name: 'Planejamento Arquitetural',
-      phase: 'planning',
-      kind: 'agent',
-      agentId: 'architect',
-    })
-
-    const result = await runAgentStep(ctx, {
-      agentId: 'architect',
-      prompt: formatPlanPrompt(task),
-      cwd: task.source.repoPath,
-      provider: task.provider,
-      model: task.model,
-    })
-
-    const planEnv = parsePlanEnvelope(result.text)
-    await defaultFactoryStore.finishSpan(task.id, spanPlan, { status: 'success', envelope: planEnv })
-
-    const currentInDb = (await defaultFactoryStore.getTask(task.id)) || task
-    const updatedTask: FactoryTask = {
-      ...currentInDb,
-      state: 'waiting_approval',
-      plan: planEnv.plan || result.text,
-      handoffs: { ...(currentInDb.handoffs ?? {}), plan: planEnv },
-      error: undefined,
-      updatedAt: new Date().toISOString(),
-    }
-    await defaultFactoryStore.saveTask(updatedTask)
-    ctx.send({ type: 'done', plan: updatedTask.plan, task: updatedTask })
+    const planned = await planTask(ctx, { ...task, clarifications })
+    ctx.send({ type: 'done', plan: planned.plan, task: planned })
   })
 })
 
-// Plan approval: worktree + Implementer + Gates + Tester + Reviewer (SSE)
+// Plan approval: worktree, Implementer with gates, Tester, review squad, Documenter (SSE).
+// The developer may send an edited plan: it replaces the Architect's before the build starts.
 factoryRouter.post('/tasks/:id/approve-plan', async (req, res) => {
   const task = await defaultFactoryStore.getTask(req.params.id as string)
   if (!task) {
@@ -423,222 +369,22 @@ factoryRouter.post('/tasks/:id/approve-plan', async (req, res) => {
     return
   }
   if (refuseState(res, task, ['waiting_approval', 'error'], 'aprovar o plano')) return
-  if (!task.plan) {
+  const editedPlan = typeof req.body?.plan === 'string' ? req.body.plan.trim() : ''
+  const plan = editedPlan || task.plan
+  if (!plan) {
     res.status(409).json({ error: 'a tarefa ainda não tem plano aprovado; rode o planejamento antes' })
     return
   }
+  const planEnv = task.handoffs?.plan
+  const approved: FactoryTask = {
+    ...task,
+    plan,
+    handoffs: { ...task.handoffs, plan: planEnv ? { ...planEnv, plan } : undefined },
+  }
 
   await runExecution(task.id, 'build', res, async ctx => {
-    const { signal } = ctx
-
-    // 1. Code phase: isolated Git worktree
-    ctx.send({ type: 'status', message: 'Fase de Código: Criando Git Worktree isolada...' })
-    await defaultFactoryStore.saveTask({ ...task, state: 'building', error: undefined, updatedAt: new Date().toISOString() })
-    const spanWorktree = await defaultFactoryStore.startSpan(task.id, {
-      name: 'Criação da Git Worktree',
-      phase: 'building',
-      kind: 'code',
-    })
-    const { worktreePath, branchName } = await createWorktree(task.source.repoPath, task.id, task.baseBranch)
-    await defaultFactoryStore.finishSpan(task.id, spanWorktree, { status: 'success' })
-
-    let currentTask: FactoryTask = {
-      ...((await defaultFactoryStore.getTask(task.id)) ?? task),
-      worktreePath,
-      branchName,
-      state: 'building',
-      error: undefined,
-      updatedAt: new Date().toISOString(),
-    }
-    await defaultFactoryStore.saveTask(currentTask)
-
-    // 2. Agent phase: Implementer
-    ctx.send({ type: 'status', message: 'Implementer: codificando a solução na worktree...' })
-    const spanImplementer = await defaultFactoryStore.startSpan(task.id, {
-      name: 'Implementação da Solução',
-      phase: 'building',
-      kind: 'agent',
-      agentId: 'implementer',
-    })
-    const planEnv = currentTask.handoffs?.plan || parsePlanEnvelope(currentTask.plan || currentTask.description)
-    const implementerResult = await runAgentStep(ctx, {
-      agentId: 'implementer',
-      prompt: formatBuildPrompt(currentTask, planEnv),
-      cwd: worktreePath,
-      provider: currentTask.provider,
-      model: currentTask.model,
-    })
-    const buildEnv = parseBuildEnvelope(implementerResult.text)
-    await defaultFactoryStore.finishSpan(task.id, spanImplementer, { status: 'success', envelope: buildEnv })
-
-    // 3. Acceptance gate: diff must not be empty
-    throwIfCancelled(signal)
-    ctx.send({ type: 'status', message: 'Portão de Aceitação: validando alterações no repositório...' })
-    const spanDiffGate = await defaultFactoryStore.startSpan(task.id, {
-      name: 'Portão de Aceitação: Verificação de Arquivos',
-      phase: 'qa_security',
-      kind: 'gate',
-    })
-    const diffGate = await gateDiffNotEmpty(worktreePath, task.baseBranch)
-    if (!diffGate.passed) {
-      await defaultFactoryStore.finishSpan(task.id, spanDiffGate, { status: 'failed', error: diffGate.reason })
-      throw new Error(`Portão de aceitação falhou: ${diffGate.reason}`)
-    }
-    await defaultFactoryStore.finishSpan(task.id, spanDiffGate, { status: 'success' })
-
-    // 4. Acceptance gate: files the Implementer claims to have touched exist or are in the diff
-    if (buildEnv.changedFiles.length > 0) {
-      const spanArtifactsGate = await defaultFactoryStore.startSpan(task.id, {
-        name: 'Portão de Aceitação: Existência de Arquivos',
-        phase: 'qa_security',
-        kind: 'gate',
-      })
-      const artifactsGate = gateArtifactsExist(worktreePath, buildEnv.changedFiles, diffGate.filesChanged)
-      if (!artifactsGate.passed) {
-        await defaultFactoryStore.finishSpan(task.id, spanArtifactsGate, { status: 'failed', error: artifactsGate.reason })
-        throw new Error(`Portão de aceitação falhou: ${artifactsGate.reason}`)
-      }
-      await defaultFactoryStore.finishSpan(task.id, spanArtifactsGate, { status: 'success' })
-    }
-
-    // 5. Acceptance gate: deterministic test suite
-    currentTask = { ...((await defaultFactoryStore.getTask(task.id)) ?? currentTask), state: 'qa_security', updatedAt: new Date().toISOString() }
-    await defaultFactoryStore.saveTask(currentTask)
-    ctx.send({ type: 'status', message: 'Portão de Testes: executando suíte determinística do projeto...' })
-    let spanTestGate = await defaultFactoryStore.startSpan(task.id, {
-      name: 'Portão: Execução de Testes',
-      phase: 'qa_security',
-      kind: 'gate',
-    })
-    let testGateResult = await gateTestsPass(worktreePath, { signal })
-    throwIfCancelled(signal)
-
-    // Self-repair loop when tests fail
-    if (!testGateResult.passed && !testGateResult.skipped) {
-      await defaultFactoryStore.finishSpan(task.id, spanTestGate, { status: 'failed', error: testGateResult.reason })
-      ctx.send({ type: 'status', message: 'Testes falharam. Disparando ciclo de auto-reparo com o Implementer...' })
-      const spanRepair = await defaultFactoryStore.startSpan(task.id, {
-        name: 'Ciclo de Auto-Reparo de Testes',
-        phase: 'building',
-        kind: 'agent',
-        agentId: 'implementer',
-      })
-      await runAgentStep(ctx, {
-        agentId: 'implementer',
-        prompt: formatRepairPrompt(currentTask, testGateResult.output),
-        cwd: worktreePath,
-        provider: currentTask.provider,
-        model: currentTask.model,
-      })
-      await defaultFactoryStore.finishSpan(task.id, spanRepair, { status: 'success' })
-
-      spanTestGate = await defaultFactoryStore.startSpan(task.id, {
-        name: 'Portão: Re-execução de Testes após Reparo',
-        phase: 'qa_security',
-        kind: 'gate',
-      })
-      testGateResult = await gateTestsPass(worktreePath, { signal })
-      throwIfCancelled(signal)
-    }
-
-    await defaultFactoryStore.finishSpan(task.id, spanTestGate, {
-      status: testGateResult.passed ? 'success' : 'failed',
-      error: testGateResult.passed ? undefined : testGateResult.reason,
-      details: { command: testGateResult.command, output: testGateResult.output },
-    })
-
-    // 6. Code phase: commit the implementation
-    throwIfCancelled(signal)
-    const spanCommit = await defaultFactoryStore.startSpan(task.id, {
-      name: 'Git Commit da Implementação',
-      phase: 'qa_security',
-      kind: 'code',
-    })
-    const implementationHead = await commitWorktree(worktreePath, buildEnv.commitMessage || `feat(${task.id}): ${task.title}`)
-    await defaultFactoryStore.finishSpan(task.id, spanCommit, { status: 'success' })
-
-    // 7. Agent phase: Tester (may write new tests in the worktree)
-    ctx.send({ type: 'status', message: 'Tester: avaliando cobertura e cenários de teste...' })
-    const spanTester = await defaultFactoryStore.startSpan(task.id, {
-      name: 'Avaliação de QA e Cobertura',
-      phase: 'qa_security',
-      kind: 'agent',
-      agentId: 'tester',
-    })
-    const testAgentResult = await runAgentStep(ctx, {
-      agentId: 'tester',
-      prompt: formatTestPrompt(currentTask, {
-        command: testGateResult.command,
-        output: testGateResult.output,
-        passed: testGateResult.passed,
-      }),
-      cwd: worktreePath,
-      provider: currentTask.provider,
-      model: currentTask.model,
-    })
-    const testEnv = parseTestEnvelope(testAgentResult.text, testGateResult.passed)
-    await defaultFactoryStore.finishSpan(task.id, spanTester, { status: 'success', envelope: testEnv })
-
-    // Tests the Tester wrote are part of the delivery: commit them, and the code (not the
-    // agent's own report) decides whether the suite still passes with them.
-    throwIfCancelled(signal)
-    const testsHead = await commitWorktree(worktreePath, `test(${task.id}): testes da demanda`)
-    if (testsHead !== implementationHead) {
-      ctx.send({ type: 'status', message: 'Portão de Testes: re-executando a suíte com os testes novos...' })
-      const spanRetest = await defaultFactoryStore.startSpan(task.id, {
-        name: 'Portão: Testes com a Cobertura Nova',
-        phase: 'qa_security',
-        kind: 'gate',
-      })
-      testGateResult = await gateTestsPass(worktreePath, { signal })
-      throwIfCancelled(signal)
-      await defaultFactoryStore.finishSpan(task.id, spanRetest, {
-        status: testGateResult.passed ? 'success' : 'failed',
-        error: testGateResult.passed ? undefined : testGateResult.reason,
-        details: { command: testGateResult.command, output: testGateResult.output },
-      })
-    }
-    const { diff, stat } = await getWorktreeDiff(worktreePath, task.baseBranch)
-
-    // 8. Agent phase: Reviewer
-    ctx.send({ type: 'status', message: 'Reviewer: auditando segurança e gerando resumo do MR...' })
-    const spanReviewer = await defaultFactoryStore.startSpan(task.id, {
-      name: 'Auditoria de Segurança e Resumo do MR',
-      phase: 'qa_security',
-      kind: 'agent',
-      agentId: 'reviewer',
-    })
-    const reviewerResult = await runAgentStep(ctx, {
-      agentId: 'reviewer',
-      prompt: formatReviewPrompt(currentTask, diff),
-      cwd: worktreePath,
-      provider: currentTask.provider,
-      model: currentTask.model,
-    })
-    const reviewEnv = parseReviewEnvelope(reviewerResult.text)
-    await defaultFactoryStore.finishSpan(task.id, spanReviewer, { status: 'success', envelope: reviewEnv })
-
-    const finalTask: FactoryTask = {
-      ...((await defaultFactoryStore.getTask(task.id)) || currentTask),
-      state: 'review',
-      diffContent: diff,
-      diffStat: stat,
-      qaReport: {
-        // Agent proposes, code disposes: a failed suite is never overridden by the agent's report
-        passed: testGateResult.passed && testEnv.testSuitePassed,
-        summary: testEnv.details || testAgentResult.text,
-        output: testGateResult.output,
-      },
-      securityReport: {
-        passed: reviewEnv.securityPassed,
-        findings: reviewEnv.findings,
-        summary: reviewEnv.summary || reviewerResult.text,
-      },
-      handoffs: { plan: planEnv, build: buildEnv, test: testEnv, review: reviewEnv },
-      updatedAt: new Date().toISOString(),
-    }
-    await defaultFactoryStore.saveTask(finalTask)
-    ctx.send({ type: 'done', task: finalTask })
+    const built = await buildTask(ctx, approved)
+    ctx.send({ type: 'done', task: built })
   })
 })
 
@@ -650,8 +396,6 @@ factoryRouter.post('/tasks/:id/adjust', async (req, res) => {
     return
   }
   if (refuseState(res, task, ['review', 'error'], 'pedir ajuste')) return
-  const worktreePath = task.worktreePath
-
   const feedback = String(req.body?.feedback ?? '').trim()
   if (!feedback) {
     res.status(400).json({ error: 'feedback e obrigatorio' })
@@ -659,59 +403,8 @@ factoryRouter.post('/tasks/:id/adjust', async (req, res) => {
   }
 
   await runExecution(task.id, 'adjust', res, async ctx => {
-    ctx.send({ type: 'status', message: 'Aplicando ajustes na worktree...' })
-    await defaultFactoryStore.saveTask({ ...task, state: 'building', error: undefined, updatedAt: new Date().toISOString() })
-
-    const spanAdjust = await defaultFactoryStore.startSpan(task.id, {
-      name: 'Ajuste Solicitado pelo Usuário',
-      phase: 'building',
-      kind: 'agent',
-      agentId: 'implementer',
-    })
-
-    await runAgentStep(ctx, {
-      agentId: 'implementer',
-      // Each CLI run starts with no memory: restate the task and plan, or the
-      // Implementer edits blind with only the feedback sentence.
-      prompt: [
-        `Demanda: ${task.title}`,
-        task.plan ? `Plano aprovado:\n${task.plan}` : '',
-        `A implementação já está commitada na worktree atual. O desenvolvedor revisou e pediu os seguintes ajustes:`,
-        `"${feedback}"`,
-        `Altere os arquivos necessários na pasta atual e certifique-se de que a implementação atende ao pedido.`,
-      ].filter(Boolean).join('\n\n'),
-      cwd: worktreePath,
-      provider: task.provider,
-      model: task.model,
-    })
-    await defaultFactoryStore.finishSpan(task.id, spanAdjust, { status: 'success' })
-
-    const testGateResult = await gateTestsPass(worktreePath, { signal: ctx.signal })
-    throwIfCancelled(ctx.signal)
-
-    await commitWorktree(worktreePath, `fix(${task.id}): ajuste conforme feedback do revisor`)
-    const { diff, stat } = await getWorktreeDiff(worktreePath, task.baseBranch)
-
-    // Re-read so spans and tool calls recorded during this run are kept
-    const updatedTask: FactoryTask = {
-      ...((await defaultFactoryStore.getTask(task.id)) ?? task),
-      state: 'review',
-      diffContent: diff,
-      diffStat: stat,
-      qaReport: {
-        passed: testGateResult.passed,
-        summary: testGateResult.passed ? 'Todos os testes passaram após o ajuste.' : 'Houve falha nos testes.',
-        output: testGateResult.output,
-      },
-      // The Reviewer did not see the adjusted code: say so instead of showing an old verdict as current
-      securityReport: task.securityReport && {
-        ...task.securityReport,
-        summary: `Revisão feita antes do ajuste "${feedback.slice(0, 120)}"; o código ajustado não foi revisado pelo Reviewer.\n\n${task.securityReport.summary}`,
-      },
-      updatedAt: new Date().toISOString(),
-    }
-    await defaultFactoryStore.saveTask(updatedTask)
-    ctx.send({ type: 'done', task: updatedTask })
+    const adjusted = await adjustTask(ctx, task, feedback)
+    ctx.send({ type: 'done', task: adjusted })
   })
 })
 
@@ -786,9 +479,9 @@ factoryRouter.post('/tasks/:id/finish', async (req, res) => {
           const token = await resolveToken(src.provider, src.tokenSource, src.id)
           const conn: Conn = { provider: src.provider, url: src.url, token }
           const title = task.title
-          const summary = task.handoffs?.review?.mrDescription || task.securityReport?.summary || task.description
+          const summary = task.handoffs?.docs?.mrDescription || task.handoffs?.review?.mrDescription || task.description
           // Closes the originating issue when the MR is merged (GitLab and GitHub both read it)
-          const description = task.source.issueIid ? `${summary}\n\nCloses #${task.source.issueIid}` : summary
+          const description = task.source.issueIid && !summary.includes(`#${task.source.issueIid}`) ? `${summary}\n\nCloses #${task.source.issueIid}` : summary
 
           const apiBase = conn.provider === 'gitlab'
             ? `${conn.url}/api/v4`

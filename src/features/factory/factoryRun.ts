@@ -6,7 +6,7 @@ import './factory.css'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { api } from '@/lib/api'
 import { streamPost } from '@/lib/stream'
-import { RUNNING_STATES, type ExecutionSpan, type FactoryTask, type FactoryTaskState } from '../../../server/lib/factory/types.ts'
+import { AGENT_ORDER, RUNNING_STATES, type ExecutionSpan, type FactoryTask, type FactoryTaskState, type SpecializedAgentId } from '../../../server/lib/factory/types.ts'
 
 export type FactoryAction = 'plan' | 'approve-plan' | 'adjust'
 
@@ -20,6 +20,31 @@ export type SessionEvent = {
   input?: unknown
   content?: string
   isError?: boolean
+  agentId?: SpecializedAgentId
+}
+
+// Name, pipeline role and lane color of each agent, for every place that draws one.
+export const AGENT_UI: Record<SpecializedAgentId, { name: string; role: string; color: string }> = {
+  analyst: { name: 'Analyst', role: 'Especificação e critérios de aceite', color: 'var(--fx-analyst)' },
+  architect: { name: 'Architect', role: 'Planejamento arquitetural', color: 'var(--fx-architect)' },
+  implementer: { name: 'Implementer', role: 'Construção e correções', color: 'var(--fx-implementer)' },
+  tester: { name: 'Tester', role: 'Testes e cobertura', color: 'var(--fx-tester)' },
+  reviewer: { name: 'Reviewer', role: 'Revisão de código e critérios', color: 'var(--fx-reviewer)' },
+  security: { name: 'Security', role: 'Auditoria de segurança', color: 'var(--fx-security)' },
+  documenter: { name: 'Documenter', role: 'Documentação e descrição do MR', color: 'var(--fx-documenter)' },
+}
+export { AGENT_ORDER }
+
+// Tokens and cost of every agent run of a task (only what the providers reported).
+export function taskUsage(task: FactoryTask) {
+  let costUsd = 0
+  let tokens = 0
+  let priced = false
+  for (const s of task.spans ?? []) {
+    if (s.usage?.costUsd !== undefined) (costUsd += s.usage.costUsd), (priced = true)
+    tokens += (s.usage?.inputTokens ?? 0) + (s.usage?.outputTokens ?? 0)
+  }
+  return { costUsd: priced ? costUsd : null, tokens }
 }
 
 // One label and one badge tone per state, for every place that shows a state.
@@ -28,6 +53,7 @@ type Tone = 'ok' | 'warn' | 'crit' | 'info' | 'signal' | 'muted'
 export const TASK_STATE: Record<FactoryTaskState, { label: string; tone: Tone }> = {
   intake: { label: 'na entrada', tone: 'muted' },
   planning: { label: 'planejando', tone: 'info' },
+  waiting_clarification: { label: 'aguardando respostas', tone: 'signal' },
   waiting_approval: { label: 'aguardando aprovação', tone: 'signal' },
   building: { label: 'construindo', tone: 'info' },
   qa_security: { label: 'QA e segurança', tone: 'info' },
@@ -81,7 +107,8 @@ export async function runFactoryAction(
 // Streamed text arrives in small deltas: merge one into the previous text event.
 export function appendEvent(events: SessionEvent[], e: SessionEvent): SessionEvent[] {
   const last = events[events.length - 1]
-  if (e.type === 'text' && last?.type === 'text') {
+  // Same agent only: Reviewer and Security stream at the same time
+  if (e.type === 'text' && last?.type === 'text' && last.agentId === e.agentId) {
     return [...events.slice(0, -1), { ...last, text: (last.text ?? '') + (e.text ?? '') }]
   }
   return [...events, e]

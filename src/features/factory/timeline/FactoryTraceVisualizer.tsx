@@ -18,13 +18,17 @@ import {
   Wrench,
   MessageSquare,
   AlertTriangle,
+  BookOpen,
+  ClipboardList,
+  ShieldAlert,
 } from 'lucide-react'
 import { Chips, Markdown } from '@/ui'
 import { api } from '@/lib/api'
 import type { FactoryTask } from '../../../../server/lib/factory/types.ts'
 import { FactoryStatusChip } from './FactoryStatusChip'
 import { FactoryStatChip } from './FactoryStatChip'
-import { fmtDuration, runFactoryAction, useLiveTask } from '../factoryRun'
+import { AGENT_ORDER, AGENT_UI, fmtDuration, runFactoryAction, useLiveTask } from '../factoryRun'
+import type { SpecializedAgentId } from '../../../../server/lib/factory/types.ts'
 
 type Props = {
   task: FactoryTask
@@ -41,6 +45,16 @@ type LaneDef = {
   model?: string
   color: string
   icon: typeof Cpu
+}
+
+const AGENT_ICON: Record<SpecializedAgentId, typeof Cpu> = {
+  analyst: ClipboardList,
+  architect: Cpu,
+  implementer: Wrench,
+  tester: Terminal,
+  reviewer: Eye,
+  security: ShieldAlert,
+  documenter: BookOpen,
 }
 
 
@@ -100,59 +114,10 @@ export function FactoryTraceVisualizer({ task, onBack, onUpdate, onOpenReview }:
 
   // Definição das Raias do Waterfall
   const lanes: LaneDef[] = [
-    {
-      id: 'engineer',
-      name: 'Engenheiro',
-      role: 'Usuário (Human-in-the-loop)',
-      color: 'var(--fx-engineer)',
-      icon: User,
-    },
-    {
-      id: 'code',
-      name: 'Workspace',
-      role: 'Código (Git Worktree & Commits)',
-      color: 'var(--fx-code)',
-      icon: Code2,
-    },
-    {
-      id: 'architect',
-      name: 'Architect',
-      role: 'Planejamento Arquitetural',
-      model: liveTask.model || liveTask.provider,
-      color: 'var(--fx-architect)',
-      icon: Cpu,
-    },
-    {
-      id: 'implementer',
-      name: 'Implementer',
-      role: 'Construção & Codificação',
-      model: liveTask.model || liveTask.provider,
-      color: 'var(--fx-implementer)',
-      icon: Wrench,
-    },
-    {
-      id: 'gates',
-      role: 'Portões Mecânicos de Aceitação',
-      name: 'Portões',
-      color: 'var(--fx-gates)',
-      icon: ShieldCheck,
-    },
-    {
-      id: 'tester',
-      name: 'Tester',
-      role: 'Avaliação de Testes & QA',
-      model: liveTask.model || liveTask.provider,
-      color: 'var(--fx-tester)',
-      icon: Terminal,
-    },
-    {
-      id: 'reviewer',
-      name: 'Reviewer',
-      role: 'Auditoria de Segurança & MR',
-      model: liveTask.model || liveTask.provider,
-      color: 'var(--fx-reviewer)',
-      icon: ShieldCheck,
-    },
+    { id: 'engineer', name: 'Engenheiro', role: 'Usuário (Human-in-the-loop)', color: 'var(--fx-engineer)', icon: User },
+    { id: 'code', name: 'Workspace', role: 'Código (Git Worktree & Commits)', color: 'var(--fx-code)', icon: Code2 },
+    ...AGENT_ORDER.map(id => ({ id, ...AGENT_UI[id], model: liveTask.model || liveTask.provider, icon: AGENT_ICON[id] })),
+    { id: 'gates', name: 'Portões', role: 'Portões Mecânicos de Aceitação', color: 'var(--fx-gates)', icon: ShieldCheck },
   ]
 
   // Monta lista de fases e blocos a partir dos spans gravados ou dos estados padrão
@@ -626,6 +591,12 @@ export function FactoryTraceVisualizer({ task, onBack, onUpdate, onOpenReview }:
           {liveTask.state === 'intake' && (
             <button type="button" className="btn btn-sm btn-primary" onClick={handleStartPlan} disabled={processing}>
               <Play size={14} /> {processing ? 'Analisando...' : 'Iniciar Planejamento com Architect'}
+            </button>
+          )}
+
+          {liveTask.state === 'waiting_clarification' && onOpenReview && (
+            <button type="button" className="btn btn-sm btn-primary" onClick={() => onOpenReview(liveTask)}>
+              <MessageSquare size={14} /> Responder Dúvidas do Analyst
             </button>
           )}
 

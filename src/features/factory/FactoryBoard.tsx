@@ -32,6 +32,7 @@ type ColumnId = 'intake' | 'planning' | 'building' | 'review' | 'done'
 const COLUMN_OF: Record<FactoryTaskState, ColumnId> = {
   intake: 'intake',
   planning: 'planning',
+  waiting_clarification: 'planning',
   waiting_approval: 'planning',
   error: 'planning',
   building: 'building',
@@ -230,6 +231,17 @@ export function FactoryBoard({ tasks, onSelectTask, onUpdate, onOpenTrace }: Pro
                               onClick={e => handleOpenConsole(task, 'plan', e)}
                             >
                               <Play size={13} /> Iniciar Planejamento
+                            </button>
+                          )}
+
+                          {task.state === 'waiting_clarification' && (
+                            <button
+                              type="button"
+                              className="btn btn-sm btn-primary"
+                              style={{ width: '100%', justifyContent: 'center', gap: 6 }}
+                              onClick={e => (e.stopPropagation(), onSelectTask(task))}
+                            >
+                              <FileText size={13} /> Responder Dúvidas do Analyst
                             </button>
                           )}
 

@@ -18,8 +18,8 @@ import {
 } from 'lucide-react'
 import { Markdown, Modal } from '@/ui'
 import { api } from '@/lib/api'
-import { isTaskRunning, runFactoryAction, type FactoryAction } from './factoryRun'
-import type { FactoryTask } from '../../../server/lib/factory/types.ts'
+import { AGENT_UI, isTaskRunning, runFactoryAction, taskUsage, type FactoryAction } from './factoryRun'
+import type { FactoryTask, SecurityFinding } from '../../../server/lib/factory/types.ts'
 import { TraceTimeline } from './TraceTimeline'
 import { FactoryStatusChip } from './timeline/FactoryStatusChip'
 
@@ -53,10 +53,16 @@ export function TaskReviewDrawer({ task, onClose, onUpdate }: Props) {
 
   // Every hook must run before this early return, or opening a card crashes the drawer
   const [stopping, setStopping] = useState(false)
+  const [answers, setAnswers] = useState('')
+  // null: the Architect's plan as is; a string: the developer's edited version
+  const [editedPlan, setEditedPlan] = useState<string | null>(null)
 
   if (!task) return null
 
   const isWaitingApproval = task.state === 'waiting_approval'
+  const isWaitingClarification = task.state === 'waiting_clarification'
+  const spec = task.handoffs?.spec
+  const usage = taskUsage(task)
   const isReview = task.state === 'review'
   const isError = task.state === 'error' || Boolean(task.error)
   const isAuthError =
@@ -118,7 +124,12 @@ export function TaskReviewDrawer({ task, onClose, onUpdate }: Props) {
 
   const handleRetryPlan = () => startAction('plan', 'Re-executando análise com o Architect...', 'Plano técnico gerado com sucesso!')
   const handleApprovePlan = () =>
-    startAction('approve-plan', 'Iniciando esteira determinística de construção...', 'Construção, portões de teste e auditoria finalizados!')
+    startAction('approve-plan', 'Iniciando esteira determinística de construção...', 'Construção, portões de teste e auditoria finalizados!',
+      editedPlan !== null && editedPlan.trim() ? { plan: editedPlan } : undefined)
+  const handleAnswer = () =>
+    startAction('plan', 'Replanejando com as suas respostas...', 'Especificação e plano gerados com as respostas.', { answers })
+  const askFix = (f: SecurityFinding) =>
+    setFeedback(`Corrija: ${f.description}${f.file ? ` (${f.file}${f.line !== undefined ? `:${f.line}` : ''})` : ''}`)
   // Same rule as the board: with a plan, retry the build; without one, plan again.
   // In review (a failed adjust) the work is intact: the way forward is a new adjust.
   const retry = task.state === 'review' ? null : task.plan ? handleApprovePlan : handleRetryPlan
@@ -192,6 +203,15 @@ export function TaskReviewDrawer({ task, onClose, onUpdate }: Props) {
           </span>
           <span>·</span>
           <FactoryStatusChip state={task.state} executing={task.executing} />
+          {(usage.costUsd !== null || usage.tokens > 0) && (
+            <>
+              <span>·</span>
+              <span className="mono" title="Somado do que os CLIs informaram em cada execução de agente">
+                {usage.costUsd !== null ? `US$ ${usage.costUsd.toFixed(2)}` : ''}
+                {usage.tokens > 0 ? ` ${(usage.tokens / 1000).toFixed(0)}k tokens` : ''}
+              </span>
+            </>
+          )}
           {task.prUrl && (
             <a
               href={task.prUrl}
@@ -296,9 +316,47 @@ export function TaskReviewDrawer({ task, onClose, onUpdate }: Props) {
           </div>
         )}
 
+        {/* CASO 0: O ANALYST TEM DÚVIDAS QUE SÓ O DESENVOLVEDOR RESPONDE */}
+        {isWaitingClarification && spec && (
+          <div className="card card-pad stack" style={{ gap: 12 }}>
+            <span className="eyebrow" style={{ color: 'var(--signal)' }}>Dúvidas do Analyst</span>
+            {spec.summary && <Markdown>{spec.summary}</Markdown>}
+            <ol style={{ margin: 0, paddingLeft: 20 }}>
+              {spec.openQuestions.map(q => <li key={q} style={{ marginBottom: 6 }}>{q}</li>)}
+            </ol>
+            <textarea
+              className="input"
+              rows={5}
+              placeholder="Responda às perguntas na ordem. As respostas entram na especificação e no plano."
+              value={answers}
+              onChange={e => setAnswers(e.target.value)}
+              disabled={processing}
+            />
+            <div className="row" style={{ justifyContent: 'space-between' }}>
+              <button type="button" className="btn" onClick={handleDelete} disabled={processing}>
+                <Trash2 size={15} style={{ color: 'var(--crit)' }} /> Descartar
+              </button>
+              <button type="button" className="btn btn-primary" onClick={handleAnswer} disabled={processing || !answers.trim()}>
+                <Play size={15} /> {processing ? 'Replanejando...' : 'Responder e Planejar'}
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* CASO 1: AGUARDANDO APROVAÇÃO DO PLANO */}
         {isWaitingApproval && (
           <div className="stack" style={{ gap: 16 }}>
+            {spec && spec.acceptanceCriteria.length > 0 && (
+              <div className="card card-pad stack" style={{ gap: 8 }}>
+                <span className="eyebrow">Critérios de aceite do Analyst</span>
+                <ul style={{ margin: 0, paddingLeft: 20 }}>
+                  {spec.acceptanceCriteria.map(c => <li key={c} style={{ marginBottom: 4 }}>{c}</li>)}
+                </ul>
+                {spec.outOfScope.length > 0 && (
+                  <span className="muted" style={{ fontSize: 12 }}>Fora do escopo: {spec.outOfScope.join('; ')}</span>
+                )}
+              </div>
+            )}
             <div className="card card-pad stack">
               <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
                 <span className="eyebrow" style={{ color: 'var(--signal)' }}>Plano Técnico do Architect</span>
@@ -308,12 +366,20 @@ export function TaskReviewDrawer({ task, onClose, onUpdate }: Props) {
                   </span>
                 )}
               </div>
-              {task.plan ? (
+              {editedPlan !== null ? (
+                <textarea className="input mono" rows={16} value={editedPlan} onChange={e => setEditedPlan(e.target.value)} disabled={processing} />
+              ) : task.plan ? (
                 <div style={{ maxHeight: 380, overflowY: 'auto' }}>
                   <Markdown>{task.plan}</Markdown>
                 </div>
               ) : (
                 <span className="muted">Nenhum plano detalhado disponível.</span>
+              )}
+              {task.plan && (
+                <button type="button" className="btn btn-sm" style={{ alignSelf: 'flex-start' }} disabled={processing}
+                  onClick={() => setEditedPlan(editedPlan === null ? task.plan ?? '' : null)}>
+                  {editedPlan === null ? 'Editar plano antes de aprovar' : 'Descartar edição'}
+                </button>
               )}
             </div>
 
@@ -371,7 +437,8 @@ export function TaskReviewDrawer({ task, onClose, onUpdate }: Props) {
                 aria-selected={tab === 'security'}
                 onClick={() => setTab('security')}
               >
-                <ShieldAlert size={14} /> Auditoria de Segurança
+                <ShieldAlert size={14} /> Revisão e Segurança
+                {task.securityReport && !task.securityReport.passed && <span style={{ color: 'var(--crit)', marginLeft: 4 }}>!</span>}
               </button>
               <button
                 type="button"
@@ -426,7 +493,9 @@ export function TaskReviewDrawer({ task, onClose, onUpdate }: Props) {
                 </div>
                 {task.qaReport?.output && (
                   <div className="stack" style={{ gap: 4 }}>
-                    <span className="muted" style={{ fontSize: 11 }}>Saída Determinística da Suíte de Testes:</span>
+                    <span className="muted" style={{ fontSize: 11 }}>
+                      Saída da verificação{task.qaReport.testsRan ? <> (<span className="mono">{task.qaReport.testsRan}</span>, executada no sandbox)</> : ''}:
+                    </span>
                     <pre style={{ margin: 0, padding: 8, background: 'var(--surface-3)', borderRadius: 4, fontSize: 11, maxHeight: 160, overflowY: 'auto' }}>
                       {task.qaReport.output}
                     </pre>
@@ -440,20 +509,54 @@ export function TaskReviewDrawer({ task, onClose, onUpdate }: Props) {
               </div>
             )}
 
-            {/* Conteúdo da Aba Segurança */}
+            {/* Conteúdo da Aba Revisão: veredito calculado em código a partir dos achados e critérios */}
             {tab === 'security' && (
-              <div className="stack card card-pad" style={{ maxHeight: 360, overflowY: 'auto', gap: 8 }}>
-                <div className="row" style={{ gap: 8 }}>
-                  <span className="eyebrow">Auditoria do Reviewer</span>
-                  <span className={`badge ${task.securityReport?.passed ? 'badge-ok' : 'badge-warn'}`}>
-                    {task.securityReport?.passed ? 'Seguro' : 'Observações'}
+              <div className="stack card card-pad" style={{ maxHeight: 420, overflowY: 'auto', gap: 12 }}>
+                <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
+                  <span className="eyebrow">Reviewer e Security</span>
+                  <span className={`badge ${task.securityReport?.passed ? 'badge-ok' : 'badge-crit'}`}>
+                    {task.securityReport?.passed ? 'Sem bloqueios' : 'Há bloqueios'}
                   </span>
+                  {Boolean(task.securityReport?.fixRounds) && (
+                    <span className="muted" style={{ fontSize: 12 }}>
+                      {task.securityReport?.fixRounds} rodada(s) automática(s) de correção já aplicada(s)
+                    </span>
+                  )}
                 </div>
-                {task.securityReport?.summary ? (
-                  <Markdown>{task.securityReport.summary}</Markdown>
-                ) : (
-                  <span className="muted">Nenhuma auditoria gravada.</span>
+
+                {task.securityReport?.criteria && task.securityReport.criteria.length > 0 && (
+                  <div className="stack" style={{ gap: 4 }}>
+                    <span className="eyebrow">Critérios de aceite</span>
+                    {task.securityReport.criteria.map(c => (
+                      <div key={c.criterion} className="row" style={{ gap: 8, alignItems: 'flex-start', fontSize: 13 }}>
+                        <span className={`badge ${c.met ? 'badge-ok' : 'badge-crit'}`}>{c.met ? 'atendido' : 'não atendido'}</span>
+                        <span>{c.criterion}<span className="muted"> {c.evidence}</span></span>
+                      </div>
+                    ))}
+                  </div>
                 )}
+
+                <div className="stack" style={{ gap: 6 }}>
+                  <span className="eyebrow">Achados ({task.securityReport?.findings.length ?? 0})</span>
+                  {(task.securityReport?.findings ?? []).map((f, i) => (
+                    <div key={i} className="row" style={{ gap: 8, alignItems: 'flex-start', fontSize: 13, borderTop: '1px solid var(--line)', paddingTop: 6 }}>
+                      <span className={`badge ${f.severity === 'critical' || f.severity === 'high' ? 'badge-crit' : f.severity === 'medium' ? 'badge-warn' : ''}`}>{f.severity}</span>
+                      <div className="stack" style={{ gap: 2, flex: 1 }}>
+                        <span>{f.description}</span>
+                        <span className="muted mono" style={{ fontSize: 11 }}>
+                          {f.agentId ? AGENT_UI[f.agentId].name : ''}
+                          {f.file ? ` · ${f.file}${f.line !== undefined ? `:${f.line}` : ''}` : ''}
+                          {f.confidence !== undefined ? ` · confiança ${f.confidence}` : ''}
+                        </span>
+                      </div>
+                      <button type="button" className="btn btn-sm" onClick={() => askFix(f)} disabled={processing} title="Preenche o pedido de ajuste com este achado">
+                        Pedir correção
+                      </button>
+                    </div>
+                  ))}
+                </div>
+
+                {task.securityReport?.summary && <Markdown>{task.securityReport.summary}</Markdown>}
               </div>
             )}
 

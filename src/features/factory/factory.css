@@ -10,6 +10,9 @@
   --fx-gates: #facc15;
   --fx-tester: #4ade80;
   --fx-reviewer: #94a3ff;
+  --fx-analyst: #f9a8d4;
+  --fx-security: #fb923c;
+  --fx-documenter: #a3e635;
 }
 :root[data-theme='light'] {
   --fx-engineer: #7c3aed;
@@ -19,6 +22,9 @@
   --fx-gates: #a16207;
   --fx-tester: #15803d;
   --fx-reviewer: #4338ca;
+  --fx-analyst: #be185d;
+  --fx-security: #c2410c;
+  --fx-documenter: #4d7c0f;
 }
 
 @keyframes pulse {

@@ -171,6 +171,21 @@ export async function commitWorktree(
   return (await git(worktreePath, ['rev-parse', 'HEAD'])).trim()
 }
 
+// Files changed since the last commit, dependency symlinks left out.
+export async function uncommittedFiles(worktreePath: string): Promise<string[]> {
+  const status = await git(worktreePath, ['status', '--porcelain', '--untracked-files=all', '--', '.', ...DEP_DIRS.map(d => `:(exclude)${d}`)])
+  return status.split('\n').filter(Boolean).map(l => l.slice(3).replace(/^.* -> /, '').trim())
+}
+
+// Throws away uncommitted changes to these files: tracked ones go back to HEAD, new ones are deleted.
+export async function discardFiles(worktreePath: string, files: string[]): Promise<void> {
+  for (const file of files) {
+    const tracked = await git(worktreePath, ['ls-files', '--error-unmatch', '--', file]).then(() => true, () => false)
+    if (tracked) await git(worktreePath, ['checkout', 'HEAD', '--', file])
+    else rmSync(join(worktreePath, file), { force: true })
+  }
+}
+
 export async function pushWorktreeBranch(
   worktreePath: string,
   branchName: string,
@@ -244,6 +259,15 @@ if (import.meta.main && process.argv.includes('--selfcheck')) {
     const commitHash = await commitWorktree(worktreePath, 'feat: adiciona app.ts')
     assert.ok(commitHash, 'commit gerado')
     assert.equal(await commitWorktree(worktreePath, 'nada novo'), commitHash, 'sem mudança staged, não tenta commit vazio')
+
+    // Descarte seletivo (portão do Documenter)
+    writeFileSync(join(worktreePath, 'app.ts'), 'mexido\n')
+    writeFileSync(join(worktreePath, 'novo.ts'), 'x\n')
+    writeFileSync(join(worktreePath, 'NOTES.md'), 'doc\n')
+    assert.deepEqual((await uncommittedFiles(worktreePath)).sort(), ['NOTES.md', 'app.ts', 'novo.ts'], 'sem o symlink de node_modules')
+    await discardFiles(worktreePath, ['app.ts', 'novo.ts'])
+    assert.deepEqual(await uncommittedFiles(worktreePath), ['NOTES.md'], 'só a documentação sobrevive')
+    rmSync(join(worktreePath, 'NOTES.md'))
 
     // Verificação de diff
     const { diff, stat } = await getWorktreeDiff(worktreePath, 'main')

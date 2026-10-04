@@ -31,6 +31,7 @@ export function NewTaskModal({ open, onClose, onCreated }: Props) {
   const [description, setDescription] = useState('')
   const [repoPath, setRepoPath] = useState('')
   const [baseBranch, setBaseBranch] = useState('')
+  const [verifyCommand, setVerifyCommand] = useState('')
   // null until Configurações answers: the server then applies the configured provider
   const [provider, setProvider] = useState<SettingsResponse['provider'] | null>(null)
   const [saving, setSaving] = useState(false)
@@ -104,6 +105,7 @@ export function NewTaskModal({ open, onClose, onCreated }: Props) {
         // empty: the server resolves the repo's default branch (main, master, develop...)
         baseBranch: baseBranch.trim() || undefined,
         provider: provider ?? undefined,
+        verifyCommand: verifyCommand.trim() || undefined,
         source: pickedIssue
           ? { type: pickedIssue.provider, repoPath, issueIid: pickedIssue.number, issueUrl: pickedIssue.url }
           : { type: 'manual', repoPath },
@@ -113,6 +115,7 @@ export function NewTaskModal({ open, onClose, onCreated }: Props) {
       setTitle('')
       setDescription('')
       setRepoPath('')
+      setVerifyCommand('')
     } catch (err) {
       setError((err as Error).message)
     } finally {
@@ -219,6 +222,19 @@ export function NewTaskModal({ open, onClose, onCreated }: Props) {
                 value={description}
                 onChange={e => setDescription(e.target.value)}
               />
+            </label>
+
+            <label className="stack" style={{ gap: 4 }}>
+              <span className="eyebrow">Comando de verificação (opcional)</span>
+              <input
+                className="input mono"
+                placeholder="detectado pelo projeto: npm test, mvn -q test, go test ./..."
+                value={verifyCommand}
+                onChange={e => setVerifyCommand(e.target.value)}
+              />
+              <span className="muted" style={{ fontSize: 12 }}>
+                Roda depois de cada entrega do Implementer, dentro do sandbox. Ex.: npm run typecheck &amp;&amp; npm test
+              </span>
             </label>
 
             <div className="row" style={{ justifyContent: 'flex-end', marginTop: 12 }}>

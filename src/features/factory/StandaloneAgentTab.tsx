@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
 import {
-  BookOpen, Bot, Cpu, ExternalLink, FolderOpen, Play, ShieldAlert, Sparkles, Square, Terminal, Wrench
+  BookOpen, Bot, ClipboardList, Cpu, Eye, ExternalLink, FolderOpen, Play, ShieldAlert, Sparkles, Square, Terminal, Wrench
 } from 'lucide-react'
 import { Link } from 'react-router'
 import { Markdown, Modal } from '@/ui'
@@ -19,6 +19,16 @@ const AGENT_CARDS: Array<{
   // when: em que momento do trabalho do agente o runbook ajuda (aparece como dica no botão)
   runbooks: Array<{ title: string; file: string; when: string }>
 }> = [
+  {
+    id: 'analyst',
+    name: 'Analyst',
+    role: 'Transforma a demanda em critérios de aceite verificáveis e aponta as dúvidas que só você responde',
+    icon: ClipboardList,
+    placeholder: 'Ex.: Especifique a demanda "permitir exportar o relatório de pedidos em CSV": critérios de aceite, fora de escopo e dúvidas de negócio...',
+    runbooks: [
+      { title: 'Pre-flight do repositório', file: 'factory/agentes-preflight.md', when: 'Antes de delegar: repo limpo, base atualizada, build verde' },
+    ],
+  },
   {
     id: 'architect',
     name: 'Architect',
@@ -57,16 +67,35 @@ const AGENT_CARDS: Array<{
   {
     id: 'reviewer',
     name: 'Reviewer',
-    role: 'Revisão de código em busca de bugs, problemas de segurança e inconsistências',
-    icon: ShieldAlert,
+    role: 'Revisão de código em busca de bugs, regressões, desvio de convenções e de critérios de aceite',
+    icon: Eye,
     placeholder: 'Ex.: Revise os arquivos da pasta src/auth em busca de falhas de segurança, vazamento de tokens e problemas de concorrência...',
     runbooks: [
       { title: 'Inspecionar a entrega', file: 'factory/inspecionar-entrega.md', when: 'Antes de aprovar: o que o agente realmente mudou' },
-      { title: 'Auditoria de segurança', file: 'factory/auditoria-seguranca.md', when: 'Segredo, arquivo indevido ou dependência vulnerável no diff' },
       { title: 'Publicar a branch para MR', file: 'factory/publicar-mr.md', when: 'Enviar a branch ao remoto para abrir o MR' },
       { title: 'Merge local falhou', file: 'factory/merge-local-falhou.md', when: 'A aprovação com merge local deu erro' },
     ],
   },
+  {
+    id: 'security',
+    name: 'Security',
+    role: 'Auditoria de segurança: injeção, autorização, segredos, dado sensível em log e dependências vulneráveis',
+    icon: ShieldAlert,
+    placeholder: 'Ex.: Audite a pasta src/upload em busca de path traversal, validação ausente e segredos no código...',
+    runbooks: [
+      { title: 'Auditoria de segurança', file: 'factory/auditoria-seguranca.md', when: 'Segredo, arquivo indevido ou dependência vulnerável no diff' },
+    ],
+  },
+  {
+    id: 'documenter',
+    name: 'Documenter',
+    role: 'Propõe a atualização da documentação e redige a descrição de MR, sem alterar a pasta do projeto',
+    icon: BookOpen,
+    placeholder: 'Ex.: Com base nas mudanças da branch atual, proponha a atualização do README e a descrição do MR...',
+    runbooks: [
+      { title: 'Publicar a branch para MR', file: 'factory/publicar-mr.md', when: 'Enviar a branch ao remoto para abrir o MR' },
+    ],
+  }
 ]
 
 export function StandaloneAgentTab() {

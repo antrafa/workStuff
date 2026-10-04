@@ -155,13 +155,13 @@ export function createFactoryStore(baseDir: string = join(DATA_DIR, 'factory')) 
       writeTasks(tasks)
     },
 
-    async recordToolCall(taskId: string, toolCall: ToolCallSpan): Promise<void> {
+    // spanId names the owner: with reviewers running in parallel, "the running span" is ambiguous.
+    async recordToolCall(taskId: string, toolCall: ToolCallSpan, spanId?: string): Promise<void> {
       const tasks = readTasks()
       const task = tasks.find(t => t.id === taskId)
       if (!task || !task.spans || task.spans.length === 0) return
 
-      // Encontra a span ativa ou a última span
-      const activeSpan = task.spans.find(s => s.status === 'running') || task.spans[task.spans.length - 1]
+      const activeSpan = task.spans.find(s => s.id === spanId) || task.spans.find(s => s.status === 'running') || task.spans[task.spans.length - 1]
       if (!activeSpan) return
 
       activeSpan.toolCalls = [...(activeSpan.toolCalls ?? []), toolCall]
@@ -210,7 +210,8 @@ export function createFactoryStore(baseDir: string = join(DATA_DIR, 'factory')) 
       const consolidated: any[] = []
       for (const item of readSessionEvents(taskId)) {
         const last = consolidated[consolidated.length - 1]
-        if (item?.type === 'text' && typeof item.text === 'string' && last?.type === 'text') {
+        // Same agent only: two reviewers stream at the same time and must not be glued together
+        if (item?.type === 'text' && typeof item.text === 'string' && last?.type === 'text' && last.agentId === item.agentId) {
           last.text = (last.text || '') + item.text
           continue
         }

@@ -24,6 +24,8 @@ export type FactoryRunOptions = {
   effort?: string
   // Standalone runs point at the user's own repository, which must never be written to.
   readOnly?: boolean
+  // Claude only: continue this CLI session, so a correction keeps what the agent already learned
+  resumeSessionId?: string | null
   signal?: AbortSignal
   onEvent: (e: AiEvent) => void
   timeoutMs?: number
@@ -68,6 +70,7 @@ export function buildFactoryArgs(
     cwd: string
     model?: string
     effort?: string
+    resumeSessionId?: string | null
     sandbox?: Sandbox
   },
 ): { bin: string; args: string[] } {
@@ -79,6 +82,7 @@ export function buildFactoryArgs(
     const args = ['--output-format', 'stream-json', '--verbose', '--include-partial-messages']
     if (options.model) args.push('--model', options.model)
     if (options.effort) args.push('--effort', options.effort)
+    if (options.resumeSessionId) args.push('--resume', options.resumeSessionId)
     args.push('--tools', ...tools, '--allowedTools', ...tools, '--strict-mcp-config')
     args.push('--append-system-prompt', options.systemPrompt, '-p', options.prompt)
     if (mode === 'read') return { bin: 'claude', args }
@@ -130,6 +134,7 @@ export async function runFactoryAgent(options: FactoryRunOptions): Promise<RunRe
       cwd: options.cwd,
       model,
       effort,
+      resumeSessionId: provider === 'claude' ? options.resumeSessionId : null,
       sandbox: needsJail ? sandbox : undefined,
     })
 
@@ -157,6 +162,8 @@ if (import.meta.main && process.argv.includes('--selfcheck')) {
   assert.deepEqual(claudeWrite.args.slice(0, 3), ['--ro-bind', '/', '/'])
   assert.ok(claudeWrite.args.includes('--dangerously-skip-permissions'))
   assert.throws(() => buildFactoryArgs('claude', { ...base, mode: 'write' }), /bwrap/, 'sem bwrap, recusa')
+  const resumed = buildFactoryArgs('claude', { ...base, mode: 'read', resumeSessionId: 's1' }).args
+  assert.equal(resumed[resumed.indexOf('--resume') + 1], 's1', 'correção continua a mesma sessão')
 
   assert.ok(buildFactoryArgs('codex', { ...base, mode: 'read' }).args.includes('read-only'))
   assert.ok(buildFactoryArgs('codex', { ...base, mode: 'write' }).args.includes('workspace-write'))

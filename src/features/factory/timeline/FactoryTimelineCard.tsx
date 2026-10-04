@@ -2,7 +2,7 @@ import type { FactoryTask } from '../../../../server/lib/factory/types.ts'
 import { FactoryStatusChip } from './FactoryStatusChip'
 import { FactoryStatChip } from './FactoryStatChip'
 import { FactoryPhaseDots } from './FactoryPhaseDots'
-import { isTaskRunning } from '../factoryRun'
+import { AGENT_ORDER, AGENT_UI, isTaskRunning } from '../factoryRun'
 
 type Props = {
   task: FactoryTask
@@ -26,10 +26,7 @@ type TimelineLane = {
 }
 
 const LANE_CONFIGS = [
-  { id: 'architect', label: 'architect', color: 'var(--fx-architect)' },
-  { id: 'implementer', label: 'builder', color: 'var(--fx-implementer)' },
-  { id: 'tester', label: 'tester', color: 'var(--fx-tester)' },
-  { id: 'reviewer', label: 'reviewer', color: 'var(--fx-reviewer)' },
+  ...AGENT_ORDER.map(id => ({ id: id as string, label: id, color: AGENT_UI[id].color })),
   { id: 'code', label: 'code', color: 'var(--fx-code)' },
 ]
 
