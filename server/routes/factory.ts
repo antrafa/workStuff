@@ -58,6 +58,16 @@ factoryRouter.get('/tasks/:id', async (req, res) => {
   }
 })
 
+// Busca o histórico de eventos da sessão de uma tarefa
+factoryRouter.get('/tasks/:id/session', async (req, res) => {
+  try {
+    const session = await defaultFactoryStore.getSession(req.params.id as string)
+    res.json(session)
+  } catch (e) {
+    res.status(500).json({ error: (e as Error).message })
+  }
+})
+
 // Atualização de configurações da tarefa (ex: trocar provedor ou modelo)
 factoryRouter.patch('/tasks/:id', async (req, res) => {
   try {
