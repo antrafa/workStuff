@@ -64,31 +64,47 @@ export function buildFactoryArgs(
     return { bin: 'codex', args }
   }
 
-  // Antigravity (agy) com isolamento Bubblewrap (bwrap)
-  if (!options.agySandbox) {
-    throw new Error('o Antigravity necessita do bwrap (bubblewrap) para isolamento; escolha Claude ou Codex em Configurações')
+  // Antigravity (agy)
+  if (options.agySandbox) {
+    const { stateDir, tmpDir } = options.agySandbox
+    const args = [
+      '--ro-bind', '/', '/',
+      '--dev', '/dev',
+      '--proc', '/proc',
+      // No modo escrita, libera somente a pasta de trabalho (worktree) para escrita!
+      ...(options.mode === 'write' && options.cwd ? ['--bind', options.cwd, options.cwd] : []),
+      '--bind', stateDir, stateDir,
+      '--bind', tmpDir, tmpDir,
+      '--setenv', 'TMPDIR', tmpDir,
+      '--die-with-parent',
+      ...(options.cwd ? ['--chdir', options.cwd] : []),
+      'agy', '--output-format', 'stream-json',
+    ]
+
+    if (options.mode === 'read') {
+      args.push('--mode', 'plan')
+    } else {
+      args.push('--mode', 'accept-edits', '--dangerously-skip-permissions')
+    }
+    if (options.model) args.push('--model', options.model)
+    if (options.effort) args.push('--effort', options.effort)
+    args.push('-p', fullPrompt)
+
+    return { bin: 'bwrap', args }
   }
-  const { stateDir, tmpDir } = options.agySandbox
 
-  const args = [
-    '--ro-bind', '/', '/',
-    '--dev', '/dev',
-    '--proc', '/proc',
-    // No modo escrita, libera somente a pasta de trabalho (worktree) para escrita!
-    ...(options.mode === 'write' && options.cwd ? ['--bind', options.cwd, options.cwd] : []),
-    '--bind', stateDir, stateDir,
-    '--bind', tmpDir, tmpDir,
-    '--setenv', 'TMPDIR', tmpDir,
-    '--die-with-parent',
-    ...(options.cwd ? ['--chdir', options.cwd] : []),
-    'agy', '--output-format', 'stream-json',
-  ]
-
+  // Sem bwrap (ex: macOS), executa agy diretamente respeitando o modo (plan ou accept-edits)
+  const args = ['--output-format', 'stream-json']
+  if (options.mode === 'read') {
+    args.push('--mode', 'plan')
+  } else {
+    args.push('--mode', 'accept-edits', '--dangerously-skip-permissions')
+  }
   if (options.model) args.push('--model', options.model)
   if (options.effort) args.push('--effort', options.effort)
   args.push('-p', fullPrompt)
 
-  return { bin: 'bwrap', args }
+  return { bin: 'agy', args }
 }
 
 export async function runFactoryAgent(options: FactoryRunOptions): Promise<RunResult> {

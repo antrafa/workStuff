@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { FolderOpen, GitPullRequest, Plus, Search } from 'lucide-react'
+import { FolderOpen, GitPullRequest, Plus, Search, Cpu } from 'lucide-react'
 import { Modal } from '@/ui'
 import { api } from '@/lib/api'
 
@@ -10,6 +10,12 @@ type Issue = {
   url: string
   repo: string
   provider: string
+}
+
+type SettingsResponse = {
+  provider: 'claude' | 'codex' | 'agy'
+  model?: string
+  effort?: string
 }
 
 type Props = {
@@ -24,8 +30,20 @@ export function NewTaskModal({ open, onClose, onCreated }: Props) {
   const [description, setDescription] = useState('')
   const [repoPath, setRepoPath] = useState('')
   const [baseBranch, setBaseBranch] = useState('main')
+  const [provider, setProvider] = useState<'claude' | 'codex' | 'agy'>('agy')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  // Carrega provedor configurado no workstuff
+  useEffect(() => {
+    if (open) {
+      api.get<SettingsResponse>('/factory/settings')
+        .then(res => {
+          if (res?.provider) setProvider(res.provider)
+        })
+        .catch(() => {})
+    }
+  }, [open])
 
   // Issues remotas
   const [issues, setIssues] = useState<Issue[]>([])
@@ -71,6 +89,7 @@ export function NewTaskModal({ open, onClose, onCreated }: Props) {
         title,
         description,
         baseBranch: baseBranch.trim() || 'main',
+        provider,
         source: {
           type: tab === 'issues' ? 'gitlab' : 'manual',
           repoPath,
@@ -151,15 +170,32 @@ export function NewTaskModal({ open, onClose, onCreated }: Props) {
               </div>
             </label>
 
-            <label className="stack" style={{ gap: 4 }}>
-              <span className="eyebrow">Branch Base</span>
-              <input
-                className="input"
-                placeholder="main"
-                value={baseBranch}
-                onChange={e => setBaseBranch(e.target.value)}
-              />
-            </label>
+            <div className="row" style={{ gap: 12 }}>
+              <label className="stack" style={{ gap: 4, flex: 1 }}>
+                <span className="eyebrow">Branch Base</span>
+                <input
+                  className="input"
+                  placeholder="main"
+                  value={baseBranch}
+                  onChange={e => setBaseBranch(e.target.value)}
+                />
+              </label>
+
+              <label className="stack" style={{ gap: 4, flex: 1 }}>
+                <span className="eyebrow row" style={{ gap: 4 }}>
+                  <Cpu size={12} /> Provedor de IA
+                </span>
+                <select
+                  className="input"
+                  value={provider}
+                  onChange={e => setProvider(e.target.value as any)}
+                >
+                  <option value="agy">Antigravity (AGY)</option>
+                  <option value="codex">Codex</option>
+                  <option value="claude">Claude Code</option>
+                </select>
+              </label>
+            </div>
 
             <label className="stack" style={{ gap: 4 }}>
               <span className="eyebrow">Descrição dos Requisitos</span>

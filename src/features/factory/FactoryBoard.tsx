@@ -35,9 +35,9 @@ export function FactoryBoard({ tasks, onSelectTask, onUpdate }: Props) {
 
   // Filtragem por colunas
   const intakeTasks = tasks.filter(t => t.state === 'intake')
-  const planningTasks = tasks.filter(t => t.state === 'planning' || t.state === 'waiting_approval')
+  const planningTasks = tasks.filter(t => t.state === 'planning' || t.state === 'waiting_approval' || (t.state === 'error' && !t.plan))
   const buildingTasks = tasks.filter(t => t.state === 'building' || t.state === 'qa_security')
-  const reviewTasks = tasks.filter(t => t.state === 'review')
+  const reviewTasks = tasks.filter(t => t.state === 'review' || (t.state === 'error' && t.plan))
   const doneTasks = tasks.filter(t => t.state === 'done')
 
   const columns = [
@@ -96,7 +96,7 @@ export function FactoryBoard({ tasks, onSelectTask, onUpdate }: Props) {
                       cursor: 'pointer',
                       padding: 12,
                       transition: 'transform 0.15s, border-color 0.15s',
-                      borderColor: task.state === 'waiting_approval' ? 'var(--accent)' : undefined,
+                      borderColor: task.state === 'error' || task.error ? 'var(--red)' : task.state === 'waiting_approval' ? 'var(--accent)' : undefined,
                     }}
                     onClick={() => onSelectTask(task)}
                   >

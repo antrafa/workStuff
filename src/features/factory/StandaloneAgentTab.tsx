@@ -1,6 +1,6 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import {
-  Bot, FolderOpen, Play, ShieldAlert, Sparkles, Square, Terminal, Wrench
+  Bot, Cpu, FolderOpen, Play, ShieldAlert, Sparkles, Square, Terminal, Wrench
 } from 'lucide-react'
 import { Markdown } from '@/ui'
 import { api } from '@/lib/api'
@@ -48,10 +48,19 @@ export function StandaloneAgentTab() {
   const [selectedAgent, setSelectedAgent] = useState<SpecializedAgentId>('architect')
   const [repoPath, setRepoPath] = useState('')
   const [prompt, setPrompt] = useState('')
+  const [provider, setProvider] = useState<'claude' | 'codex' | 'agy'>('agy')
   const [running, setRunning] = useState(false)
   const [output, setOutput] = useState('')
   const [error, setError] = useState<string | null>(null)
   const abortRef = useRef<AbortController | null>(null)
+
+  useEffect(() => {
+    api.get<{ provider?: 'claude' | 'codex' | 'agy' }>('/factory/settings')
+      .then(res => {
+        if (res?.provider) setProvider(res.provider)
+      })
+      .catch(() => {})
+  }, [])
 
   const activeMeta = AGENT_CARDS.find(a => a.id === selectedAgent)!
 
@@ -88,6 +97,7 @@ export function StandaloneAgentTab() {
           agentId: selectedAgent,
           repoPath,
           prompt,
+          provider,
         }
       )
     } catch (err) {
@@ -140,23 +150,40 @@ export function StandaloneAgentTab() {
       </div>
 
       {/* Formulário de Execução */}
-      <form onSubmit={handleRun} className="card card-pad stack">
-        <label className="stack" style={{ gap: 4 }}>
-          <span className="eyebrow">Repositório Alvo</span>
-          <div className="row" style={{ gap: 8 }}>
-            <input
+      <form onSubmit={handleRun} className="card card-pad stack" style={{ gap: 12 }}>
+        <div className="row" style={{ gap: 12 }}>
+          <label className="stack" style={{ gap: 4, flex: 2 }}>
+            <span className="eyebrow">Repositório Alvo</span>
+            <div className="row" style={{ gap: 8 }}>
+              <input
+                className="input"
+                style={{ flex: 1 }}
+                placeholder="/caminho/do/projeto"
+                value={repoPath}
+                onChange={e => setRepoPath(e.target.value)}
+                required
+              />
+              <button type="button" className="btn" onClick={pickFolder}>
+                <FolderOpen size={16} /> Escolher
+              </button>
+            </div>
+          </label>
+
+          <label className="stack" style={{ gap: 4, flex: 1 }}>
+            <span className="eyebrow row" style={{ gap: 4 }}>
+              <Cpu size={12} /> Provedor de IA
+            </span>
+            <select
               className="input"
-              style={{ flex: 1 }}
-              placeholder="/caminho/do/projeto"
-              value={repoPath}
-              onChange={e => setRepoPath(e.target.value)}
-              required
-            />
-            <button type="button" className="btn" onClick={pickFolder}>
-              <FolderOpen size={16} /> Escolher
-            </button>
-          </div>
-        </label>
+              value={provider}
+              onChange={e => setProvider(e.target.value as any)}
+            >
+              <option value="agy">Antigravity (AGY)</option>
+              <option value="codex">Codex</option>
+              <option value="claude">Claude Code</option>
+            </select>
+          </label>
+        </div>
 
         <label className="stack" style={{ gap: 4 }}>
           <span className="eyebrow">Instrução para o {activeMeta.name}</span>
@@ -178,25 +205,33 @@ export function StandaloneAgentTab() {
 
         <div className="row" style={{ justifyContent: 'flex-end', marginTop: 4 }}>
           {running ? (
-            <button type="button" className="btn" onClick={handleStop}>
-              <Square size={14} /> Parar Execução
+            <button type="button" className="btn" onClick={handleStop} style={{ borderColor: 'var(--red)' }}>
+              <Square size={14} style={{ color: 'var(--red)' }} /> Interromper
             </button>
           ) : (
             <button type="submit" className="btn btn-primary">
-              <Play size={15} /> Executar {activeMeta.name}
+              <Play size={14} /> Executar {activeMeta.name}
             </button>
           )}
         </div>
       </form>
 
-      {/* Saída em Streaming */}
+      {/* Terminal de Saída do Agente */}
       {output && (
-        <div className="card card-pad stack">
-          <div className="row" style={{ justifyContent: 'space-between', borderBottom: '1px solid var(--line)', paddingBottom: 8 }}>
+        <div className="stack" style={{ gap: 8 }}>
+          <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
             <span className="eyebrow">Resposta do {activeMeta.name}</span>
-            {running && <span className="mono muted" style={{ fontSize: 12 }}>Processando streaming...</span>}
+            {running && <span className="muted" style={{ fontSize: 12 }}>Processando com IA...</span>}
           </div>
-          <div style={{ maxHeight: 500, overflowY: 'auto', paddingTop: 8 }}>
+          <div
+            className="card card-pad"
+            style={{
+              maxHeight: 500,
+              overflowY: 'auto',
+              background: 'var(--surface)',
+              lineHeight: 1.5,
+            }}
+          >
             <Markdown>{output}</Markdown>
           </div>
         </div>

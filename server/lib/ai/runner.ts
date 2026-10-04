@@ -92,10 +92,19 @@ export function spawnCli(provider: ProviderId, model: string, { bin, args }: { b
       emit(parser.line(buffer))
       const text = (result?.type === 'result' && result.text) || parser.text()
       if (failure) return reject(failure)
-      if (!stopped && code !== 0 && !text) {
-        const detail = stderr.trim().split('\n').slice(-3).join(' ') || `saiu com código ${code}`
-        return reject(new Error(`${bin} falhou: ${detail}`))
+
+      const isFailedResult = result?.type === 'result' && !result.ok
+      const isErrorCode = !stopped && code !== 0
+
+      if (isFailedResult || isErrorCode) {
+        const errorDetail = (result?.type === 'result' && !result.ok ? result.text : '') || stderr.trim().split('\n').slice(-3).join(' ') || text || `saiu com código ${code}`
+        const isAuth = /authenticate|oauth|expired|unauthorized|401|api_key/i.test(errorDetail)
+        const hint = isAuth
+          ? ` Falha de autenticação do provedor "${provider}". Execute "${provider === 'claude' ? 'claude login' : provider === 'codex' ? 'codex login' : 'agy'}" no terminal para renovar o acesso ou troque de provedor em Configurações.`
+          : ''
+        return reject(new Error(`${bin} falhou: ${errorDetail}.${hint}`))
       }
+
       resolve({ text, provider, model, durationMs: Date.now() - t0, stopped, sessionId: parser.sessionId() })
     })
   })

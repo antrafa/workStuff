@@ -13,6 +13,71 @@ export type FactoryTaskState =
 
 export type SpecializedAgentId = 'architect' | 'implementer' | 'tester' | 'reviewer'
 
+export type ExecutionSpanKind = 'code' | 'agent' | 'gate'
+
+export type ToolCallSpan = {
+  id?: string
+  tool: string
+  input?: unknown
+  output?: string
+  isError?: boolean
+  durationMs?: number
+}
+
+export type ExecutionSpan = {
+  id: string
+  name: string
+  phase: FactoryTaskState | string
+  kind: ExecutionSpanKind
+  agentId?: SpecializedAgentId
+  startedAt: string
+  finishedAt?: string
+  durationMs?: number
+  status: 'running' | 'success' | 'failed'
+  toolCalls?: ToolCallSpan[]
+  error?: string
+  details?: Record<string, unknown>
+  envelope?: unknown
+}
+
+export type PlanEnvelope = {
+  status: 'ok' | 'error'
+  plan: string
+  targetFiles: string[]
+  risks: string[]
+  testScenarios: string[]
+}
+
+export type BuildEnvelope = {
+  status: 'ok' | 'error'
+  changedFiles: string[]
+  commitMessage: string
+  summary: string
+}
+
+export type TestEnvelope = {
+  status: 'ok' | 'error'
+  testSuitePassed: boolean
+  testsRan: string[]
+  coverageNotes?: string
+  details?: string
+}
+
+export type ReviewEnvelope = {
+  status: 'ok' | 'error'
+  securityPassed: boolean
+  findings: SecurityFinding[]
+  mrDescription: string
+  summary: string
+}
+
+export type TaskHandoffs = {
+  plan?: PlanEnvelope
+  build?: BuildEnvelope
+  test?: TestEnvelope
+  review?: ReviewEnvelope
+}
+
 export type QaReport = {
   passed: boolean
   testsRan?: string
@@ -67,4 +132,6 @@ export type FactoryTask = {
   createdAt: string
   updatedAt: string
   error?: string
+  spans?: ExecutionSpan[]
+  handoffs?: TaskHandoffs
 }
