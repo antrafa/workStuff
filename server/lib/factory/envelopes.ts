@@ -195,6 +195,60 @@ export function formatRepairPrompt(task: FactoryTask, testFailureOutput: string)
   ].join('\n\n')
 }
 
+export function formatTestPrompt(
+  task: FactoryTask,
+  testGateResult: { command?: string; output: string; passed: boolean },
+): string {
+  return [
+    `Avalie as alterações da worktree e os resultados da suíte determinística de testes:`,
+    `Demanda: ${task.title}`,
+    testGateResult.command ? `Comando executado: ${testGateResult.command}` : 'Nenhum script automatizado detectado.',
+    `Saída dos testes:\n\`\`\`\n${testGateResult.output.slice(-4000)}\n\`\`\``,
+    `Analise a cobertura, os cenários felizes e de borda validados.`,
+    `Ao final da resposta, inclua um bloco JSON estrito no formato:`,
+    '```json',
+    JSON.stringify(
+      {
+        status: 'ok',
+        testSuitePassed: testGateResult.passed,
+        testsRan: ['teste unitário de exemplo'],
+        coverageNotes: 'Cobertura adequada para cenários principais e de borda.',
+        details: 'Parecer técnico detalhado sobre os testes.',
+      },
+      null,
+      2,
+    ),
+    '```',
+  ].filter(Boolean).join('\n\n')
+}
+
+export function formatReviewPrompt(
+  task: FactoryTask,
+  diff: string,
+): string {
+  return [
+    `Revise as alterações finais da branch contra a base ${task.baseBranch}:`,
+    `Demanda: ${task.title}`,
+    `Diff das alterações:\n\`\`\`diff\n${diff.slice(0, 80_000)}\n\`\`\``,
+    `Audite criticamente se há vulnerabilidades de segurança (injeções, segredos expostos, etc.), bugs ou regressões.`,
+    `Produza a descrição para o Pull/Merge Request e aponte quaisquer achados.`,
+    `Ao final da resposta, inclua um bloco JSON estrito no formato:`,
+    '```json',
+    JSON.stringify(
+      {
+        status: 'ok',
+        securityPassed: true,
+        findings: [],
+        mrDescription: '## Resumo das Alterações\n\n- Implementação de funcionalidade conforme plano.',
+        summary: 'Revisão concluída com sucesso sem vulnerabilidades críticas.',
+      },
+      null,
+      2,
+    ),
+    '```',
+  ].filter(Boolean).join('\n\n')
+}
+
 // Autoteste
 if (process.argv.includes('--selfcheck')) {
   const samplePlanJson = '```json\n{"status":"ok","plan":"passo 1","targetFiles":["a.ts"],"risks":["r1"],"testScenarios":["s1"]}\n```'
@@ -211,8 +265,34 @@ if (process.argv.includes('--selfcheck')) {
   const testEnv = parseTestEnvelope('tudo passou com sucesso!', true)
   assert.equal(testEnv.testSuitePassed, true)
 
+  const sampleTestJson = '```json\n{"status":"ok","testSuitePassed":true,"testsRan":["unit test 1"],"coverageNotes":"100%","details":"ok"}\n```'
+  const parsedTestEnv = parseTestEnvelope(sampleTestJson)
+  assert.equal(parsedTestEnv.testSuitePassed, true)
+  assert.deepEqual(parsedTestEnv.testsRan, ['unit test 1'])
+
   const reviewEnv = parseReviewEnvelope('```json\n{"securityPassed":true,"findings":[],"mrDescription":"desc"}\n```')
   assert.equal(reviewEnv.securityPassed, true)
+
+  // Testa formatTestPrompt e formatReviewPrompt
+  const dummyTask: FactoryTask = {
+    id: 'fac-1',
+    title: 'Tarefa de Teste',
+    description: 'Desc',
+    source: { type: 'manual', repoPath: '/tmp' },
+    state: 'qa_security',
+    baseBranch: 'main',
+    branchName: 'factory/fac-1',
+    provider: 'claude',
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  }
+  const testPromptText = formatTestPrompt(dummyTask, { command: 'npm test', output: 'ok', passed: true })
+  assert.ok(testPromptText.includes('```json'))
+  assert.ok(testPromptText.includes('testSuitePassed'))
+
+  const reviewPromptText = formatReviewPrompt(dummyTask, '+ console.log(1)')
+  assert.ok(reviewPromptText.includes('```json'))
+  assert.ok(reviewPromptText.includes('mrDescription'))
 
   console.log('factory envelopes selfcheck: ok')
 }

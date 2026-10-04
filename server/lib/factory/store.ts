@@ -140,12 +140,22 @@ export function createFactoryStore(baseDir: string = join(DATA_DIR, 'factory')) 
     async appendSessionEvent(taskId: string, event: unknown): Promise<void> {
       ensureDirs()
       const file = join(sessionsDir, `${taskId}.json`)
-      let events: unknown[] = []
+      let events: any[] = []
       if (existsSync(file)) {
         try {
           events = JSON.parse(readFileSync(file, 'utf-8'))
         } catch {
           events = []
+        }
+      }
+      const ev = event as any
+      // Coalesce continuous streaming text chunks to prevent fragmentation
+      if (ev && ev.type === 'text' && typeof ev.text === 'string') {
+        const last = events[events.length - 1] as any
+        if (last && last.type === 'text') {
+          last.text = (last.text || '') + ev.text
+          writeFileSync(file, JSON.stringify(events, null, 2), 'utf-8')
+          return
         }
       }
       events.push(event)
@@ -156,7 +166,21 @@ export function createFactoryStore(baseDir: string = join(DATA_DIR, 'factory')) 
       const file = join(sessionsDir, `${taskId}.json`)
       if (!existsSync(file)) return []
       try {
-        return JSON.parse(readFileSync(file, 'utf-8'))
+        const raw = JSON.parse(readFileSync(file, 'utf-8'))
+        if (!Array.isArray(raw)) return []
+        // Coalesce continuous streaming text chunks
+        const consolidated: any[] = []
+        for (const item of raw) {
+          if (item?.type === 'text' && typeof item.text === 'string') {
+            const last = consolidated[consolidated.length - 1]
+            if (last && last.type === 'text') {
+              last.text = (last.text || '') + item.text
+              continue
+            }
+          }
+          consolidated.push({ ...item })
+        }
+        return consolidated
       } catch {
         return []
       }

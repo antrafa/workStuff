@@ -1,6 +1,6 @@
 .shell {
   display: grid;
-  grid-template-columns: var(--sidebar-w) 1fr;
+  grid-template-columns: var(--sidebar-w) minmax(0, 1fr);
   height: 100%;
 }
 
@@ -443,11 +443,15 @@ kbd {
 .content {
   flex: 1;
   overflow-y: auto;
+  overflow-x: auto;
+  min-width: 0;
   padding: 28px 32px 48px;
 }
 .page {
-  max-width: 1280px;
+  max-width: 1440px;
   margin: 0 auto;
+  min-width: 0;
+  width: 100%;
 }
 .page-head {
   display: flex;
@@ -477,7 +481,7 @@ kbd {
 
 @media (max-width: 860px) {
   .shell {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
   .sidebar {
     position: fixed;

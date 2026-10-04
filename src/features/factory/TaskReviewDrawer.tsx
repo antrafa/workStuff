@@ -13,6 +13,7 @@ import {
   Play,
   RotateCw,
   ShieldAlert,
+  Terminal,
   Trash2,
 } from 'lucide-react'
 import { Markdown, Modal } from '@/ui'
@@ -27,7 +28,7 @@ type Props = {
   onUpdate: () => void
 }
 
-type Tab = 'diff' | 'qa' | 'security' | 'trace'
+type Tab = 'diff' | 'qa' | 'security' | 'trace' | 'logs'
 
 export function TaskReviewDrawer({ task, onClose, onUpdate }: Props) {
   const [tab, setTab] = useState<Tab>('diff')
@@ -61,6 +62,7 @@ export function TaskReviewDrawer({ task, onClose, onUpdate }: Props) {
     setError(null)
     setLogText('')
     setStatusMessage('Re-executando análise com o Architect...')
+    setTab('logs')
 
     try {
       await streamPost(
@@ -88,6 +90,7 @@ export function TaskReviewDrawer({ task, onClose, onUpdate }: Props) {
     setError(null)
     setLogText('')
     setStatusMessage('Iniciando esteira determinística de construção...')
+    setTab('logs')
 
     try {
       await streamPost(
@@ -116,6 +119,7 @@ export function TaskReviewDrawer({ task, onClose, onUpdate }: Props) {
     setError(null)
     setLogText('')
     setStatusMessage('Aplicando ajustes na worktree...')
+    setTab('logs')
 
     try {
       await streamPost(
@@ -150,11 +154,19 @@ export function TaskReviewDrawer({ task, onClose, onUpdate }: Props) {
   }
 
   const handleFinish = async (mode: 'mr' | 'local_merge') => {
+    if (mode === 'local_merge') {
+      if (!confirm(`Deseja mesclar a branch ${task.branchName} diretamente na branch ${task.baseBranch} do seu repositório local? Certifique-se de que não possui alterações não salvas no workspace.`)) {
+        return
+      }
+    }
     setProcessing(true)
     setError(null)
     try {
-      await api.post(`/factory/tasks/${task.id}/finish`, { mode })
+      const res = await api.post<FactoryTask>(`/factory/tasks/${task.id}/finish`, { mode })
       onUpdate()
+      if (res?.prUrl) {
+        window.open(res.prUrl, '_blank')
+      }
       onClose()
     } catch (err) {
       setError((err as Error).message)
@@ -193,6 +205,17 @@ export function TaskReviewDrawer({ task, onClose, onUpdate }: Props) {
           </span>
           <span>·</span>
           <span className="badge" style={{ textTransform: 'uppercase', fontSize: 10 }}>{task.state}</span>
+          {task.prUrl && (
+            <a
+              href={task.prUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="btn btn-sm btn-primary row"
+              style={{ gap: 4, textDecoration: 'none', padding: '2px 8px', fontSize: 11, marginLeft: 'auto' }}
+            >
+              <GitPullRequest size={12} /> Abrir MR/PR <ExternalLink size={10} />
+            </a>
+          )}
         </div>
 
         {/* ALERTA DE ERRO OU FALHA DE AUTENTICAÇÃO */}
@@ -347,6 +370,13 @@ export function TaskReviewDrawer({ task, onClose, onUpdate }: Props) {
                   </span>
                 )}
               </button>
+              <button
+                type="button"
+                className={`btn btn-sm ${tab === 'logs' ? 'btn-primary' : ''}`}
+                onClick={() => setTab('logs')}
+              >
+                <Terminal size={14} /> Console de Logs
+              </button>
             </div>
 
             {/* Conteúdo da Aba Diff */}
@@ -416,6 +446,43 @@ export function TaskReviewDrawer({ task, onClose, onUpdate }: Props) {
             {tab === 'trace' && (
               <div className="stack" style={{ maxHeight: 420, overflowY: 'auto' }}>
                 <TraceTimeline spans={task.spans} />
+              </div>
+            )}
+
+            {/* Conteúdo da Aba Logs */}
+            {tab === 'logs' && (
+              <div className="stack" style={{ gap: 8 }}>
+                <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span className="eyebrow">Saída em Tempo Real dos Agentes</span>
+                  {processing && (
+                    <span className="badge" style={{ color: '#5ad2dd', borderColor: '#5ad2dd' }}>
+                      executando...
+                    </span>
+                  )}
+                </div>
+                {statusMessage && (
+                  <div className="card card-pad" style={{ background: 'var(--surface-active)', fontSize: 12, color: '#5ad2dd' }}>
+                    {statusMessage}
+                  </div>
+                )}
+                <pre
+                  style={{
+                    margin: 0,
+                    padding: 12,
+                    background: '#06080f',
+                    borderRadius: 8,
+                    fontSize: 12,
+                    lineHeight: 1.5,
+                    maxHeight: 360,
+                    overflowY: 'auto',
+                    whiteSpace: 'pre-wrap',
+                    wordBreak: 'break-word',
+                    color: '#dbeafe',
+                    border: '1px solid var(--line)',
+                  }}
+                >
+                  {logText || 'Aguardando logs ou nenhuma saída registrada nesta sessão.'}
+                </pre>
               </div>
             )}
 

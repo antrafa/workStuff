@@ -5,7 +5,7 @@ import { openInEditor, pickFolder } from '../lib/desktop.ts'
 import { openSse } from '../lib/sse.ts'
 import { repoInfo } from '../lib/review/git.ts'
 import { defaultFactoryStore } from '../lib/factory/store.ts'
-import { createWorktree, getWorktreeDiff, removeWorktree, commitWorktree, mergeWorktreeLocal } from '../lib/factory/worktree.ts'
+import { createWorktree, getWorktreeDiff, removeWorktree, commitWorktree, mergeWorktreeLocal, pushWorktreeBranch } from '../lib/factory/worktree.ts'
 import { SPECIALIZED_AGENTS } from '../lib/factory/agents.ts'
 import { runFactoryAgent } from '../lib/factory/runner.ts'
 import type { FactoryTask, SpecializedAgentId } from '../lib/factory/types.ts'
@@ -17,6 +17,8 @@ import {
   formatPlanPrompt,
   formatBuildPrompt,
   formatRepairPrompt,
+  formatTestPrompt,
+  formatReviewPrompt,
   parsePlanEnvelope,
   parseBuildEnvelope,
   parseTestEnvelope,
@@ -203,6 +205,11 @@ factoryRouter.post('/tasks/:id/plan', async (req, res) => {
     return
   }
 
+  if (task.state === 'planning') {
+    res.status(409).json({ error: 'A fase de planejamento já está em execução para esta tarefa.' })
+    return
+  }
+
   const sse = openSse(res)
   await defaultFactoryStore.saveTask({ ...task, state: 'planning', error: undefined })
 
@@ -279,6 +286,11 @@ factoryRouter.post('/tasks/:id/approve-plan', async (req, res) => {
   const task = await defaultFactoryStore.getTask(req.params.id as string)
   if (!task) {
     res.status(404).json({ error: 'tarefa nao encontrada' })
+    return
+  }
+
+  if (task.state === 'building' || task.state === 'qa_security') {
+    res.status(409).json({ error: 'A tarefa já está em execução (construção ou QA).' })
     return
   }
 
@@ -437,12 +449,11 @@ factoryRouter.post('/tasks/:id/approve-plan', async (req, res) => {
       agentId: 'tester',
     })
 
-    const testPrompt = [
-      `Avalie as alterações da worktree e os resultados dos testes:`,
-      testGateResult.command ? `Comando executado: ${testGateResult.command}` : 'Nenhum script automatizado detectado.',
-      `Saída dos testes:\n\`\`\`\n${testGateResult.output.slice(-4000)}\n\`\`\``,
-      `Emita seu parecer técnico sobre os testes e cenários de borda.`,
-    ].join('\n\n')
+    const testPrompt = formatTestPrompt(currentTask, {
+      command: testGateResult.command,
+      output: testGateResult.output,
+      passed: testGateResult.passed,
+    })
 
     const testAgentResult = await runFactoryAgent({
       agentId: 'tester',
@@ -472,11 +483,7 @@ factoryRouter.post('/tasks/:id/approve-plan', async (req, res) => {
       agentId: 'reviewer',
     })
 
-    const reviewPrompt = [
-      `Revise as alterações finais da branch contra a base ${task.baseBranch}:`,
-      `Diff das alterações:\n\`\`\`diff\n${diff.slice(0, 80_000)}\n\`\`\``,
-      `Audite se há vulnerabilidades de segurança, credenciais expostas ou regressões. Produza a descrição do MR.`,
-    ].join('\n\n')
+    const reviewPrompt = formatReviewPrompt(currentTask, diff)
 
     const reviewerResult = await runFactoryAgent({
       agentId: 'reviewer',
@@ -649,9 +656,90 @@ factoryRouter.post('/tasks/:id/finish', async (req, res) => {
     }
 
     const mode = req.body?.mode || 'local_merge'
+    let prUrl = task.prUrl
 
     if (mode === 'local_merge') {
       await mergeWorktreeLocal(task.source.repoPath, task.branchName, task.baseBranch)
+    } else if (mode === 'mr') {
+      // 1. Envia a branch para o repositório remoto via git push
+      if (task.worktreePath) {
+        try {
+          await pushWorktreeBranch(task.worktreePath, task.branchName)
+        } catch (pushErr) {
+          throw new Error(`Falha ao enviar branch para o servidor remoto: ${(pushErr as Error).message}`)
+        }
+      }
+
+      // 2. Busca conexão Git ativa para tentar criar o Pull/Merge Request oficial
+      const sources = listSources()
+      const src = sources.find(s => {
+        if (task.source.repoPath.includes(s.id) || (task.source.remoteUrl && s.basePath && task.source.remoteUrl.includes(s.basePath))) {
+          return true
+        }
+        return false
+      })
+
+      if (src) {
+        try {
+          const token = await resolveToken(src.provider, src.tokenSource, src.id)
+          const conn: Conn = { provider: src.provider, url: src.url, token }
+          const title = task.title
+          const description = task.handoffs?.review?.mrDescription || task.securityReport?.summary || task.description
+
+          const apiBase = conn.provider === 'gitlab'
+            ? `${conn.url}/api/v4`
+            : conn.url === 'https://github.com'
+              ? 'https://api.github.com'
+              : `${conn.url}/api/v3`
+          const headers: Record<string, string> = {
+            'Content-Type': 'application/json',
+            ...(conn.provider === 'gitlab'
+              ? (conn.token ? { 'PRIVATE-TOKEN': conn.token } : {})
+              : { Accept: 'application/vnd.github+json', ...(conn.token ? { Authorization: `Bearer ${conn.token}` } : {}) }),
+          }
+
+          if (src.provider === 'gitlab') {
+            const encoded = encodeURIComponent(src.basePath.replace(/^\//, ''))
+            const resp = await fetch(`${apiBase}/projects/${encoded}/merge_requests`, {
+              method: 'POST',
+              headers,
+              body: JSON.stringify({
+                source_branch: task.branchName,
+                target_branch: task.baseBranch,
+                title,
+                description,
+              }),
+              signal: AbortSignal.timeout(20_000),
+            })
+            if (resp.ok) {
+              const data = await resp.json() as { web_url?: string }
+              prUrl = data.web_url
+            }
+          } else if (src.provider === 'github') {
+            const parts = src.basePath.split('/').filter(Boolean)
+            if (parts.length >= 2) {
+              const [owner, repo] = parts
+              const resp = await fetch(`${apiBase}/repos/${owner}/${repo}/pulls`, {
+                method: 'POST',
+                headers,
+                body: JSON.stringify({
+                  title,
+                  head: task.branchName,
+                  base: task.baseBranch,
+                  body: description,
+                }),
+                signal: AbortSignal.timeout(20_000),
+              })
+              if (resp.ok) {
+                const data = await resp.json() as { html_url?: string }
+                prUrl = data.html_url
+              }
+            }
+          }
+        } catch {
+          // Se falhar a abertura automática, a branch remota já está no servidor
+        }
+      }
     }
 
     if (task.worktreePath) {
@@ -662,6 +750,7 @@ factoryRouter.post('/tasks/:id/finish', async (req, res) => {
       ...task,
       state: 'done',
       worktreePath: undefined,
+      prUrl: prUrl || task.prUrl,
       updatedAt: new Date().toISOString(),
     }
     await defaultFactoryStore.saveTask(updatedTask)

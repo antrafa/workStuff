@@ -1,192 +1,367 @@
 import { useState } from 'react'
 import {
-  AlertCircle, CheckCircle2, GitBranch,
-  Play, ShieldAlert, Sparkles
+  Activity,
+  AlertCircle,
+  AlertTriangle,
+  CheckCircle2,
+  FileText,
+  GitBranch,
+  Play,
+  RotateCw,
+  ShieldAlert,
+  Terminal,
 } from 'lucide-react'
-import { streamPost } from '@/lib/stream'
 import type { FactoryTask } from '../../../server/lib/factory/types.ts'
+import { FactoryLiveConsole } from './FactoryLiveConsole'
 
 type Props = {
   tasks: FactoryTask[]
   onSelectTask: (task: FactoryTask) => void
   onUpdate: () => void
+  onOpenTrace?: (task: FactoryTask) => void
 }
 
-export function FactoryBoard({ tasks, onSelectTask, onUpdate }: Props) {
-  const [runningTaskId, setRunningTaskId] = useState<string | null>(null)
+export function FactoryBoard({ tasks, onSelectTask, onUpdate, onOpenTrace }: Props) {
+  const [consoleTask, setConsoleTask] = useState<FactoryTask | null>(null)
+  const [consoleAction, setConsoleAction] = useState<'plan' | 'approve-plan' | null>(null)
 
-  const handleStartPlan = async (task: FactoryTask, e: React.MouseEvent) => {
-    e.stopPropagation()
-    setRunningTaskId(task.id)
-    try {
-      await streamPost(
-        `/factory/tasks/${task.id}/plan`,
-        (ev: any) => {
-          if (ev.type === 'done') {
-            onUpdate()
-          }
-        }
-      )
-    } finally {
-      setRunningTaskId(null)
-      onUpdate()
-    }
+  const handleOpenConsole = (task: FactoryTask, action: 'plan' | 'approve-plan' | null = null, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation()
+    setConsoleTask(task)
+    setConsoleAction(action)
   }
 
   // Filtragem por colunas
   const intakeTasks = tasks.filter(t => t.state === 'intake')
-  const planningTasks = tasks.filter(t => t.state === 'planning' || t.state === 'waiting_approval' || (t.state === 'error' && !t.plan))
+  const planningTasks = tasks.filter(
+    t => t.state === 'planning' || t.state === 'waiting_approval' || (t.state === 'error' && !t.plan)
+  )
   const buildingTasks = tasks.filter(t => t.state === 'building' || t.state === 'qa_security')
   const reviewTasks = tasks.filter(t => t.state === 'review' || (t.state === 'error' && t.plan))
   const doneTasks = tasks.filter(t => t.state === 'done')
 
   const columns = [
-    { title: 'Entrada', badge: intakeTasks.length, items: intakeTasks, color: 'var(--muted)' },
-    { title: 'Planejamento', badge: planningTasks.length, items: planningTasks, color: 'var(--accent)' },
-    { title: 'Construção & QA', badge: buildingTasks.length, items: buildingTasks, color: 'var(--yellow, #eab308)' },
-    { title: 'Revisão', badge: reviewTasks.length, items: reviewTasks, color: 'var(--purple, #a855f7)' },
-    { title: 'Concluído', badge: doneTasks.length, items: doneTasks, color: 'var(--green, #22c55e)' },
+    { id: 'intake', title: 'Entrada', badge: intakeTasks.length, items: intakeTasks, color: 'var(--muted)' },
+    { id: 'planning', title: 'Planejamento', badge: planningTasks.length, items: planningTasks, color: 'var(--accent)' },
+    { id: 'building', title: 'Construção & QA', badge: buildingTasks.length, items: buildingTasks, color: '#eab308' },
+    { id: 'review', title: 'Revisão', badge: reviewTasks.length, items: reviewTasks, color: '#a855f7' },
+    { id: 'done', title: 'Concluído', badge: doneTasks.length, items: doneTasks, color: '#22c55e' },
   ]
 
   return (
-    <div
-      style={{
-        display: 'grid',
-        gridTemplateColumns: 'repeat(5, minmax(260px, 1fr))',
-        gap: 16,
-        overflowX: 'auto',
-        paddingBottom: 16,
-      }}
-    >
-      {columns.map(col => (
+    <div style={{ width: '100%', minWidth: 0 }}>
+      {/* Container com rolagem horizontal explícita para evitar que as colunas sejam cortadas */}
+      <div
+        style={{
+          width: '100%',
+          overflowX: 'auto',
+          paddingBottom: 16,
+          WebkitOverflowScrolling: 'touch',
+        }}
+      >
         <div
-          key={col.title}
-          className="stack"
           style={{
-            background: 'var(--surface-active, rgba(255,255,255,0.02))',
-            borderRadius: 'var(--r-lg, 12px)',
-            padding: 12,
-            minHeight: 480,
+            display: 'grid',
+            gridTemplateColumns: 'repeat(5, minmax(280px, 1fr))',
+            gap: 16,
+            minWidth: 1440,
           }}
         >
-          {/* Cabeçalho da Coluna */}
-          <div className="row" style={{ justifyContent: 'space-between', paddingBottom: 8, borderBottom: '1px solid var(--line)' }}>
-            <span className="eyebrow" style={{ color: col.color, fontSize: 12 }}>
-              {col.title}
-            </span>
-            <span className="badge" style={{ fontSize: 11 }}>
-              {col.badge}
-            </span>
-          </div>
-
-          {/* Cards da Coluna */}
-          <div className="stack" style={{ gap: 10, marginTop: 4 }}>
-            {col.items.length === 0 ? (
-              <div style={{ textAlign: 'center', padding: '32px 8px', color: 'var(--muted)', fontSize: 12 }}>
-                Nenhuma tarefa
-              </div>
-            ) : (
-              col.items.map(task => {
-                const isRunning = runningTaskId === task.id
-                return (
-                  <div
-                    key={task.id}
-                    className="card card-pad stack"
+          {columns.map(col => (
+            <div
+              key={col.id}
+              className="stack"
+              style={{
+                background: 'var(--surface-active, rgba(255,255,255,0.02))',
+                borderRadius: 'var(--r-lg, 12px)',
+                padding: 14,
+                minHeight: 520,
+                border: '1px solid var(--line)',
+              }}
+            >
+              {/* Cabeçalho da Coluna */}
+              <div
+                className="row"
+                style={{
+                  justifyContent: 'space-between',
+                  paddingBottom: 10,
+                  borderBottom: '1px solid var(--line)',
+                  alignItems: 'center',
+                }}
+              >
+                <div className="row" style={{ gap: 8, alignItems: 'center' }}>
+                  <span
                     style={{
-                      cursor: 'pointer',
-                      padding: 12,
-                      transition: 'transform 0.15s, border-color 0.15s',
-                      borderColor: task.state === 'error' || task.error ? 'var(--red)' : task.state === 'waiting_approval' ? 'var(--accent)' : undefined,
+                      width: 8,
+                      height: 8,
+                      borderRadius: '50%',
+                      background: col.color,
+                      display: 'inline-block',
                     }}
-                    onClick={() => onSelectTask(task)}
-                  >
-                    <div className="row" style={{ justifyContent: 'space-between' }}>
-                      <span className="badge" style={{ fontSize: 10, textTransform: 'uppercase' }}>
-                        {task.state}
-                      </span>
-                      {task.diffStat && (
-                        <span className="mono" style={{ fontSize: 11, color: 'var(--green)' }}>
-                          +{task.diffStat.insertions} / -{task.diffStat.deletions}
-                        </span>
-                      )}
-                    </div>
+                  />
+                  <span className="eyebrow" style={{ color: col.color, fontSize: 13, fontWeight: 700 }}>
+                    {col.title}
+                  </span>
+                </div>
+                <span className="badge" style={{ fontSize: 11, fontWeight: 600 }}>
+                  {col.badge}
+                </span>
+              </div>
 
-                    <span style={{ fontWeight: 600, fontSize: 13, lineHeight: 1.3 }}>
-                      {task.title}
-                    </span>
-
-                    <div className="row" style={{ fontSize: 11, color: 'var(--muted)', gap: 6 }}>
-                      <GitBranch size={12} />
-                      <span className="mono" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        {task.branchName}
-                      </span>
-                    </div>
-
-                    {/* Alertas ou Ações Rápidas por Fase */}
-                    {task.state === 'intake' && (
-                      <button
-                        type="button"
-                        className="btn btn-sm btn-primary"
-                        style={{ marginTop: 6 }}
-                        onClick={e => handleStartPlan(task, e)}
-                        disabled={isRunning}
-                      >
-                        <Play size={12} /> {isRunning ? 'Planejando...' : 'Planejar'}
-                      </button>
-                    )}
-
-                    {task.state === 'waiting_approval' && (
-                      <div
-                        className="row"
-                        style={{
-                          background: 'var(--surface-hover)',
-                          padding: '4px 8px',
-                          borderRadius: 6,
-                          fontSize: 11,
-                          color: 'var(--accent)',
-                          marginTop: 4,
-                        }}
-                      >
-                        <Sparkles size={12} /> Plano pronto para aprovação
-                      </div>
-                    )}
-
-                    {task.state === 'review' && (
-                      <div className="row" style={{ gap: 6, marginTop: 4, fontSize: 11 }}>
-                        {task.qaReport?.passed ? (
-                          <span className="row" style={{ color: 'var(--green)', gap: 3 }}>
-                            <CheckCircle2 size={12} /> QA ok
-                          </span>
-                        ) : (
-                          <span className="row" style={{ color: 'var(--yellow)', gap: 3 }}>
-                            <AlertCircle size={12} /> QA pendente
-                          </span>
-                        )}
-                        <span>·</span>
-                        {task.securityReport?.passed ? (
-                          <span className="row" style={{ color: 'var(--green)', gap: 3 }}>
-                            <ShieldAlert size={12} /> Seguro
-                          </span>
-                        ) : (
-                          <span className="row" style={{ color: 'var(--yellow)', gap: 3 }}>
-                            <ShieldAlert size={12} /> Alertas
-                          </span>
-                        )}
-                      </div>
-                    )}
-
-                    {task.error && (
-                      <span style={{ color: 'var(--red)', fontSize: 11 }}>
-                        Erro: {task.error}
-                      </span>
-                    )}
+              {/* Cards da Coluna */}
+              <div className="stack" style={{ gap: 12, marginTop: 8 }}>
+                {col.items.length === 0 ? (
+                  <div style={{ textAlign: 'center', padding: '40px 8px', color: 'var(--muted)', fontSize: 12 }}>
+                    Nenhuma tarefa
                   </div>
-                )
-              })
-            )}
-          </div>
+                ) : (
+                  col.items.map(task => {
+                    const isTaskRunning = task.state === 'planning' || task.state === 'building' || task.state === 'qa_security'
+                    const hasError = task.state === 'error' || Boolean(task.error)
+                    const isWaitingApproval = task.state === 'waiting_approval'
+
+                    return (
+                      <div
+                        key={task.id}
+                        className="card card-pad stack"
+                        style={{
+                          cursor: 'pointer',
+                          padding: 14,
+                          gap: 10,
+                          transition: 'transform 0.15s, border-color 0.15s, box-shadow 0.15s',
+                          border: hasError
+                            ? '1px solid var(--red)'
+                            : isWaitingApproval
+                            ? '1px solid var(--accent)'
+                            : isTaskRunning
+                            ? '1px solid #5ad2dd'
+                            : '1px solid var(--line)',
+                          background: isTaskRunning ? 'rgba(90, 210, 221, 0.03)' : undefined,
+                        }}
+                        onClick={() => onSelectTask(task)}
+                      >
+                        {/* Topo do Card: Badge de Estado + Botão de Logs */}
+                        <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
+                          <span
+                            className="badge"
+                            style={{
+                              fontSize: 10,
+                              textTransform: 'uppercase',
+                              background: isTaskRunning
+                                ? 'rgba(90, 210, 221, 0.15)'
+                                : hasError
+                                ? 'var(--red-subtle)'
+                                : undefined,
+                              color: isTaskRunning
+                                ? '#5ad2dd'
+                                : hasError
+                                ? 'var(--red)'
+                                : undefined,
+                            }}
+                          >
+                            {task.state}
+                          </span>
+
+                          <div className="row" style={{ gap: 6, alignItems: 'center' }}>
+                            {task.diffStat && (
+                              <span className="mono" style={{ fontSize: 11, color: 'var(--green)' }}>
+                                +{task.diffStat.insertions}/-{task.diffStat.deletions}
+                              </span>
+                            )}
+
+                            {/* Botão de Console / Logs Interativo */}
+                            <button
+                              type="button"
+                              className="btn btn-ghost btn-sm"
+                              style={{
+                                padding: '2px 6px',
+                                height: 22,
+                                fontSize: 11,
+                                gap: 4,
+                                color: isTaskRunning ? '#5ad2dd' : 'var(--muted)',
+                              }}
+                              onClick={e => handleOpenConsole(task, null, e)}
+                              title="Abrir console e acompanhar logs em tempo real"
+                            >
+                              <Terminal size={12} /> Logs
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Título da Tarefa */}
+                        <div style={{ fontWeight: 600, fontSize: 13, lineHeight: 1.35, color: 'var(--foreground)' }}>
+                          {task.title}
+                        </div>
+
+                        {/* Linha da Branch e Worktree */}
+                        <div className="row" style={{ fontSize: 11, color: 'var(--muted)', gap: 6, alignItems: 'center' }}>
+                          <GitBranch size={12} style={{ flexShrink: 0 }} />
+                          <span
+                            className="mono"
+                            style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                            title={task.branchName}
+                          >
+                            {task.branchName}
+                          </span>
+                        </div>
+
+                        {/* Botões de Ação Rápida e Feedback Visual */}
+                        <div style={{ paddingTop: 4 }}>
+                          {task.state === 'intake' && (
+                            <button
+                              type="button"
+                              className="btn btn-sm btn-primary"
+                              style={{ width: '100%', justifyContent: 'center', gap: 6 }}
+                              onClick={e => handleOpenConsole(task, 'plan', e)}
+                            >
+                              <Play size={13} /> Iniciar Planejamento
+                            </button>
+                          )}
+
+                          {task.state === 'waiting_approval' && (
+                            <div className="stack" style={{ gap: 6 }}>
+                              <button
+                                type="button"
+                                className="btn btn-sm btn-primary"
+                                style={{ width: '100%', justifyContent: 'center', gap: 6 }}
+                                onClick={e => handleOpenConsole(task, 'approve-plan', e)}
+                              >
+                                <Play size={13} /> Aprovar e Construir
+                              </button>
+                              <button
+                                type="button"
+                                className="btn btn-sm"
+                                style={{ width: '100%', justifyContent: 'center', gap: 6, fontSize: 11 }}
+                                onClick={e => {
+                                  e.stopPropagation()
+                                  onSelectTask(task)
+                                }}
+                              >
+                                <FileText size={12} /> Ver Plano Técnico
+                              </button>
+                            </div>
+                          )}
+
+                          {isTaskRunning && (
+                            <button
+                              type="button"
+                              className="btn btn-sm"
+                              style={{
+                                width: '100%',
+                                justifyContent: 'center',
+                                gap: 6,
+                                borderColor: '#5ad2dd',
+                                color: '#5ad2dd',
+                              }}
+                              onClick={e => handleOpenConsole(task, null, e)}
+                            >
+                              <Activity size={13} style={{ animation: 'spin 2s linear infinite' }} />
+                              Acompanhar Execução
+                            </button>
+                          )}
+
+                          {task.state === 'review' && (
+                            <div className="stack" style={{ gap: 6 }}>
+                              <div className="row" style={{ gap: 6, fontSize: 11 }}>
+                                {task.qaReport?.passed ? (
+                                  <span className="row" style={{ color: 'var(--green)', gap: 3 }}>
+                                    <CheckCircle2 size={12} /> QA ok
+                                  </span>
+                                ) : (
+                                  <span className="row" style={{ color: 'var(--yellow)', gap: 3 }}>
+                                    <AlertCircle size={12} /> QA pendente
+                                  </span>
+                                )}
+                                <span>·</span>
+                                {task.securityReport?.passed ? (
+                                  <span className="row" style={{ color: 'var(--green)', gap: 3 }}>
+                                    <CheckCircle2 size={12} /> Seguro
+                                  </span>
+                                ) : (
+                                  <span className="row" style={{ color: 'var(--yellow)', gap: 3 }}>
+                                    <ShieldAlert size={12} /> Alertas
+                                  </span>
+                                )}
+                              </div>
+                              <button
+                                type="button"
+                                className="btn btn-sm btn-primary"
+                                style={{ width: '100%', justifyContent: 'center', gap: 6 }}
+                                onClick={e => {
+                                  e.stopPropagation()
+                                  onSelectTask(task)
+                                }}
+                              >
+                                <FileText size={12} /> Revisar Código
+                              </button>
+                            </div>
+                          )}
+
+                          {hasError && (
+                            <div className="stack" style={{ gap: 6 }}>
+                              <div
+                                style={{
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: 6,
+                                  color: 'var(--red)',
+                                  fontSize: 11,
+                                }}
+                              >
+                                <AlertTriangle size={12} style={{ flexShrink: 0 }} />
+                                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                  {task.error || 'Erro na execução'}
+                                </span>
+                              </div>
+                              <button
+                                type="button"
+                                className="btn btn-sm"
+                                style={{ width: '100%', justifyContent: 'center', gap: 6, borderColor: 'var(--red)', color: 'var(--red)' }}
+                                onClick={e => handleOpenConsole(task, task.plan ? 'approve-plan' : 'plan', e)}
+                              >
+                                <RotateCw size={12} /> Ver Logs & Tentar Novamente
+                              </button>
+                            </div>
+                          )}
+
+                          {task.state === 'done' && (
+                            <button
+                              type="button"
+                              className="btn btn-sm"
+                              style={{ width: '100%', justifyContent: 'center', gap: 6, color: 'var(--green)' }}
+                              onClick={e => {
+                                e.stopPropagation()
+                                onSelectTask(task)
+                              }}
+                            >
+                              <CheckCircle2 size={12} /> Concluída (Ver Detalhes)
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    )
+                  })
+                )}
+              </div>
+            </div>
+          ))}
         </div>
-      ))}
+      </div>
+
+      {/* Modal Interativo do Console com Logs em Tempo Real */}
+      {consoleTask && (
+        <FactoryLiveConsole
+          task={consoleTask}
+          initialAction={consoleAction}
+          onClose={() => {
+            setConsoleTask(null)
+            setConsoleAction(null)
+          }}
+          onUpdate={onUpdate}
+          onOpenTrace={onOpenTrace}
+          onOpenReview={onSelectTask}
+        />
+      )}
     </div>
   )
 }

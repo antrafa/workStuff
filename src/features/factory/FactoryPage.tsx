@@ -177,6 +177,7 @@ export default function FactoryPage() {
                       tasks={loadedTasks}
                       onSelectTask={handleSelectTask}
                       onUpdate={handleRefresh}
+                      onOpenTrace={handleOpenTrace}
                     />
                   )
                 )}

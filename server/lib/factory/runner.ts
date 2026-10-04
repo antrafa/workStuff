@@ -1,5 +1,6 @@
 // Runner da Fábrica de Software com isolamento multi-provedor (Claude, Codex, Antigravity).
 
+import assert from 'node:assert/strict'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { homedir, tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -47,6 +48,9 @@ export function buildFactoryArgs(
     if (options.model) args.push('--model', options.model)
     if (options.effort) args.push('--effort', options.effort)
     args.push('--tools', ...tools, '--allowedTools', ...tools, '--strict-mcp-config')
+    if (options.mode === 'write') {
+      args.push('--dangerously-skip-permissions')
+    }
     args.push('--append-system-prompt', options.systemPrompt)
     args.push('-p', options.prompt)
     return { bin: 'claude', args }
@@ -56,6 +60,8 @@ export function buildFactoryArgs(
     const args = ['exec', '--json', '--skip-git-repo-check']
     if (options.mode === 'read') {
       args.push('-s', 'read-only')
+    } else {
+      args.push('-s', 'workspace-write')
     }
     if (options.model) args.push('-m', options.model)
     if (options.effort) args.push('-c', `model_reasoning_effort="${options.effort}"`)
@@ -146,4 +152,65 @@ export async function runFactoryAgent(options: FactoryRunOptions): Promise<RunRe
       }
     }
   }
+}
+
+if (import.meta.main && process.argv.includes('--selfcheck')) {
+  // Teste Claude: leitura vs escrita
+  const claudeRead = buildFactoryArgs('claude', {
+    agentId: 'architect',
+    prompt: 'oi',
+    systemPrompt: 'sys',
+    mode: 'read',
+    cwd: '/tmp',
+  })
+  assert.ok(!claudeRead.args.includes('--dangerously-skip-permissions'))
+
+  const claudeWrite = buildFactoryArgs('claude', {
+    agentId: 'implementer',
+    prompt: 'oi',
+    systemPrompt: 'sys',
+    mode: 'write',
+    cwd: '/tmp',
+  })
+  assert.ok(claudeWrite.args.includes('--dangerously-skip-permissions'))
+
+  // Teste Codex: leitura vs escrita
+  const codexRead = buildFactoryArgs('codex', {
+    agentId: 'architect',
+    prompt: 'oi',
+    systemPrompt: 'sys',
+    mode: 'read',
+    cwd: '/tmp',
+  })
+  assert.ok(codexRead.args.includes('read-only'))
+
+  const codexWrite = buildFactoryArgs('codex', {
+    agentId: 'implementer',
+    prompt: 'oi',
+    systemPrompt: 'sys',
+    mode: 'write',
+    cwd: '/tmp',
+  })
+  assert.ok(codexWrite.args.includes('workspace-write'))
+
+  // Teste AGY: plan vs accept-edits
+  const agyRead = buildFactoryArgs('agy', {
+    agentId: 'architect',
+    prompt: 'oi',
+    systemPrompt: 'sys',
+    mode: 'read',
+    cwd: '/tmp',
+  })
+  assert.ok(agyRead.args.includes('--mode') && agyRead.args.includes('plan'))
+
+  const agyWrite = buildFactoryArgs('agy', {
+    agentId: 'implementer',
+    prompt: 'oi',
+    systemPrompt: 'sys',
+    mode: 'write',
+    cwd: '/tmp',
+  })
+  assert.ok(agyWrite.args.includes('--mode') && agyWrite.args.includes('accept-edits'))
+
+  console.log('factory runner selfcheck: ok')
 }

@@ -3,7 +3,7 @@
 
 import assert from 'node:assert/strict'
 import { execFileSync } from 'node:child_process'
-import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, lstatSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, unlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { basename, join } from 'node:path'
 import { DATA_DIR } from '../paths.ts'
@@ -11,6 +11,37 @@ import { run } from '../run.ts'
 import type { DiffStat } from './types.ts'
 
 const git = (dir: string, args: string[], timeoutMs = 30_000) => run('git', ['-C', dir, ...args], timeoutMs)
+
+export function linkWorkspaceDependencies(repoPath: string, worktreePath: string): void {
+  const depDirs = ['node_modules', '.venv', 'venv']
+  for (const dir of depDirs) {
+    const src = join(repoPath, dir)
+    const dest = join(worktreePath, dir)
+    if (existsSync(src) && !existsSync(dest)) {
+      try {
+        symlinkSync(src, dest, 'dir')
+      } catch {
+        // ignora se o sistema de arquivos não suportar symlink
+      }
+    }
+  }
+}
+
+function unlinkSafeDependencies(worktreePath: string): void {
+  const depDirs = ['node_modules', '.venv', 'venv']
+  for (const dir of depDirs) {
+    const target = join(worktreePath, dir)
+    try {
+      if (existsSync(target) || lstatSync(target).isSymbolicLink()) {
+        if (lstatSync(target).isSymbolicLink()) {
+          unlinkSync(target)
+        }
+      }
+    } catch {
+      // ignora se não existir
+    }
+  }
+}
 
 export async function createWorktree(
   repoPath: string,
@@ -43,6 +74,9 @@ export async function createWorktree(
     await git(repoPath, ['worktree', 'add', '-b', branchName, targetDir, baseBranch])
   }
 
+  // Vincula dependências instaladas do repositório original para acelerar testes e build
+  linkWorkspaceDependencies(repoPath, targetDir)
+
   return { worktreePath: targetDir, branchName }
 }
 
@@ -51,6 +85,9 @@ export async function removeWorktree(
   worktreePath: string,
   branchName?: string,
 ): Promise<void> {
+  // Desvincula symlinks antes de apagar a pasta da worktree
+  unlinkSafeDependencies(worktreePath)
+
   try {
     await git(repoPath, ['worktree', 'remove', worktreePath, '--force'])
   } catch {
@@ -130,13 +167,39 @@ export async function commitWorktree(
   return (await git(worktreePath, ['rev-parse', 'HEAD'])).trim()
 }
 
+export async function pushWorktreeBranch(
+  worktreePath: string,
+  branchName: string,
+  remote = 'origin',
+): Promise<string> {
+  return await git(worktreePath, ['push', '-u', remote, branchName])
+}
+
 export async function mergeWorktreeLocal(
   repoPath: string,
   branchName: string,
   targetBranch: string,
 ): Promise<void> {
-  await git(repoPath, ['checkout', targetBranch])
-  await git(repoPath, ['merge', '--no-ff', branchName, '-m', `Merge branch '${branchName}' via workstuff fabrica`])
+  // 1. Verifica se o repositório principal tem alterações não salvas
+  const dirty = (await git(repoPath, ['status', '--porcelain'])).trim()
+  if (dirty) {
+    throw new Error('O repositório principal possui alterações pendentes não commitadas. Faça commit ou stash antes de mesclar.')
+  }
+
+  // 2. Guarda a branch original do usuário
+  const currentBranch = (await git(repoPath, ['rev-parse', '--abbrev-ref', 'HEAD'])).trim()
+
+  try {
+    if (currentBranch !== targetBranch) {
+      await git(repoPath, ['checkout', targetBranch])
+    }
+    await git(repoPath, ['merge', '--no-ff', branchName, '-m', `Merge branch '${branchName}' via workstuff fabrica`])
+  } finally {
+    // Se o usuário estava em outra branch diferente de targetBranch, restaura
+    if (currentBranch && currentBranch !== targetBranch) {
+      await git(repoPath, ['checkout', currentBranch]).catch(() => {})
+    }
+  }
 }
 
 if (import.meta.main && process.argv.includes('--selfcheck')) {
@@ -154,13 +217,20 @@ if (import.meta.main && process.argv.includes('--selfcheck')) {
     sh('config', 'user.name', 'Workstuff Test')
     sh('config', 'user.email', 'test@workstuff.local')
     writeFileSync(join(repoDir, 'README.md'), '# Repo de Teste\n')
-    sh('add', 'README.md')
+    writeFileSync(join(repoDir, '.gitignore'), 'node_modules\n.venv\n')
+    sh('add', 'README.md', '.gitignore')
     sh('commit', '-m', 'chore: commit inicial')
 
-    // Criação de worktree
+    // Criação de worktree com simulação de node_modules
+    mkdirSync(join(repoDir, 'node_modules', 'fake-pkg'), { recursive: true })
+    writeFileSync(join(repoDir, 'node_modules', 'fake-pkg', 'index.js'), 'module.exports = 42\n')
+
     const { worktreePath, branchName } = await createWorktree(repoDir, 'wt-task-1', 'main', wtRootDir)
     assert.ok(existsSync(worktreePath), 'worktree criada')
     assert.equal(branchName, 'factory/wt-task-1')
+
+    // Confere se o symlink de node_modules foi criado na worktree
+    assert.ok(existsSync(join(worktreePath, 'node_modules', 'fake-pkg', 'index.js')), 'node_modules acessivel na worktree via symlink')
 
     // Modificação na worktree
     writeFileSync(join(worktreePath, 'app.ts'), 'console.log("hello world")\n')
@@ -174,9 +244,18 @@ if (import.meta.main && process.argv.includes('--selfcheck')) {
     assert.equal(stat.insertions, 1)
     assert.deepEqual(stat.files, ['app.ts'])
 
-    // Remoção da worktree
+    // Remoção da worktree e garantia de que o node_modules original NÃO foi apagado
     await removeWorktree(repoDir, worktreePath, branchName)
     assert.ok(!existsSync(worktreePath), 'worktree removida')
+    assert.ok(existsSync(join(repoDir, 'node_modules', 'fake-pkg', 'index.js')), 'node_modules original permanece intacto no repositorio pai')
+
+    // Teste de mergeWorktreeLocal com repositório sujo (dirty check)
+    writeFileSync(join(repoDir, 'dirty.txt'), 'modificacao nao commitada\n')
+    await assert.rejects(
+      async () => mergeWorktreeLocal(repoDir, 'some-branch', 'main'),
+      /alterações pendentes/
+    )
+    rmSync(join(repoDir, 'dirty.txt'))
 
     console.log('factory worktree selfcheck: ok')
   } finally {
