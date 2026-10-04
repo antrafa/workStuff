@@ -14,8 +14,7 @@ const AGENT_CARDS: Array<{
   role: string
   icon: typeof Bot
   placeholder: string
-  runbookTitle: string
-  runbookFile: string
+  runbooks: Array<{ title: string; file: string }>
 }> = [
   {
     id: 'architect',
@@ -23,8 +22,10 @@ const AGENT_CARDS: Array<{
     role: 'Análise de requisitos, arquitetura de software, mapeamento de riscos e planejamento técnico',
     icon: Sparkles,
     placeholder: 'Ex.: Analise a arquitetura do módulo de autenticação e elabore um plano para suportar autenticação OAuth2 sem quebrar clientes legados...',
-    runbookTitle: 'Pre-flight Check do Repositório',
-    runbookFile: 'factory/agentes-preflight.md',
+    runbooks: [
+      { title: 'Pre-flight Check do Repositório', file: 'factory/agentes-preflight.md' },
+      { title: 'Mapeamento de Arquitetura e Dependências', file: 'factory/analise-dependencias.md' },
+    ],
   },
   {
     id: 'implementer',
@@ -32,8 +33,11 @@ const AGENT_CARDS: Array<{
     role: 'Implementação de código e refatoração na pasta do projeto',
     icon: Wrench,
     placeholder: 'Ex.: Adicione tratamento de retry com backoff exponencial no cliente HTTP da pasta src/lib/api...',
-    runbookTitle: 'Sincronização e Rebase de Branch',
-    runbookFile: 'factory/sincronizar-branch.md',
+    runbooks: [
+      { title: 'Sincronização e Rebase de Branch', file: 'factory/sincronizar-branch.md' },
+      { title: 'Criação e Isolamento de Git Worktree', file: 'factory/isolamento-worktree.md' },
+      { title: 'Diagnóstico e Resolução de Conflitos de Rebase', file: 'factory/rebase-conflitos.md' },
+    ],
   },
   {
     id: 'tester',
@@ -41,8 +45,10 @@ const AGENT_CARDS: Array<{
     role: 'Identificação de cenários de teste, escrita de testes automatizados e validação de QA',
     icon: Terminal,
     placeholder: 'Ex.: Crie testes unitários para a rota de upload cobrindo arquivos vazios, formatos inválidos e sucesso...',
-    runbookTitle: 'Validação Manual de Portões de Aceitação',
-    runbookFile: 'factory/portoes-aceitacao.md',
+    runbooks: [
+      { title: 'Validação Manual de Portões de Aceitação', file: 'factory/portoes-aceitacao.md' },
+      { title: 'Execução de Testes e Validação de QA', file: 'factory/testes-isolados.md' },
+    ],
   },
   {
     id: 'reviewer',
@@ -50,8 +56,10 @@ const AGENT_CARDS: Array<{
     role: 'Revisão de código em busca de bugs, problemas de segurança e inconsistências',
     icon: ShieldAlert,
     placeholder: 'Ex.: Revise os arquivos da pasta src/auth em busca de falhas de segurança, vazamento de tokens e problemas de concorrência...',
-    runbookTitle: 'Auditoria de Segurança e Verificação Pré-MR',
-    runbookFile: 'factory/auditoria-seguranca.md',
+    runbooks: [
+      { title: 'Auditoria de Segurança e Verificação Pré-MR', file: 'factory/auditoria-seguranca.md' },
+      { title: 'Publicação Remota e Preparação de Merge Request', file: 'factory/publicar-mr.md' },
+    ],
   },
 ]
 
@@ -208,15 +216,24 @@ export function StandaloneAgentTab() {
           />
         </label>
 
-        {activeMeta.runbookTitle && (
-          <div className="row" style={{ alignItems: 'center', justifyContent: 'space-between', padding: '8px 12px', background: 'var(--surface-subtle)', borderRadius: 'var(--radius)', fontSize: 12 }}>
-            <span className="row" style={{ gap: 6, color: 'var(--muted)', alignItems: 'center' }}>
+        {activeMeta.runbooks && activeMeta.runbooks.length > 0 && (
+          <div className="col" style={{ gap: 8, padding: '10px 12px', background: 'var(--surface-subtle)', borderRadius: 'var(--radius)', fontSize: 12 }}>
+            <span className="row" style={{ gap: 6, color: 'var(--muted)', alignItems: 'center', fontWeight: 500 }}>
               <BookOpen size={14} style={{ color: 'var(--accent)' }} />
-              <span>Procedimento operacional sugerido: <b>{activeMeta.runbookTitle}</b></span>
+              <span>Procedimentos operacionais recomendados para <b>{activeMeta.name}</b>:</span>
             </span>
-            <Link to="/dev-runbooks" className="btn btn-ghost btn-sm" style={{ fontSize: 11 }}>
-              Abrir nos Runbooks →
-            </Link>
+            <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
+              {activeMeta.runbooks.map(rb => (
+                <Link
+                  key={rb.file}
+                  to={`/dev-runbooks?file=${encodeURIComponent(rb.file)}`}
+                  className="btn btn-ghost btn-sm"
+                  style={{ fontSize: 11, padding: '3px 8px' }}
+                >
+                  {rb.title} →
+                </Link>
+              ))}
+            </div>
           </div>
         )}
 

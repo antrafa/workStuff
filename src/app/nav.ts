@@ -1,5 +1,5 @@
 import {
-  Activity, ArrowUpCircle, BellRing, BookOpen, Bot, Cpu, Dices, Factory, FileSearch, GitBranch, GitCompare, GitPullRequest, History, ScrollText, Server, ServerCog, ShieldAlert, Sparkles, Stethoscope, Terminal, Users, Workflow, Wrench,
+  Activity, ArrowUpCircle, BellRing, BookOpen, Bot, Cpu, Dices, Factory, FileSearch, GitBranch, GitCompare, GitPullRequest, History, LayoutDashboard, ScrollText, Server, ServerCog, ShieldAlert, Sparkles, Stethoscope, Terminal, Users, Workflow, Wrench,
   type LucideIcon,
 } from 'lucide-react'
 
@@ -11,6 +11,12 @@ export type NavGroup = { label: string; items: NavItem[] }
 
 // Fonte única do menu: sidebar, breadcrumb e configuração de itens ocultos leem daqui.
 export const NAV: NavGroup[] = [
+  {
+    label: 'Visão Geral',
+    items: [
+      { path: '/', label: 'Início', hint: 'Painel consolidado do ambiente, cluster e agentes da fábrica', icon: LayoutDashboard },
+    ],
+  },
   {
     label: 'Desenvolvimento',
     items: [
@@ -65,7 +71,10 @@ export const NAV: NavGroup[] = [
 
 export function findNav(pathname: string) {
   for (const group of NAV) {
-    const item = group.items.find(i => pathname === i.path || pathname.startsWith(i.path + '/'))
+    const item = group.items.find(i => {
+      if (i.path === '/') return pathname === '/'
+      return pathname === i.path || pathname.startsWith(i.path + '/')
+    })
     if (item) return { group, item }
   }
   return null

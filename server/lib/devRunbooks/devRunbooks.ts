@@ -292,6 +292,7 @@ if (import.meta.main && process.argv.includes('--selfcheck')) {
   assert.equal(classify('git worktree list --porcelain', {}).kind, 'read')
   assert.equal(classify('git worktree prune -v', {}).kind, 'write')
   assert.equal(classify('git worktree remove temp', {}).kind, 'write')
+  assert.equal(classify('git worktree add -b feat temp origin/main', {}).kind, 'write')
 
   // Testa rejeição de operadores de shell
   assert.equal(classify('git status; rm -rf .', {}).kind, 'blocked')
@@ -312,8 +313,24 @@ if (import.meta.main && process.argv.includes('--selfcheck')) {
   }
 
   assert.ok(statSync(DEFAULT_ROOT, { throwIfNoEntry: false })?.isDirectory(), 'pasta padrão de dev-runbooks existe')
-  assert.ok(listDevRunbooks(DEFAULT_ROOT).length >= 6, 'dev runbooks padrão encontrados')
+  assert.ok(listDevRunbooks(DEFAULT_ROOT).length >= 15, 'dev runbooks padrão encontrados')
   assert.equal(readRoot(), DEFAULT_ROOT)
+
+  // Validação estrita de todos os runbooks da seção factory
+  const factoryRunbooks = listDevRunbooks(DEFAULT_ROOT).filter(r => r.file.startsWith('factory/'))
+  assert.ok(factoryRunbooks.length >= 11, `esperado >= 11 runbooks de fábrica, encontrados ${factoryRunbooks.length}`)
+  for (const r of factoryRunbooks) {
+    const raw = readFileSync(devRunbookPath(DEFAULT_ROOT, r.file), 'utf-8')
+    const segs = parseDevRunbook(raw)
+    const steps = segs.filter(s => s.type === 'step') as Extract<Segment, { type: 'step' }>[]
+    assert.ok(steps.length >= 2, `${r.file} tem poucos passos`)
+    for (const s of steps) {
+      const mockVals = Object.fromEntries(s.vars.map(v => [v, 'test_val']))
+      const cl = classify(s.line, mockVals)
+      assert.notEqual(cl.kind, 'blocked', `${r.file}: passo bloqueado: ${s.line} (${cl.kind === 'blocked' ? cl.reason : ''})`)
+    }
+  }
+
   console.log('dev-runbooks selfcheck: ok')
 }
 

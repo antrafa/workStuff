@@ -16,7 +16,9 @@ export const router = createBrowserRouter([
         // Rota sem caminho só para o errorElement: o erro aparece dentro do layout, com o menu.
         errorElement: <RouteError />,
         children: [
-          { index: true, element: <Navigate to="/cluster" replace /> },
+          { index: true, element: page(() => import('@/features/dashboard/DashboardPage')) },
+          { path: 'inicio', element: <Navigate to="/" replace /> },
+          { path: 'dashboard', element: <Navigate to="/" replace /> },
           { path: 'maquina', element: page(() => import('@/features/doctor/DoctorPage')) },
           { path: 'perfil', element: page(() => import('@/features/profile/ProfilePage')) },
           { path: 'repositorios', element: page(() => import('@/features/repos/ReposPage')) },
@@ -44,7 +46,7 @@ export const router = createBrowserRouter([
           { path: 'playbooks', element: page(() => import('@/features/playbooks/PlaybooksPage')) },
           { path: 'acervo', element: <Navigate to="/catalogo" replace /> },
           { path: 'configuracoes/:secao?', element: page(() => import('@/features/settings/SettingsPage')) },
-          { path: '*', element: <Navigate to="/cluster" replace /> },
+          { path: '*', element: <Navigate to="/" replace /> },
         ],
       },
     ],

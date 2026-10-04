@@ -11,6 +11,19 @@ export type Help = {
 }
 
 export const HELP: Record<string, Help> = {
+  '/': {
+    purpose: 'Painel central de controle do desenvolvedor: reúne a saúde do cluster Kubernetes, execuções ativas da Fábrica de Software, diagnósticos da máquina e atalhos rápidos para fluxos operacionais.',
+    steps: [
+      'Acompanhe os cartões de status no topo para conferir a saúde do cluster, pods com problema, tarefas ativas e pendências da máquina.',
+      'Veja as execuções recentes da Fábrica de Software e clique para abrir a linha do tempo ou criar uma nova demanda.',
+      'Use os atalhos rápidos para navegar direto para runbooks, revisões de código, catálogo de IA e conversores.',
+      'Clique em Atualizar a qualquer momento para ler novamente os indicadores de todos os subsistemas.',
+    ],
+    notes: [
+      'O painel sincroniza automaticamente em segundo plano a cada 10 segundos.',
+      'Você pode voltar a esta tela inicial a qualquer momento clicando no logotipo workStuff no topo da barra lateral.',
+    ],
+  },
   '/maquina': {
     purpose: 'Mostra o que falta nesta máquina para trabalhar (ferramentas, versões, credenciais, rede) e como resolver cada item, com o comando certo para o seu sistema: Linux, macOS ou Windows.',
     steps: [

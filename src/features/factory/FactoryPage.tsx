@@ -93,7 +93,7 @@ export default function FactoryPage() {
       hint="Desenvolvimento com múltiplos agentes, rastreamento visual em linha do tempo, isolamento estrito via Git Worktrees e portões mecânicos de aceitação."
       actions={
         <div className="row" style={{ gap: 8 }}>
-          <Link to="/dev-runbooks" className="btn btn-sm" title="Abrir Runbooks de Desenvolvimento e Fábrica">
+          <Link to="/dev-runbooks?file=factory%2Fworktrees-limpeza.md" className="btn btn-sm" title="Abrir Runbooks de Desenvolvimento e Fábrica">
             <Terminal size={14} /> Runbooks da Fábrica
           </Link>
           <button type="button" className="btn btn-sm" onClick={handleRefresh} title="Atualizar tarefas">

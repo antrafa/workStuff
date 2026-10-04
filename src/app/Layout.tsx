@@ -191,7 +191,12 @@ function Sidebar({ currentGroup, favorites, onSearch }: SidebarProps) {
 function NavItemLink({ item, favorite, shortcut }: { item: NavItem; favorite?: boolean; shortcut?: number }) {
   const Icon = favorite ? Star : item.icon
   return (
-    <NavLink to={item.path} className={`nav-link ${favorite ? 'is-favorite' : ''}`} title={item.mock ? `${item.hint} · ainda com dados de exemplo` : item.hint}>
+    <NavLink
+      to={item.path}
+      end={item.path === '/'}
+      className={`nav-link ${favorite ? 'is-favorite' : ''}`}
+      title={item.mock ? `${item.hint} · ainda com dados de exemplo` : item.hint}
+    >
       <Icon size={15} />
       <span>{item.label}{item.mock && <span className="nav-mock">mock</span>}</span>
       {shortcut && <kbd title={`Alt ${shortcut}`}>{shortcut}</kbd>}

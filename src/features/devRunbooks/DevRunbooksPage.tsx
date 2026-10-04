@@ -3,6 +3,7 @@ import {
   BookOpen, FolderOpen, Lock, Play, RotateCcw, Terminal, Zap,
 } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
+import { useSearchParams } from 'react-router'
 import { Async, ConfirmModal, Empty, Markdown, Modal, Page, SkeletonRows, useToast } from '@/ui'
 import { api } from '@/lib/api'
 import { useAsync } from '@/lib/useAsync'
@@ -37,17 +38,31 @@ type DocResponse = {
 type Result = { ok: boolean; command: string; cwd?: string; output: string }
 
 export default function DevRunbooksPage() {
+  const [searchParams, setSearchParams] = useSearchParams()
+  const requestedFile = searchParams.get('file')
   const list = useAsync(() => api.get<DevRunbooksResponse>('/dev-runbooks'))
-  const [file, setFile] = useState<string | null>(null)
+  const [file, setFile] = useState<string | null>(requestedFile)
   const [rootInput, setRootInput] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [modalOpen, setModalOpen] = useState(false)
 
   useEffect(() => {
-    if (!file && list.data?.runbooks && list.data.runbooks.length > 0) {
-      setFile(list.data.runbooks[0].file)
+    if (requestedFile && list.data?.runbooks.some(r => r.file === requestedFile)) {
+      setFile(requestedFile)
+    } else if (!file && list.data?.runbooks && list.data.runbooks.length > 0) {
+      const defaultItem = list.data.runbooks.find(r => r.file.startsWith('factory/')) ?? list.data.runbooks[0]
+      setFile(defaultItem.file)
     }
-  }, [list.data, file])
+  }, [list.data, requestedFile])
+
+  const handleSelectFile = (selected: string) => {
+    setFile(selected)
+    setSearchParams(prev => {
+      const p = new URLSearchParams(prev)
+      p.set('file', selected)
+      return p
+    }, { replace: true })
+  }
 
   const setRoot = async (root: string) => {
     setError(null)
@@ -60,6 +75,40 @@ export default function DevRunbooksPage() {
       setError((e as Error).message)
     }
   }
+
+  const grouped = useMemo(() => {
+    if (!list.data?.runbooks) return []
+    const map = new Map<string, DevRunbookItem[]>()
+    for (const r of list.data.runbooks) {
+      const slash = r.file.indexOf('/')
+      const section = slash > 0 ? r.file.slice(0, slash) : 'outros'
+      const arr = map.get(section) ?? []
+      arr.push(r)
+      map.set(section, arr)
+    }
+    const order = ['factory', 'git', 'containers', 'ambiente', 'outros']
+    const keys = [...map.keys()].sort((a, b) => {
+      const ia = order.indexOf(a)
+      const ib = order.indexOf(b)
+      if (ia !== -1 && ib !== -1) return ia - ib
+      if (ia !== -1) return -1
+      if (ib !== -1) return 1
+      return a.localeCompare(b)
+    })
+    const labels: Record<string, string> = {
+      factory: 'Fábrica de Software',
+      git: 'Git & Branches',
+      containers: 'Containers & Docker',
+      ambiente: 'Ambiente Local',
+      outros: 'Outros Procedimentos',
+    }
+    return keys.map(k => ({
+      key: k,
+      label: labels[k] ?? k,
+      items: map.get(k)!,
+      isFactory: k === 'factory',
+    }))
+  }, [list.data?.runbooks])
 
   const pick = async () => {
     const { path } = await api.post<{ path: string | null }>('/dev-runbooks/pick-folder').catch(e => (setError((e as Error).message), { path: null }))
@@ -103,11 +152,24 @@ export default function DevRunbooksPage() {
               {d.runbooks.length === 0 ? (
                 <p className="muted card-pad" style={{ fontSize: 12.5 }}>Nenhum .md nesta pasta.</p>
               ) : (
-                d.runbooks.map(r => (
-                  <button key={r.file} className={`drb-item${r.file === file ? ' drb-active' : ''}`} onClick={() => setFile(r.file)}>
-                    <div>{r.title}</div>
-                    <div className="muted mono" style={{ fontSize: 11 }}>{r.file}</div>
-                  </button>
+                grouped.map(g => (
+                  <div key={g.key}>
+                    <div className={`drb-group-header${g.isFactory ? ' drb-group-factory' : ''}`}>
+                      <span>{g.label} ({g.items.length})</span>
+                      {g.isFactory && <span className="badge badge-info" style={{ fontSize: 9 }}>esteira</span>}
+                    </div>
+                    {g.items.map(r => (
+                      <button
+                        key={r.file}
+                        type="button"
+                        className={`drb-item${r.file === file ? ' drb-active' : ''}`}
+                        onClick={() => handleSelectFile(r.file)}
+                      >
+                        <div>{r.title}</div>
+                        <div className="muted mono" style={{ fontSize: 11 }}>{r.file}</div>
+                      </button>
+                    ))}
+                  </div>
                 ))
               )}
             </aside>
