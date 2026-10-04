@@ -1,36 +1,47 @@
-# Falha ao baixar imagem (ImagePullBackOff)
+# Falha ao baixar imagem (ImagePullBackOff / ErrImagePull)
 
-Diagnóstico de pods com erro `ImagePullBackOff` ou `ErrImagePull`. As causas frequentes são: tag de imagem incorreta ou inexistente no container registry, repositório privado sem credencial (`imagePullSecrets`) ou bloqueio de rede/firewall com o registry.
+O nó não conseguiu baixar a imagem do container. São três causas, e a mensagem do evento diz qual: a imagem/tag não existe, falta credencial para o registry, ou o nó não alcança o registry.
 
-### Parâmetros
-- `namespace`: Namespace da aplicação
-- `app`: Label da aplicação
-- `pod`: Nome do pod com erro de imagem
-- `deployment`: Nome do deployment associado
+**Quando usar:** status `ImagePullBackOff`, `ErrImagePull` ou `InvalidImageName`.
 
-### Procedimento
+### Antes de começar
+- `namespace`, `pod` e `deployment`.
+- O painel nunca lê Secrets; para conferir a credencial do registry, só o **nome** dela aparece aqui.
 
-1. Liste os pods no namespace com endereço do nó e status detalhado:
+### 1. Pods afetados e em quais nós
 ```bash
 kubectl get pods -n {{namespace}} -o wide
 ```
+> Falha só nos pods de um nó: problema de rede ou disco daquele nó. Em todos: imagem ou credencial.
 
-2. Inspecione a mensagem detalhada emitida pelo kubelet na seção de eventos:
+### 2. A mensagem exata do kubelet
 ```bash
-kubectl describe pod {{pod}} -n {{namespace}}
+kubectl get events -n {{namespace}} --field-selector involvedObject.name={{pod}} --sort-by=.lastTimestamp
 ```
+| Mensagem contém | Causa | O que fazer |
+|---|---|---|
+| `not found`, `manifest unknown` | tag não existe no registry | confira a tag gerada pelo pipeline |
+| `unauthorized`, `denied`, `authentication required` | sem credencial ou credencial vencida | renove o Secret de registry (fora do painel) |
+| `i/o timeout`, `no such host`, `connection refused` | o nó não alcança o registry | rede, proxy ou DNS do nó |
+| `toomanyrequests` | limite de download do Docker Hub | use registry próprio ou credencial |
+| `InvalidImageName` | nome com maiúscula, espaço ou tag vazia | corrija o manifest |
 
-3. Filtre os eventos específicos deste pod para ver o histórico de tentativas de download:
+### 3. Imagem declarada no deployment
 ```bash
-kubectl get events -n {{namespace}} --field-selector involvedObject.name={{pod}}
+kubectl get deployment {{deployment}} -n {{namespace}} -o jsonpath='{.spec.template.spec.containers[*].image}'
 ```
+> Tag `latest` ou vazia é armadilha: o nó pode ter uma versão em cache e outro não.
 
-4. Verifique a imagem, tag e imagePullSecrets declarados no Deployment:
+### 4. Credencial de registry associada
 ```bash
-kubectl get deployment {{deployment}} -n {{namespace}} -o yaml
+kubectl get deployment {{deployment}} -n {{namespace}} -o jsonpath='{.spec.template.spec.imagePullSecrets}'
+kubectl get serviceaccount default -n {{namespace}} -o jsonpath='{.imagePullSecrets}'
 ```
+> Ambos vazios com registry privado: falta configurar `imagePullSecrets`.
 
-5. Após corrigir a tag no pipeline ou liberar o registry, force um novo rollout do deployment:
+### 5. Depois de corrigir a tag ou a credencial
+Bloqueado em PRO.
 ```bash
 kubectl rollout restart deployment/{{deployment}} -n {{namespace}}
+kubectl rollout status deployment/{{deployment}} -n {{namespace}} --timeout=120s
 ```

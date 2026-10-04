@@ -180,7 +180,16 @@ if (import.meta.main && process.argv.includes('--selfcheck')) {
   }
 
   assert.ok(statSync(DEFAULT_ROOT, { throwIfNoEntry: false })?.isDirectory(), 'pasta padrão do projeto existe')
-  assert.ok(listRunbooks(DEFAULT_ROOT).length >= 10, 'runbooks padrão do projeto encontrados')
+  const bundled = listRunbooks(DEFAULT_ROOT)
+  assert.ok(bundled.length >= 16, 'runbooks padrão do projeto encontrados')
+  // Em HML tudo que o painel aceita fica liberado (leitura, restart, scale); passo bloqueado lá é erro do runbook.
+  for (const r of bundled) {
+    for (const s of parseRunbook(readFileSync(runbookPath(DEFAULT_ROOT, r.file), 'utf-8'))) {
+      if (s.type !== 'step') continue
+      const c = classify(s.line, Object.fromEntries(s.vars.map(v => [v, 'x1'])), 'HML')
+      assert.notEqual(c.kind, 'blocked', `${r.file}: passo bloqueado: ${s.line} (${c.kind === 'blocked' ? c.reason : ''})`)
+    }
+  }
   assert.equal(readRoot(), DEFAULT_ROOT, 'readRoot sem config retorna DEFAULT_ROOT')
   console.log('runbooks selfcheck: ok')
 }
