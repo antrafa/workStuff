@@ -260,6 +260,21 @@ export const HELP: Record<string, Help> = {
       'Tudo é gerado no navegador.',
     ],
   },
+  '/fabrica': {
+    purpose: 'Orquestra o ciclo de desenvolvimento com agentes de IA (Architect, Implementer, Tester, Reviewer) em Git Worktrees isoladas, com aprovacao humana antes de qualquer envio de codigo.',
+    steps: [
+      'Clique em "Nova Tarefa" e escolha importar uma issue aberta do GitLab ou GitHub, ou digite uma tarefa manual.',
+      'Acompanhe o agente Architect investigar os requisitos e gerar o plano tecnico.',
+      'Revise o plano e clique em "Aprovar e Construir" para o Implementer codificar na worktree isolada.',
+      'Acompanhe o Tester rodar a suite de testes e o Reviewer realizar a auditoria de seguranca.',
+      'Na tela de revisao, inspecione o diff, peca ajustes se necessario, e aprove para abrir o MR/PR ou mesclar localmente.',
+    ],
+    notes: [
+      'Toda alteracao de codigo ocorre em ~/.workstuff/worktrees; o seu repositorio principal fica 100% intocado.',
+      'Apenas com sua confirmacao final o codigo e enviado para o Git remoto ou mesclado na branch base.',
+      'Voce tambem pode acionar qualquer um dos 4 agentes de forma independente na aba de Agentes Avulsos.',
+    ],
+  },
   '/dev-runbooks': {
     purpose: 'Executa procedimentos e rotinas locais de desenvolvimento: comandos de Git, Docker e Node executáveis pelo painel com confirmação.',
     steps: [

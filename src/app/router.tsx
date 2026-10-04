@@ -36,6 +36,7 @@ export const router = createBrowserRouter([
           { path: 'servicos', element: page(() => import('@/features/local/LocalPage')) },
           { path: 'agenda', element: page(() => import('@/features/schedules/SchedulesPage')) },
           { path: 'gerador', element: page(() => import('@/features/gerador/GeradorPage')) },
+          { path: 'fabrica', element: page(() => import('@/features/factory/FactoryPage')) },
           { path: 'dev-runbooks', element: page(() => import('@/features/devRunbooks/DevRunbooksPage')) },
           { path: 'catalogo', element: page(() => import('@/features/catalog/CatalogPage')) },
 
