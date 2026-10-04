@@ -1,7 +1,7 @@
 // Runner da Fábrica de Software com isolamento multi-provedor (Claude, Codex, Antigravity).
 
 import assert from 'node:assert/strict'
-import { mkdtempSync, rmSync } from 'node:fs'
+import { existsSync, mkdtempSync, rmSync } from 'node:fs'
 import { homedir, tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { which } from '../run.ts'
@@ -22,95 +22,82 @@ export type FactoryRunOptions = {
   provider?: ProviderId
   model?: string
   effort?: string
+  // Standalone runs point at the user's own repository, which must never be written to.
+  readOnly?: boolean
   signal?: AbortSignal
   onEvent: (e: AiEvent) => void
   timeoutMs?: number
 }
 
+// bwrap jail: the whole disk read-only, except the folders the CLI must write to.
+// Claude in write mode runs with --dangerously-skip-permissions and Bash, so without
+// the jail it could write anywhere the user can. Tested 2026-10-04: inside the jail
+// Claude authenticates, writes in cwd and gets EROFS outside it.
+export type Sandbox = { writable: string[]; tmpDir: string }
+
+function jail(sandbox: Sandbox, cwd: string, bin: string, args: string[]): { bin: string; args: string[] } {
+  return {
+    bin: 'bwrap',
+    args: [
+      '--ro-bind', '/', '/', '--dev', '/dev', '--proc', '/proc',
+      ...sandbox.writable.flatMap(dir => ['--bind', dir, dir]),
+      '--bind', sandbox.tmpDir, sandbox.tmpDir, '--setenv', 'TMPDIR', sandbox.tmpDir,
+      '--die-with-parent', '--chdir', cwd,
+      bin, ...args,
+    ],
+  }
+}
+
 export function buildFactoryArgs(
   provider: ProviderId,
   options: {
-    agentId: SpecializedAgentId
     prompt: string
     systemPrompt: string
     mode: 'read' | 'write'
     cwd: string
     model?: string
     effort?: string
-    agySandbox?: { stateDir: string; tmpDir: string }
+    sandbox?: Sandbox
   },
 ): { bin: string; args: string[] } {
+  const { mode, cwd, sandbox } = options
   const fullPrompt = `${options.systemPrompt}\n\n${options.prompt}`
 
   if (provider === 'claude') {
-    const tools = options.mode === 'write' ? WRITE_TOOLS : READ_TOOLS
+    const tools = mode === 'write' ? WRITE_TOOLS : READ_TOOLS
     const args = ['--output-format', 'stream-json', '--verbose', '--include-partial-messages']
     if (options.model) args.push('--model', options.model)
     if (options.effort) args.push('--effort', options.effort)
     args.push('--tools', ...tools, '--allowedTools', ...tools, '--strict-mcp-config')
-    if (options.mode === 'write') {
-      args.push('--dangerously-skip-permissions')
-    }
-    args.push('--append-system-prompt', options.systemPrompt)
-    args.push('-p', options.prompt)
-    return { bin: 'claude', args }
+    args.push('--append-system-prompt', options.systemPrompt, '-p', options.prompt)
+    if (mode === 'read') return { bin: 'claude', args }
+    if (!sandbox) throw new Error('o agente com escrita só roda dentro do bwrap (bubblewrap), que não está disponível nesta máquina')
+    return jail(sandbox, cwd, 'claude', ['--dangerously-skip-permissions', ...args])
   }
 
   if (provider === 'codex') {
-    const args = ['exec', '--json', '--skip-git-repo-check']
-    if (options.mode === 'read') {
-      args.push('-s', 'read-only')
-    } else {
-      args.push('-s', 'workspace-write')
-    }
+    // workspace-write is codex's own OS sandbox: writes only inside -C.
+    const args = ['exec', '--json', '--skip-git-repo-check', '-s', mode === 'read' ? 'read-only' : 'workspace-write']
     if (options.model) args.push('-m', options.model)
     if (options.effort) args.push('-c', `model_reasoning_effort="${options.effort}"`)
-    if (options.cwd) args.push('-C', options.cwd)
-    args.push(fullPrompt)
+    args.push('-C', cwd, fullPrompt)
     return { bin: 'codex', args }
   }
 
-  // Antigravity (agy)
-  if (options.agySandbox) {
-    const { stateDir, tmpDir } = options.agySandbox
-    const args = [
-      '--ro-bind', '/', '/',
-      '--dev', '/dev',
-      '--proc', '/proc',
-      // No modo escrita, libera somente a pasta de trabalho (worktree) para escrita!
-      ...(options.mode === 'write' && options.cwd ? ['--bind', options.cwd, options.cwd] : []),
-      '--bind', stateDir, stateDir,
-      '--bind', tmpDir, tmpDir,
-      '--setenv', 'TMPDIR', tmpDir,
-      '--die-with-parent',
-      ...(options.cwd ? ['--chdir', options.cwd] : []),
-      'agy', '--output-format', 'stream-json',
-    ]
-
-    if (options.mode === 'read') {
-      args.push('--mode', 'plan')
-    } else {
-      args.push('--mode', 'accept-edits', '--dangerously-skip-permissions')
-    }
-    if (options.model) args.push('--model', options.model)
-    if (options.effort) args.push('--effort', options.effort)
-    args.push('-p', fullPrompt)
-
-    return { bin: 'bwrap', args }
-  }
-
-  // Sem bwrap (ex: macOS), executa agy diretamente respeitando o modo (plan ou accept-edits)
+  // agy writes to disk even in --mode plan (see server/lib/ai/args.ts): it only ever runs jailed.
+  if (!sandbox) throw new Error('o Antigravity só roda dentro do bwrap (bubblewrap), que não está disponível nesta máquina; escolha Claude ou Codex em Configurações')
   const args = ['--output-format', 'stream-json']
-  if (options.mode === 'read') {
-    args.push('--mode', 'plan')
-  } else {
-    args.push('--mode', 'accept-edits', '--dangerously-skip-permissions')
-  }
+  if (mode === 'read') args.push('--mode', 'plan')
+  else args.push('--mode', 'accept-edits', '--dangerously-skip-permissions')
   if (options.model) args.push('--model', options.model)
   if (options.effort) args.push('--effort', options.effort)
   args.push('-p', fullPrompt)
+  return jail({ ...sandbox, writable: mode === 'write' ? sandbox.writable : sandbox.writable.filter(d => d !== cwd) }, cwd, 'agy', args)
+}
 
-  return { bin: 'agy', args }
+function sandboxDirs(provider: ProviderId, cwd: string): string[] {
+  if (provider === 'agy') return [cwd, join(homedir(), '.gemini')]
+  return [cwd, join(homedir(), '.claude'), join(homedir(), '.claude.json')].filter(existsSync)
 }
 
 export async function runFactoryAgent(options: FactoryRunOptions): Promise<RunResult> {
@@ -119,20 +106,21 @@ export async function runFactoryAgent(options: FactoryRunOptions): Promise<RunRe
   const model = options.model || settings.model
   const effort = options.effort || settings.effort
   const agent = SPECIALIZED_AGENTS[options.agentId]
+  const mode = options.readOnly ? 'read' : agent.mode
 
-  const tmpDir = provider === 'agy' && (await which('bwrap')) ? mkdtempSync(join(tmpdir(), 'workstuff-agy-factory-')) : null
-  const agySandbox = tmpDir ? { stateDir: join(homedir(), '.gemini'), tmpDir } : undefined
+  const needsJail = provider === 'agy' || (provider === 'claude' && mode === 'write')
+  const tmpDir = needsJail && (await which('bwrap')) ? mkdtempSync(join(tmpdir(), 'workstuff-factory-')) : null
+  const sandbox = tmpDir ? { writable: sandboxDirs(provider, options.cwd), tmpDir } : undefined
 
   try {
     const cliSpec = buildFactoryArgs(provider, {
-      agentId: options.agentId,
       prompt: options.prompt,
       systemPrompt: agent.systemPrompt,
-      mode: agent.mode,
+      mode,
       cwd: options.cwd,
       model,
       effort,
-      agySandbox,
+      sandbox,
     })
 
     return await spawnCli(provider, model, cliSpec, {
@@ -144,73 +132,35 @@ export async function runFactoryAgent(options: FactoryRunOptions): Promise<RunRe
       stallMs: 4 * 60_000,
     })
   } finally {
-    if (tmpDir) {
-      try {
-        rmSync(tmpDir, { recursive: true, force: true })
-      } catch {
-        // ignora
-      }
-    }
+    if (tmpDir) rmSync(tmpDir, { recursive: true, force: true })
   }
 }
 
 if (import.meta.main && process.argv.includes('--selfcheck')) {
-  // Teste Claude: leitura vs escrita
-  const claudeRead = buildFactoryArgs('claude', {
-    agentId: 'architect',
-    prompt: 'oi',
-    systemPrompt: 'sys',
-    mode: 'read',
-    cwd: '/tmp',
-  })
+  const base = { prompt: 'oi', systemPrompt: 'sys', cwd: '/wt' }
+  const sandbox = { writable: ['/wt', '/home/u/.claude'], tmpDir: '/tmp/x' }
+
+  const claudeRead = buildFactoryArgs('claude', { ...base, mode: 'read' })
+  assert.equal(claudeRead.bin, 'claude')
   assert.ok(!claudeRead.args.includes('--dangerously-skip-permissions'))
 
-  const claudeWrite = buildFactoryArgs('claude', {
-    agentId: 'implementer',
-    prompt: 'oi',
-    systemPrompt: 'sys',
-    mode: 'write',
-    cwd: '/tmp',
-  })
+  const claudeWrite = buildFactoryArgs('claude', { ...base, mode: 'write', sandbox })
+  assert.equal(claudeWrite.bin, 'bwrap', 'claude com escrita sempre dentro do bwrap')
+  assert.deepEqual(claudeWrite.args.slice(0, 3), ['--ro-bind', '/', '/'])
   assert.ok(claudeWrite.args.includes('--dangerously-skip-permissions'))
+  assert.throws(() => buildFactoryArgs('claude', { ...base, mode: 'write' }), /bwrap/, 'sem bwrap, recusa')
 
-  // Teste Codex: leitura vs escrita
-  const codexRead = buildFactoryArgs('codex', {
-    agentId: 'architect',
-    prompt: 'oi',
-    systemPrompt: 'sys',
-    mode: 'read',
-    cwd: '/tmp',
-  })
-  assert.ok(codexRead.args.includes('read-only'))
+  assert.ok(buildFactoryArgs('codex', { ...base, mode: 'read' }).args.includes('read-only'))
+  assert.ok(buildFactoryArgs('codex', { ...base, mode: 'write' }).args.includes('workspace-write'))
 
-  const codexWrite = buildFactoryArgs('codex', {
-    agentId: 'implementer',
-    prompt: 'oi',
-    systemPrompt: 'sys',
-    mode: 'write',
-    cwd: '/tmp',
-  })
-  assert.ok(codexWrite.args.includes('workspace-write'))
-
-  // Teste AGY: plan vs accept-edits
-  const agyRead = buildFactoryArgs('agy', {
-    agentId: 'architect',
-    prompt: 'oi',
-    systemPrompt: 'sys',
-    mode: 'read',
-    cwd: '/tmp',
-  })
-  assert.ok(agyRead.args.includes('--mode') && agyRead.args.includes('plan'))
-
-  const agyWrite = buildFactoryArgs('agy', {
-    agentId: 'implementer',
-    prompt: 'oi',
-    systemPrompt: 'sys',
-    mode: 'write',
-    cwd: '/tmp',
-  })
-  assert.ok(agyWrite.args.includes('--mode') && agyWrite.args.includes('accept-edits'))
+  const agyRead = buildFactoryArgs('agy', { ...base, mode: 'read', sandbox })
+  assert.equal(agyRead.bin, 'bwrap')
+  assert.ok(agyRead.args.includes('plan'))
+  assert.ok(!agyRead.args.join(' ').includes('--bind /wt /wt'), 'agy em leitura não recebe a pasta como gravável')
+  const agyWrite = buildFactoryArgs('agy', { ...base, mode: 'write', sandbox })
+  assert.ok(agyWrite.args.includes('accept-edits'))
+  assert.ok(agyWrite.args.join(' ').includes('--bind /wt /wt'))
+  assert.throws(() => buildFactoryArgs('agy', { ...base, mode: 'read' }), /bwrap/, 'agy sem bwrap, recusa')
 
   console.log('factory runner selfcheck: ok')
 }

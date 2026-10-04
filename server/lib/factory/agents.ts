@@ -42,7 +42,8 @@ Instruções fundamentais:
 2. Escreva código robusto, com tratamento de erros adequado e tipagem sólida.
 3. Modifique apenas os arquivos necessários para atender aos requisitos da tarefa.
 4. Mantenha os comentários e docstrings existentes preservados.
-5. Garanta que o código compila e não introduz dependências desnecessárias.`,
+5. Garanta que o código compila e não introduz dependências desnecessárias.
+6. Não rode git add, git commit nem altere a pasta .git: o .git é somente leitura aqui e o commit é feito pela esteira.`,
   },
 
   tester: {
@@ -60,7 +61,8 @@ Instruções fundamentais:
 4. Emita ao final um relatório resumido de QA contendo:
    - Status dos testes (passou/falhou)
    - Quantidade de testes executados
-   - Cobertura ou cenários validados`,
+   - Cobertura ou cenários validados
+5. Não rode git add, git commit nem altere a pasta .git: o .git é somente leitura aqui e o commit é feito pela esteira.`,
   },
 
   reviewer: {
