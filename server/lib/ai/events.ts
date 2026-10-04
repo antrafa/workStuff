@@ -29,6 +29,12 @@ export function createParser(provider: ProviderId) {
   let text = ''
   // Id da conversa no CLI, para continuar depois (claude --resume).
   let sessionId: string | null = null
+  // Tokens and cost, when the CLI reports them in its final line (claude and codex do; agy does not).
+  let usage: { inputTokens?: number; outputTokens?: number; costUsd?: number } | null = null
+  const tokens = (u: Json | undefined) => ({
+    inputTokens: (u?.input_tokens ?? 0) + (u?.cache_read_input_tokens ?? 0) + (u?.cache_creation_input_tokens ?? 0),
+    outputTokens: u?.output_tokens ?? 0,
+  })
 
   const claude = (e: Json): AiEvent[] => {
     if (typeof e.session_id === 'string') sessionId = e.session_id
@@ -58,7 +64,10 @@ export function createParser(provider: ProviderId) {
         .map((b: Json) => ({ type: 'tool-result', id: b.tool_use_id, tool: toolNames.get(b.tool_use_id), isError: Boolean(b.is_error), content: toolContent(b.content) }))
     }
     if (e.type === 'system' && e.subtype === 'api_retry') return [{ type: 'status', message: `API instável, nova tentativa ${e.attempt ?? ''}` }]
-    if (e.type === 'result') return [{ type: 'result', ok: !e.is_error, text: typeof e.result === 'string' ? e.result : text }]
+    if (e.type === 'result') {
+      usage = { ...tokens(e.usage), costUsd: typeof e.total_cost_usd === 'number' ? e.total_cost_usd : undefined }
+      return [{ type: 'result', ok: !e.is_error, text: typeof e.result === 'string' ? e.result : text }]
+    }
     return []
   }
 
@@ -76,7 +85,10 @@ export function createParser(provider: ProviderId) {
     if (e.type === 'item.completed' && item?.type === 'command_execution') {
       return [{ type: 'tool-result', id: item.id ?? '', tool: 'shell', isError: item.exit_code !== 0, content: toolContent(item.aggregated_output) }]
     }
-    if (e.type === 'turn.completed') return [{ type: 'result', ok: true, text }]
+    if (e.type === 'turn.completed') {
+      if (e.usage) usage = tokens(e.usage)
+      return [{ type: 'result', ok: true, text }]
+    }
     if (e.type === 'turn.failed' || e.type === 'error') return [{ type: 'result', ok: false, text: e.error?.message ?? e.message ?? 'falhou' }]
     return []
   }
@@ -110,6 +122,7 @@ export function createParser(provider: ProviderId) {
     },
     text: () => text,
     sessionId: () => sessionId,
+    usage: () => usage,
   }
 }
 
@@ -145,6 +158,10 @@ if (import.meta.main && process.argv.includes('--selfcheck')) {
     { event: 'result', result: { status: 'SUCCESS', response: 'Parte 1' } },
   ])
   assert.deepEqual(agy.events.at(-1), { type: 'result', ok: true, text: 'Parte 1' })
+
+  const priced = createParser('claude')
+  priced.line(JSON.stringify({ type: 'result', is_error: false, result: 'x', total_cost_usd: 0.12, usage: { input_tokens: 10, cache_read_input_tokens: 90, output_tokens: 5 } }))
+  assert.deepEqual(priced.usage(), { inputTokens: 100, outputTokens: 5, costUsd: 0.12 }, 'custo e tokens do resultado final')
 
   assert.deepEqual(createParser('claude').line('não é json'), [{ type: 'status', message: 'não é json' }])
   console.log('ai events selfcheck: ok')

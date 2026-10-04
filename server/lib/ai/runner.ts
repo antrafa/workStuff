@@ -16,7 +16,7 @@ export type RunRequest = Omit<RunOptions, 'model' | 'effort'> & {
   stallMs?: number
 }
 
-export type RunResult = { text: string; provider: ProviderId; model: string; durationMs: number; stopped: boolean; sessionId: string | null }
+export type RunResult = { text: string; provider: ProviderId; model: string; durationMs: number; stopped: boolean; sessionId: string | null; usage: { inputTokens?: number; outputTokens?: number; costUsd?: number } | null }
 
 // Roda o CLI escolhido em Configurações (provedor, modelo e esforço), sempre em modo leitura.
 export async function runAi(req: RunRequest): Promise<RunResult> {
@@ -105,7 +105,7 @@ export function spawnCli(provider: ProviderId, model: string, { bin, args }: { b
         return reject(new Error(`${bin} falhou: ${errorDetail}.${hint}`))
       }
 
-      resolve({ text, provider, model, durationMs: Date.now() - t0, stopped, sessionId: parser.sessionId() })
+      resolve({ text, provider, model, durationMs: Date.now() - t0, stopped, sessionId: parser.sessionId(), usage: parser.usage() })
     })
   })
 }
