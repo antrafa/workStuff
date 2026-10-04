@@ -22,7 +22,7 @@ function fmtTokens(n?: number | null): string {
   return String(n)
 }
 
-export function SSSFStatChip({ kind, value, compact = false }: Props) {
+export function FactoryStatChip({ kind, value, compact = false }: Props) {
   let label = ''
   let Icon = Clock
   let color = 'var(--text)'
@@ -44,7 +44,7 @@ export function SSSFStatChip({ kind, value, compact = false }: Props) {
       color = '#c89bff'
       break
     case 'tools':
-      label = `${value ?? 0} tools`
+      label = `${value ?? 0} ferramentas`
       Icon = Terminal
       color = '#5ad2dd'
       break

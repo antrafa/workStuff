@@ -5,7 +5,7 @@ type Props = {
   state?: string
 }
 
-export function SSSFPhaseDots({ spans = [], state = 'intake' }: Props) {
+export function FactoryPhaseDots({ spans = [], state = 'intake' }: Props) {
   // Se houver spans gravadas, desenha cada span
   if (spans.length > 0) {
     return (

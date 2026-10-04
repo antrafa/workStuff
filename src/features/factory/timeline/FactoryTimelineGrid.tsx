@@ -1,5 +1,5 @@
 import type { FactoryTask } from '../../../../server/lib/factory/types.ts'
-import { SSSFSessionCard } from './SSSFSessionCard'
+import { FactoryTimelineCard } from './FactoryTimelineCard'
 import { Boxes } from 'lucide-react'
 
 type Props = {
@@ -8,7 +8,7 @@ type Props = {
   onDelete?: (task: FactoryTask) => void
 }
 
-export function SSSFSessionGrid({ tasks, onOpenTrace, onDelete }: Props) {
+export function FactoryTimelineGrid({ tasks, onOpenTrace, onDelete }: Props) {
   if (tasks.length === 0) {
     return (
       <div
@@ -31,14 +31,14 @@ export function SSSFSessionGrid({ tasks, onOpenTrace, onDelete }: Props) {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-      {/* Contagem de Sessões */}
+      {/* Session counter */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 4px' }}>
         <span style={{ fontSize: 14, fontFamily: 'ui-monospace, monospace', color: '#8b9cb6' }}>
           <b style={{ color: '#f2f5fa' }}>{tasks.length}</b> execuções gravadas
         </span>
       </div>
 
-      {/* Grid de Cards SSSF */}
+      {/* Grid of timeline cards */}
       <div
         style={{
           display: 'grid',
@@ -47,7 +47,7 @@ export function SSSFSessionGrid({ tasks, onOpenTrace, onDelete }: Props) {
         }}
       >
         {tasks.map(task => (
-          <SSSFSessionCard
+          <FactoryTimelineCard
             key={task.id}
             task={task}
             onOpenTrace={onOpenTrace}

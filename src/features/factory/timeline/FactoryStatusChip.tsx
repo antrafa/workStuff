@@ -2,7 +2,7 @@ type Props = {
   status?: string
 }
 
-export function SSSFStatusChip({ status = 'queued' }: Props) {
+export function FactoryStatusChip({ status = 'queued' }: Props) {
   const isSuccess = status === 'success' || status === 'done' || status === 'review'
   const isRunning = status === 'running' || status === 'planning' || status === 'building' || status === 'qa_security'
   const isFail = status === 'fail' || status === 'error'
@@ -25,7 +25,7 @@ export function SSSFStatusChip({ status = 'queued' }: Props) {
         }}
       >
         <span>✓</span>
-        <span>success</span>
+        <span>sucesso</span>
       </span>
     )
   }
@@ -48,7 +48,7 @@ export function SSSFStatusChip({ status = 'queued' }: Props) {
         }}
       >
         <span style={{ display: 'inline-block', width: 6, height: 6, borderRadius: '50%', background: '#6cb6ff', boxShadow: '0 0 8px #6cb6ff', animation: 'pulse 1.4s infinite' }} />
-        <span>running</span>
+        <span>em execução</span>
       </span>
     )
   }
@@ -71,7 +71,7 @@ export function SSSFStatusChip({ status = 'queued' }: Props) {
         }}
       >
         <span>✕</span>
-        <span>error</span>
+        <span>falha</span>
       </span>
     )
   }

@@ -16,8 +16,8 @@ import { Markdown } from '@/ui'
 import { api } from '@/lib/api'
 import { streamPost } from '@/lib/stream'
 import type { FactoryTask } from '../../../../server/lib/factory/types.ts'
-import { SSSFStatusChip } from './SSSFStatusChip'
-import { SSSFStatChip } from './SSSFStatChip'
+import { FactoryStatusChip } from './FactoryStatusChip'
+import { FactoryStatChip } from './FactoryStatChip'
 
 type Props = {
   task: FactoryTask
@@ -44,7 +44,7 @@ function fmtDuration(ms?: number | null): string {
   return `${min}m ${remSec < 10 ? '0' : ''}${remSec}s`
 }
 
-export function SSSFTraceVisualizer({ task, onBack, onUpdate }: Props) {
+export function FactoryTraceVisualizer({ task, onBack, onUpdate }: Props) {
   const [selectedSpanId, setSelectedSpanId] = useState<string | null>(null)
   const [sessionEvents, setSessionEvents] = useState<any[]>([])
   const [loadingEvents, setLoadingEvents] = useState(false)
@@ -225,7 +225,7 @@ export function SSSFTraceVisualizer({ task, onBack, onUpdate }: Props) {
           </button>
 
           <span style={{ fontSize: 13, color: '#8b9cb6' }}>
-            Fábrica de Software &gt; sessões &gt;{' '}
+            Fábrica de Software &gt; execuções &gt;{' '}
             <b style={{ color: '#c084fc', fontFamily: 'ui-monospace, monospace' }}>{task.id}</b>
             {activeSpan && <span> &gt; <b style={{ color: '#5ad2dd' }}>{activeSpan.name}</b></span>}
           </span>
@@ -274,17 +274,17 @@ export function SSSFTraceVisualizer({ task, onBack, onUpdate }: Props) {
           {task.title}
         </span>
 
-        <SSSFStatusChip status={task.state} />
+        <FactoryStatusChip status={task.state} />
 
         <span style={{ fontSize: 12, color: '#8b9cb6', fontFamily: 'ui-monospace, monospace' }}>
           iniciado em {new Date(task.createdAt).toLocaleTimeString()}
         </span>
 
         <div style={{ display: 'inline-flex', gap: 8, marginLeft: 'auto', flexWrap: 'wrap' }}>
-          <SSSFStatChip kind="cost" value={0.0} />
-          <SSSFStatChip kind="runtime" value={totalDurationMs} />
-          <SSSFStatChip kind="model" value={task.model || task.provider} />
-          <SSSFStatChip kind="tools" value={spans.reduce((a, s) => a + (s.toolCalls?.length ?? 0), 0)} />
+          <FactoryStatChip kind="cost" value={0.0} />
+          <FactoryStatChip kind="runtime" value={totalDurationMs} />
+          <FactoryStatChip kind="model" value={task.model || task.provider} />
+          <FactoryStatChip kind="tools" value={spans.reduce((a, s) => a + (s.toolCalls?.length ?? 0), 0)} />
         </div>
       </div>
 
@@ -462,14 +462,14 @@ export function SSSFTraceVisualizer({ task, onBack, onUpdate }: Props) {
                         <span style={{ fontSize: 13, fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                           {span.name}
                         </span>
-                        <SSSFStatChip kind="runtime" compact value={sDur} />
+                        <FactoryStatChip kind="runtime" compact value={sDur} />
                       </div>
 
                       <span style={{ fontSize: 11, color: '#8b9cb6', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                         {span.error ? span.error : span.phase}
                       </span>
 
-                      {/* Tool Ticks (Pequenas marcas verticais de ferramentas executadas) */}
+                      {/* Tool Ticks (Marcas verticais de ferramentas executadas) */}
                       <div style={{ position: 'relative', height: 8, width: '100%', marginTop: 2 }}>
                         {span.toolCalls?.map((tc, tcIdx) => (
                           <span
@@ -545,8 +545,8 @@ export function SSSFTraceVisualizer({ task, onBack, onUpdate }: Props) {
           >
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
               <span style={{ fontSize: 16, fontWeight: 700, color: '#f2f5fa' }}>{activeSpan.name}</span>
-              <SSSFStatusChip status={activeSpan.status} />
-              <SSSFStatChip kind="runtime" value={activeSpan.durationMs} />
+              <FactoryStatusChip status={activeSpan.status} />
+              <FactoryStatChip kind="runtime" value={activeSpan.durationMs} />
             </div>
 
             <div style={{ display: 'flex', alignItems: 'center', gap: 14, fontSize: 12, color: '#8b9cb6' }}>
@@ -661,14 +661,14 @@ export function SSSFTraceVisualizer({ task, onBack, onUpdate }: Props) {
                 {openAccordions.gates && (
                   <div style={{ padding: 14, display: 'flex', flexDirection: 'column', gap: 10 }}>
                     <div style={{ padding: 10, borderRadius: 6, background: '#131a26', borderLeft: '3px solid #4ade80', fontSize: 12 }}>
-                      <div style={{ fontWeight: 600, color: '#f2f5fa' }}>Gate 1: Verificação de Alterações Git (Diff Not Empty)</div>
+                      <div style={{ fontWeight: 600, color: '#f2f5fa' }}>Portão 1: Verificação de Alterações Git (Diff Not Empty)</div>
                       <div style={{ color: '#8b9cb6', marginTop: 2 }}>
                         {task.diffStat ? `${task.diffStat.filesChanged} arquivos modificados (+${task.diffStat.insertions} / -${task.diffStat.deletions})` : 'Validado na worktree'}
                       </div>
                     </div>
 
                     <div style={{ padding: 10, borderRadius: 6, background: '#131a26', borderLeft: '3px solid #4ade80', fontSize: 12 }}>
-                      <div style={{ fontWeight: 600, color: '#f2f5fa' }}>Gate 2: Suíte Determinística de Testes (Tests Pass)</div>
+                      <div style={{ fontWeight: 600, color: '#f2f5fa' }}>Portão 2: Suíte Determinística de Testes (Tests Pass)</div>
                       {task.qaReport?.output && (
                         <pre style={{ margin: '6px 0 0', padding: 8, background: '#06080f', borderRadius: 4, fontSize: 11, maxHeight: 120, overflowY: 'auto' }}>
                           {task.qaReport.output}

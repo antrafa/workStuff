@@ -1,8 +1,8 @@
 import { useState } from 'react'
 import type { FactoryTask } from '../../../../server/lib/factory/types.ts'
-import { SSSFStatusChip } from './SSSFStatusChip'
-import { SSSFStatChip } from './SSSFStatChip'
-import { SSSFPhaseDots } from './SSSFPhaseDots'
+import { FactoryStatusChip } from './FactoryStatusChip'
+import { FactoryStatChip } from './FactoryStatChip'
+import { FactoryPhaseDots } from './FactoryPhaseDots'
 
 type Props = {
   task: FactoryTask
@@ -33,7 +33,7 @@ const LANE_CONFIGS = [
   { id: 'code', label: 'code', color: '#60a5fa' },
 ]
 
-export function SSSFSessionCard({ task, onOpenTrace, onDelete }: Props) {
+export function FactoryTimelineCard({ task, onOpenTrace, onDelete }: Props) {
   const [isHovered, setIsHovered] = useState(false)
 
   // Calcula duração total
@@ -106,7 +106,7 @@ export function SSSFSessionCard({ task, onOpenTrace, onDelete }: Props) {
 
   return (
     <div
-      className="sssf-card"
+      className="timeline-card"
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
       onClick={() => onOpenTrace(task)}
@@ -134,7 +134,7 @@ export function SSSFSessionCard({ task, onOpenTrace, onDelete }: Props) {
         transition: 'all 0.2s ease',
       }}
     >
-      {/* Botão de Excluir / Arquivar no canto superior */}
+      {/* Botão de Excluir no canto superior */}
       {onDelete && isHovered && (
         <button
           type="button"
@@ -177,7 +177,7 @@ export function SSSFSessionCard({ task, onOpenTrace, onDelete }: Props) {
         {shortId}
       </span>
 
-      {/* Nome do Workflow em Ciano */}
+      {/* Nome da Esteira / Branch em Ciano */}
       <span
         style={{
           fontFamily: 'ui-monospace, SFMono-Regular, monospace',
@@ -189,7 +189,7 @@ export function SSSFSessionCard({ task, onOpenTrace, onDelete }: Props) {
         }}
         title={task.branchName}
       >
-        adw_pipeline · {task.branchName}
+        esteira · {task.branchName}
       </span>
 
       {/* Título / Demanda */}
@@ -313,8 +313,8 @@ export function SSSFSessionCard({ task, onOpenTrace, onDelete }: Props) {
         }}
       >
         <div style={{ display: 'inline-flex', alignItems: 'center', gap: 10 }}>
-          <SSSFStatusChip status={task.state} />
-          <SSSFPhaseDots spans={spans} state={task.state} />
+          <FactoryStatusChip status={task.state} />
+          <FactoryPhaseDots spans={spans} state={task.state} />
         </div>
         <span style={{ fontSize: 11, color: '#8b9cb6', fontFamily: 'ui-monospace, monospace' }}>
           {new Date(task.createdAt).toLocaleDateString(undefined, { day: '2-digit', month: 'short' })}
@@ -323,9 +323,9 @@ export function SSSFSessionCard({ task, onOpenTrace, onDelete }: Props) {
 
       {/* STAT CHIPS FOOTER */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-        <SSSFStatChip kind="cost" value={0.0} />
-        <SSSFStatChip kind="runtime" value={durationMs} />
-        <SSSFStatChip kind="tools" value={totalTools} />
+        <FactoryStatChip kind="cost" value={0.0} />
+        <FactoryStatChip kind="runtime" value={durationMs} />
+        <FactoryStatChip kind="tools" value={totalTools} />
       </div>
     </div>
   )

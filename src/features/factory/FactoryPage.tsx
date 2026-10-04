@@ -15,18 +15,18 @@ import { FactoryBoard } from './FactoryBoard'
 import { NewTaskModal } from './NewTaskModal'
 import { TaskReviewDrawer } from './TaskReviewDrawer'
 import { StandaloneAgentTab } from './StandaloneAgentTab'
-import { SSSFSessionGrid } from './sssf/SSSFSessionGrid'
-import { SSSFTraceVisualizer } from './sssf/SSSFTraceVisualizer'
+import { FactoryTimelineGrid } from './timeline/FactoryTimelineGrid'
+import { FactoryTraceVisualizer } from './timeline/FactoryTraceVisualizer'
 
 export default function FactoryPage() {
-  const [activeTab, setActiveTab] = useState<'sssf' | 'board' | 'agents'>('sssf')
+  const [activeTab, setActiveTab] = useState<'timeline' | 'board' | 'agents'>('timeline')
   const [modalOpen, setModalOpen] = useState(false)
   const [selectedTask, setSelectedTask] = useState<FactoryTask | null>(null)
   const [visualizerTask, setVisualizerTask] = useState<FactoryTask | null>(null)
 
   const tasksLoader = useAsync(() => api.get<FactoryTask[]>('/factory/tasks'))
 
-  // Atualização periódica leve a cada 6 segundos se houver tarefa rodando
+  // Periodic light refresh every 6 seconds when tasks are running
   useEffect(() => {
     const hasActive = tasksLoader.data?.some(
       t => t.state === 'planning' || t.state === 'building' || t.state === 'qa_security'
@@ -87,7 +87,7 @@ export default function FactoryPage() {
   return (
     <Page
       title="Fábrica de Software"
-      hint="Desenvolvimento com múltiplos agentes, rastreamento visual SSSF, isolamento estrito via Git Worktrees e portões mecânicos de aceitação."
+      hint="Desenvolvimento com múltiplos agentes, rastreamento visual em linha do tempo, isolamento estrito via Git Worktrees e portões mecânicos de aceitação."
       actions={
         <div className="row" style={{ gap: 8 }}>
           <button type="button" className="btn btn-sm" onClick={handleRefresh} title="Atualizar tarefas">
@@ -100,24 +100,24 @@ export default function FactoryPage() {
       }
     >
       <div className="stack" style={{ gap: 16 }}>
-        {/* Se uma tarefa estiver aberta no visualizador detalhado SSSF */}
+        {/* Detailed trace visualizer if a task is inspected */}
         {visualizerTask ? (
-          <SSSFTraceVisualizer
+          <FactoryTraceVisualizer
             task={visualizerTask}
             onBack={() => setVisualizerTask(null)}
             onUpdate={handleRefresh}
           />
         ) : (
           <>
-            {/* Badges de Resumo e Sub-navegação */}
+            {/* Header summary and tabs */}
             <div className="row" style={{ justifyContent: 'space-between', borderBottom: '1px solid var(--line)', paddingBottom: 12 }}>
               <div className="row" style={{ gap: 8 }}>
                 <button
                   type="button"
-                  className={`btn btn-sm ${activeTab === 'sssf' ? 'btn-primary' : ''}`}
-                  onClick={() => setActiveTab('sssf')}
+                  className={`btn btn-sm ${activeTab === 'timeline' ? 'btn-primary' : ''}`}
+                  onClick={() => setActiveTab('timeline')}
                 >
-                  <Activity size={14} /> Visualizador SSSF ({tasks.length})
+                  <Activity size={14} /> Linha do Tempo ({tasks.length})
                 </button>
                 <button
                   type="button"
@@ -144,11 +144,11 @@ export default function FactoryPage() {
               </div>
             </div>
 
-            {/* Conteúdo da Aba Ativa */}
-            {activeTab === 'sssf' && (
+            {/* Active tab content */}
+            {activeTab === 'timeline' && (
               <Async state={tasksLoader}>
                 {loadedTasks => (
-                  <SSSFSessionGrid
+                  <FactoryTimelineGrid
                     tasks={loadedTasks}
                     onOpenTrace={handleOpenTrace}
                     onDelete={handleDeleteTask}
@@ -189,14 +189,14 @@ export default function FactoryPage() {
           </>
         )}
 
-        {/* Modal de Criação */}
+        {/* New task modal */}
         <NewTaskModal
           open={modalOpen}
           onClose={() => setModalOpen(false)}
           onCreated={handleRefresh}
         />
 
-        {/* Gaveta de Revisão / Aprovação (Kanban) */}
+        {/* Task review drawer */}
         <TaskReviewDrawer
           task={selectedTask}
           onClose={() => setSelectedTask(null)}
