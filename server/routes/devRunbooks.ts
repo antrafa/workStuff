@@ -10,6 +10,7 @@ import {
   devRunbookPath,
   execDevCommand,
   listDevRunbooks,
+  needsProject,
   parseDevRunbook,
   readRoot,
   saveRoot,
@@ -99,9 +100,16 @@ devRunbooksRouter.post('/run', handle(async req => {
     }
   }
 
+  // Sem pasta válida o comando rodaria no diretório do próprio painel (git branch -D no repo errado).
+  if (!cwd && needsProject(c.bin, c.args)) {
+    throw new Error('informe a pasta do projeto (parâmetro projeto) antes de executar este passo')
+  }
+
   const command = `${c.bin} ${c.args.join(' ')}`
   try {
-    const out = await execDevCommand(c.bin, c.args, cwd, 60_000)
+    // build e testes (npm test, mvn test) usam o mesmo teto do portão de testes da Fábrica; git é sempre rápido
+    const timeoutMs = c.bin === 'git' ? 60_000 : 10 * 60_000
+    const out = await execDevCommand(c.bin, c.args, cwd, timeoutMs)
     audit({ file, step: stepId, command, cwd, kind: c.kind, ok: true })
     return { ok: true, command, cwd: cwd ? tildify(cwd) : undefined, output: out.slice(0, 20_000) }
   } catch (e) {

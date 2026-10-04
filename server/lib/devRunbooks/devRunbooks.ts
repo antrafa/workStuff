@@ -181,34 +181,9 @@ export function classify(line: string, values: Record<string, string>): Classifi
   const args = tokens.slice(1)
   const sub = args[0] ?? ''
 
-  // Classificação Git
-  if (bin === 'git') {
-    if (['status', 'log', 'diff', 'show', 'remote', 'tag'].includes(sub)) {
-      return { kind: 'read', bin, args }
-    }
-    if (sub === 'branch') {
-      const isDelete = args.some(a => a === '-d' || a === '-D' || a.startsWith('--delete'))
-      return isDelete ? { kind: 'write', bin, args, action: 'remover branch' } : { kind: 'read', bin, args }
-    }
-    if (sub === 'worktree') {
-      const op = args[1] ?? 'list'
-      if (op === 'list') return { kind: 'read', bin, args }
-      return { kind: 'write', bin, args, action: `git worktree ${op}` }
-    }
-    if (sub === 'fetch') {
-      const isPrune = args.some(a => a === '-p' || a === '--prune')
-      return isPrune ? { kind: 'write', bin, args, action: 'limpar referências remotas' } : { kind: 'read', bin, args }
-    }
-    if (sub === 'stash') {
-      const op = args[1] ?? 'list'
-      if (['list', 'show'].includes(op)) return { kind: 'read', bin, args }
-      return { kind: 'write', bin, args, action: `git stash ${op}` }
-    }
-    if (['rebase', 'merge', 'checkout', 'switch', 'restore', 'reset', 'commit', 'pull', 'push'].includes(sub)) {
-      return { kind: 'write', bin, args, action: `git ${sub}` }
-    }
-    return { kind: 'read', bin, args }
-  }
+  const isVersionQuery = args.length === 1 && ['-v', '--version', 'version'].includes(sub)
+  if (isVersionQuery) return { kind: 'read', bin, args }
+  if (bin === 'git') return classifyGit(args)
 
   // Classificação Docker
   if (bin === 'docker' || bin === 'docker-compose') {
@@ -226,15 +201,55 @@ export function classify(line: string, values: Record<string, string>): Classifi
 
   // Classificação npm / pnpm / yarn
   if (bin === 'npm' || bin === 'pnpm' || bin === 'yarn') {
-    if (['outdated', 'audit', 'list', 'ls', 'view', 'why'].includes(sub)) {
+    const isAuditFix = sub === 'audit' && args[1] === 'fix'
+    if (['outdated', 'audit', 'list', 'ls', 'view', 'why'].includes(sub) && !isAuditFix) {
       return { kind: 'read', bin, args }
     }
     if (sub === 'cache' && args[1] === 'verify') return { kind: 'read', bin, args }
     return { kind: 'write', bin, args, action: `${bin} ${sub}` }
   }
 
-  return { kind: 'read', bin, args }
+  // cargo, mvn, gradle, go e make compilam, baixam e gravam artefatos: nunca contam como leitura.
+  return { kind: 'write', bin, args, action: `${bin} ${sub}`.trim() }
 }
+
+// Git: só o que comprovadamente não altera repositório, índice ou working tree roda sem confirmação.
+// Subcomando desconhecido conta como escrita (cherry-pick, clean, bisect, add, revert…).
+const GIT_READ = new Set([
+  'status', 'log', 'diff', 'show', 'reflog', 'rev-parse', 'ls-files', 'blame', 'shortlog', 'describe',
+  'merge-base', 'rev-list', 'cherry', 'grep', 'range-diff', 'count-objects', 'check-ignore', 'for-each-ref',
+])
+const BRANCH_WRITE_FLAG = /^(-d|-D|--delete|-m|-M|--move|-c|-C|--copy|-f|--force|-u|--set-upstream-to(=.*)?|--unset-upstream|--edit-description)$/
+const BRANCH_FILTER_FLAG = new Set(['--merged', '--no-merged', '--contains', '--no-contains', '--points-at', '--sort', '--format'])
+
+function isBranchListing(rest: string[]): boolean {
+  if (rest.some(a => BRANCH_WRITE_FLAG.test(a))) return false
+  if (rest.includes('--list') || rest.includes('-l')) return true
+  return rest.every((a, i) => a.startsWith('-') || BRANCH_FILTER_FLAG.has(rest[i - 1]))
+}
+
+function classifyGit(args: string[]): Classified {
+  const bin = 'git'
+  const [sub = '', op] = args
+  const read: Classified = { kind: 'read', bin, args }
+  const write = (action: string): Classified => ({ kind: 'write', bin, args, action })
+
+  if (GIT_READ.has(sub)) return read
+  if (sub === 'fsck') return args.includes('--lost-found') ? write('git fsck --lost-found') : read
+  if (sub === 'branch') {
+    if (isBranchListing(args.slice(1))) return read
+    return args.some(a => /^(-d|-D|--delete)$/.test(a)) ? write('remover branch') : write('criar ou alterar branch')
+  }
+  if (sub === 'worktree') return !op || op === 'list' ? read : write(`git worktree ${op}`)
+  if (sub === 'stash') return op === 'list' || op === 'show' ? read : write(`git stash ${op ?? 'push'}`)
+  if (sub === 'remote') return !op || op === '-v' || op === 'show' || op === 'get-url' ? read : write(`git remote ${op}`)
+  if (sub === 'tag') return !op || ['-l', '--list', '-n', '--contains', '--points-at'].includes(op) ? read : write('criar ou remover tag')
+  if (sub === 'fetch') return args.some(a => a === '-p' || a === '--prune') ? write('limpar referências remotas') : read
+  return write(`git ${sub}`)
+}
+
+// Comando que depende da pasta do projeto (todos, exceto docker fora do compose, que é global ao daemon).
+export const needsProject = (bin: string, args: string[]) => !(bin === 'docker' && args[0] !== 'compose')
 
 export async function execDevCommand(bin: string, args: string[], cwd?: string, timeoutMs = 60_000): Promise<string> {
   const dir = cwd && statSync(cwd, { throwIfNoEntry: false })?.isDirectory() ? cwd : undefined
@@ -294,6 +309,17 @@ if (import.meta.main && process.argv.includes('--selfcheck')) {
   assert.equal(classify('git worktree remove temp', {}).kind, 'write')
   assert.equal(classify('git worktree add -b feat temp origin/main', {}).kind, 'write')
 
+  // Git: leitura só com subcomando conhecido; o resto pede confirmação
+  for (const line of ['git reflog', 'git branch -vv', "git branch --list 'factory/*'", 'git branch --merged main', 'git stash list', 'git stash show -p 0', 'git remote -v', 'git tag -l', 'git ls-files --others --exclude-standard', 'git fetch origin main', 'git fsck --no-reflogs', 'npm version', 'mvn -v']) {
+    assert.equal(classify(line, {}).kind, 'read', line)
+  }
+  for (const line of ['git stash', 'git branch nova', 'git branch -m velho novo', 'git cherry-pick abc', 'git clean -fd', 'git bisect start', 'git revert HEAD', 'git remote add x y', 'git tag v1', 'git tag -d v1', 'git add -A', 'npm audit fix', 'npm version patch', 'git fsck --lost-found', 'make', 'mvn test', 'go test ./...']) {
+    assert.equal(classify(line, {}).kind, 'write', line)
+  }
+  assert.equal(needsProject('docker', ['system', 'df']), false)
+  assert.equal(needsProject('docker', ['compose', 'ps']), true)
+  assert.equal(needsProject('git', ['status']), true)
+
   // Testa rejeição de operadores de shell
   assert.equal(classify('git status; rm -rf .', {}).kind, 'blocked')
   assert.equal(classify('git log | grep erro', {}).kind, 'blocked')
@@ -316,10 +342,11 @@ if (import.meta.main && process.argv.includes('--selfcheck')) {
   assert.ok(listDevRunbooks(DEFAULT_ROOT).length >= 15, 'dev runbooks padrão encontrados')
   assert.equal(readRoot(), DEFAULT_ROOT)
 
-  // Validação estrita de todos os runbooks da seção factory
-  const factoryRunbooks = listDevRunbooks(DEFAULT_ROOT).filter(r => r.file.startsWith('factory/'))
-  assert.ok(factoryRunbooks.length >= 11, `esperado >= 11 runbooks de fábrica, encontrados ${factoryRunbooks.length}`)
-  for (const r of factoryRunbooks) {
+  // Todo runbook do projeto precisa ter passos executáveis (nenhum bloqueado pelo classificador)
+  const all = listDevRunbooks(DEFAULT_ROOT)
+  const factoryCount = all.filter(r => r.file.startsWith('factory/')).length
+  assert.ok(factoryCount >= 14, `esperado >= 14 runbooks de fábrica, encontrados ${factoryCount}`)
+  for (const r of all) {
     const raw = readFileSync(devRunbookPath(DEFAULT_ROOT, r.file), 'utf-8')
     const segs = parseDevRunbook(raw)
     const steps = segs.filter(s => s.type === 'step') as Extract<Segment, { type: 'step' }>[]
