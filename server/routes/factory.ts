@@ -510,7 +510,7 @@ factoryRouter.post('/tasks/:id/approve-plan', async (req, res) => {
       phase: 'qa_security',
       kind: 'gate',
     })
-    let testGateResult = await gateTestsPass(worktreePath, undefined, signal)
+    let testGateResult = await gateTestsPass(worktreePath, { signal })
     throwIfCancelled(signal)
 
     // Self-repair loop when tests fail
@@ -537,7 +537,7 @@ factoryRouter.post('/tasks/:id/approve-plan', async (req, res) => {
         phase: 'qa_security',
         kind: 'gate',
       })
-      testGateResult = await gateTestsPass(worktreePath, undefined, signal)
+      testGateResult = await gateTestsPass(worktreePath, { signal })
       throwIfCancelled(signal)
     }
 
@@ -590,7 +590,7 @@ factoryRouter.post('/tasks/:id/approve-plan', async (req, res) => {
         phase: 'qa_security',
         kind: 'gate',
       })
-      testGateResult = await gateTestsPass(worktreePath, undefined, signal)
+      testGateResult = await gateTestsPass(worktreePath, { signal })
       throwIfCancelled(signal)
       await defaultFactoryStore.finishSpan(task.id, spanRetest, {
         status: testGateResult.passed ? 'success' : 'failed',
@@ -686,7 +686,7 @@ factoryRouter.post('/tasks/:id/adjust', async (req, res) => {
     })
     await defaultFactoryStore.finishSpan(task.id, spanAdjust, { status: 'success' })
 
-    const testGateResult = await gateTestsPass(worktreePath, undefined, ctx.signal)
+    const testGateResult = await gateTestsPass(worktreePath, { signal: ctx.signal })
     throwIfCancelled(ctx.signal)
 
     await commitWorktree(worktreePath, `fix(${task.id}): ajuste conforme feedback do revisor`)

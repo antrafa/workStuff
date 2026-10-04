@@ -5,9 +5,10 @@
 import assert from 'node:assert/strict'
 import { existsSync, mkdirSync, readFileSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { tmpdir } from 'node:os'
+import { homedir, tmpdir } from 'node:os'
 import { spawn } from 'node:child_process'
 import { run } from '../run.ts'
+import { jail, withSandbox } from './runner.ts'
 
 export type DiffGateResult = {
   passed: boolean
@@ -96,50 +97,61 @@ export function gateArtifactsExist(worktreePath: string, claimedFiles: string[],
   }
 }
 
-// 3. Gate: Executa testes determinísticos do projeto via código TypeScript (não IA)
-// 10 min: `mvn test` in a real Java project rarely fits the old 60s and a timeout reads as a failure
-export async function gateTestsPass(worktreePath: string, timeoutMs = 10 * 60_000, signal?: AbortSignal): Promise<TestsGateResult> {
-  const t0 = Date.now()
+// 3. Gate: runs the project's verification (tests, or the task's own command) in code, not by an agent.
+// The suite executes code the agent just wrote, so it runs in the same bwrap jail as the agent:
+// only the worktree, a tmp dir and the build tool caches are writable. Without bwrap it does not run.
+// 10 min: `mvn test` in a real Java project rarely fits less, and a timeout reads as a failure.
+const BUILD_CACHES = ['.m2', '.npm', '.gradle', '.cache/go-build', 'go/pkg/mod', '.cache/pip'].map(d => join(homedir(), d))
+const MAX_OUTPUT = 30_000
 
-  // Detecta comando de teste baseado nos arquivos presentes
-  let cmd: { bin: string; args: string[] } | null = null
-
+export function detectVerifyCommand(worktreePath: string): string | null {
   const pkgJsonPath = join(worktreePath, 'package.json')
   if (existsSync(pkgJsonPath)) {
     try {
-      const pkg = JSON.parse(readFileSync(pkgJsonPath, 'utf-8'))
-      if (pkg.scripts?.test && !pkg.scripts.test.includes('no test specified')) {
-        cmd = { bin: 'npm', args: ['test'] }
-      }
+      const test = JSON.parse(readFileSync(pkgJsonPath, 'utf-8')).scripts?.test
+      if (test && !test.includes('no test specified')) return 'npm test'
     } catch {
-      // ignora
-    }
-  } else if (existsSync(join(worktreePath, 'pom.xml'))) {
-    cmd = { bin: 'mvn', args: ['test'] }
-  } else if (existsSync(join(worktreePath, 'pytest.ini')) || existsSync(join(worktreePath, 'pyproject.toml'))) {
-    cmd = { bin: 'pytest', args: [] }
-  } else if (existsSync(join(worktreePath, 'go.mod'))) {
-    cmd = { bin: 'go', args: ['test', './...'] }
-  }
-
-  if (!cmd) {
-    return {
-      passed: true,
-      skipped: true,
-      output: 'Nenhum script de teste automatizado detectado no repositório.',
-      exitCode: 0,
-      durationMs: Date.now() - t0,
+      // unreadable package.json: fall through to the other build files
     }
   }
+  if (existsSync(join(worktreePath, 'pom.xml'))) return 'mvn -q test'
+  if (existsSync(join(worktreePath, 'gradlew'))) return './gradlew test'
+  if (existsSync(join(worktreePath, 'pytest.ini')) || existsSync(join(worktreePath, 'pyproject.toml'))) return 'pytest'
+  if (existsSync(join(worktreePath, 'go.mod'))) return 'go test ./...'
+  return null
+}
 
+export async function gateTestsPass(
+  worktreePath: string,
+  opts: { command?: string; timeoutMs?: number; signal?: AbortSignal } = {},
+): Promise<TestsGateResult> {
+  const t0 = Date.now()
+  const command = opts.command?.trim() || detectVerifyCommand(worktreePath)
+  if (!command) {
+    return { passed: true, skipped: true, output: 'Nenhum comando de verificação detectado no repositório.', exitCode: 0, durationMs: 0 }
+  }
+  return withSandbox([worktreePath, ...BUILD_CACHES], async sandbox => {
+    if (!sandbox) {
+      const reason = 'bwrap (bubblewrap) não está instalado: a suíte não roda fora do sandbox porque executa código escrito pelo agente.'
+      return { passed: false, skipped: true, command, output: reason, exitCode: -1, durationMs: 0, reason }
+    }
+    return spawnVerify(jail(sandbox, worktreePath, 'sh', ['-c', command]), command, worktreePath, t0, opts)
+  })
+}
+
+function spawnVerify(
+  spec: { bin: string; args: string[] },
+  command: string,
+  worktreePath: string,
+  t0: number,
+  { timeoutMs = 10 * 60_000, signal }: { timeoutMs?: number; signal?: AbortSignal },
+): Promise<TestsGateResult> {
   return new Promise(resolve => {
     let output = ''
     let settled = false
-    const command = `${cmd.bin} ${cmd.args.join(' ')}`
-    const child = spawn(cmd.bin, cmd.args, {
+    const child = spawn(spec.bin, spec.args, {
       cwd: worktreePath,
-      shell: true,
-      // Own process group so we can stop the shell AND the test runner it spawns
+      // Own process group so we can stop the jail AND the test runner it spawns
       detached: process.platform !== 'win32',
       env: { ...process.env, CI: 'true' },
     })
@@ -158,53 +170,27 @@ export async function gateTestsPass(worktreePath: string, timeoutMs = 10 * 60_00
       settled = true
       clearTimeout(timer)
       signal?.removeEventListener('abort', onAbort)
-      resolve(result)
+      // The tail carries the failure; the head of a long Maven log is download noise
+      resolve({ ...result, output: result.output.length > MAX_OUTPUT ? `[...]\n${result.output.slice(-MAX_OUTPUT)}` : result.output })
     }
+    const fail = (reason: string, extra: string) =>
+      finish({ passed: false, command, output: output + extra, exitCode: -1, durationMs: Date.now() - t0, reason })
 
     const timer = setTimeout(() => {
       killTree()
-      finish({
-        passed: false,
-        command,
-        output: output + '\n[Timeout após ' + Math.round(timeoutMs / 1000) + 's]',
-        exitCode: -1,
-        durationMs: Date.now() - t0,
-        reason: 'Tempo limite de execução de testes excedido.',
-      })
+      fail('Tempo limite de execução de testes excedido.', `\n[Timeout após ${Math.round(timeoutMs / 1000)}s]`)
     }, timeoutMs)
 
     const onAbort = () => {
       killTree()
-      finish({
-        passed: false,
-        command,
-        output: output + '\n[Interrompido pelo usuário]',
-        exitCode: -1,
-        durationMs: Date.now() - t0,
-        reason: 'Execução de testes interrompida pelo usuário.',
-      })
+      fail('Execução de testes interrompida pelo usuário.', '\n[Interrompido pelo usuário]')
     }
     if (signal?.aborted) onAbort()
     else signal?.addEventListener('abort', onAbort, { once: true })
 
-    child.stdout.on('data', chunk => {
-      output += chunk.toString('utf-8')
-    })
-    child.stderr.on('data', chunk => {
-      output += chunk.toString('utf-8')
-    })
-
-    child.on('error', err => {
-      finish({
-        passed: false,
-        command,
-        output: `${output}\n${err.message}`,
-        exitCode: 1,
-        durationMs: Date.now() - t0,
-        reason: err.message,
-      })
-    })
-
+    child.stdout.on('data', chunk => (output += chunk.toString('utf-8')))
+    child.stderr.on('data', chunk => (output += chunk.toString('utf-8')))
+    child.on('error', err => fail(err.message, `\n${err.message}`))
     child.on('close', (code, sig) => {
       // code is null when the process was killed by a signal: that is never a pass
       const exitCode = code ?? -1
@@ -219,6 +205,10 @@ export async function gateTestsPass(worktreePath: string, timeoutMs = 10 * 60_00
     })
   })
 }
+
+// 4. Gate: the Documenter may only touch documentation. Anything else it changed is thrown away.
+const DOC_FILE = /(^|\/)(docs?|documentation)\/|\.(md|mdx|rst|adoc|txt)$|(^|\/)(README|CHANGELOG|CONTRIBUTING)[^/]*$/i
+export const nonDocFiles = (files: string[]) => files.filter(f => !DOC_FILE.test(f))
 
 // Autoteste
 if (import.meta.main && process.argv.includes('--selfcheck')) {
@@ -243,6 +233,23 @@ if (import.meta.main && process.argv.includes('--selfcheck')) {
     const testSkip = await gateTestsPass(tmp)
     assert.equal(testSkip.passed, true)
     assert.equal(testSkip.skipped, true)
+
+    writeFileSync(join(tmp, 'pom.xml'), '<project/>')
+    assert.equal(detectVerifyCommand(tmp), 'mvn -q test')
+    rmSync(join(tmp, 'pom.xml'))
+
+    // Custom command runs jailed: writes inside the worktree work, outside are refused
+    const outside = join(homedir(), `.workstuff-gate-escape-${process.pid}`)
+    const jailed = await gateTestsPass(tmp, { command: `touch inside.txt && touch ${outside}` })
+    if (!jailed.skipped) {
+      assert.ok(existsSync(join(tmp, 'inside.txt')), 'escreve na worktree')
+      assert.equal(jailed.passed, false, 'escrita fora da worktree falha')
+      assert.ok(!existsSync(outside), 'nada escapou do sandbox')
+    }
+    const failing = await gateTestsPass(tmp, { command: 'exit 3' })
+    if (!failing.skipped) assert.equal(failing.exitCode, 3)
+
+    assert.deepEqual(nonDocFiles(['README.md', 'docs/api.yaml', 'src/a.ts', 'CHANGELOG']), ['src/a.ts'])
 
     console.log('factory gates selfcheck: ok')
   } finally {

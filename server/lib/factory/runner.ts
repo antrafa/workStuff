@@ -35,7 +35,18 @@ export type FactoryRunOptions = {
 // Claude authenticates, writes in cwd and gets EROFS outside it.
 export type Sandbox = { writable: string[]; tmpDir: string }
 
-function jail(sandbox: Sandbox, cwd: string, bin: string, args: string[]): { bin: string; args: string[] } {
+// Runs fn with a fresh jail tmp dir, or with no sandbox when bwrap is missing (the caller decides
+// whether that is acceptable). The tmp dir is always removed.
+export async function withSandbox<T>(writable: string[], fn: (sandbox: Sandbox | undefined) => Promise<T>): Promise<T> {
+  const tmpDir = (await which('bwrap')) ? mkdtempSync(join(tmpdir(), 'workstuff-factory-')) : null
+  try {
+    return await fn(tmpDir ? { writable: writable.filter(existsSync), tmpDir } : undefined)
+  } finally {
+    if (tmpDir) rmSync(tmpDir, { recursive: true, force: true })
+  }
+}
+
+export function jail(sandbox: Sandbox, cwd: string, bin: string, args: string[]): { bin: string; args: string[] } {
   return {
     bin: 'bwrap',
     args: [
@@ -97,7 +108,7 @@ export function buildFactoryArgs(
 
 function sandboxDirs(provider: ProviderId, cwd: string): string[] {
   if (provider === 'agy') return [cwd, join(homedir(), '.gemini')]
-  return [cwd, join(homedir(), '.claude'), join(homedir(), '.claude.json')].filter(existsSync)
+  return [cwd, join(homedir(), '.claude'), join(homedir(), '.claude.json')]
 }
 
 export async function runFactoryAgent(options: FactoryRunOptions): Promise<RunResult> {
@@ -109,10 +120,9 @@ export async function runFactoryAgent(options: FactoryRunOptions): Promise<RunRe
   const mode = options.readOnly ? 'read' : agent.mode
 
   const needsJail = provider === 'agy' || (provider === 'claude' && mode === 'write')
-  const tmpDir = needsJail && (await which('bwrap')) ? mkdtempSync(join(tmpdir(), 'workstuff-factory-')) : null
-  const sandbox = tmpDir ? { writable: sandboxDirs(provider, options.cwd), tmpDir } : undefined
+  const writable = needsJail ? sandboxDirs(provider, options.cwd) : []
 
-  try {
+  return withSandbox(writable, async sandbox => {
     const cliSpec = buildFactoryArgs(provider, {
       prompt: options.prompt,
       systemPrompt: agent.systemPrompt,
@@ -120,10 +130,10 @@ export async function runFactoryAgent(options: FactoryRunOptions): Promise<RunRe
       cwd: options.cwd,
       model,
       effort,
-      sandbox,
+      sandbox: needsJail ? sandbox : undefined,
     })
 
-    return await spawnCli(provider, model, cliSpec, {
+    return spawnCli(provider, model, cliSpec, {
       prompt: options.prompt,
       cwd: options.cwd,
       signal: options.signal,
@@ -131,9 +141,7 @@ export async function runFactoryAgent(options: FactoryRunOptions): Promise<RunRe
       timeoutMs: options.timeoutMs ?? 15 * 60_000,
       stallMs: 4 * 60_000,
     })
-  } finally {
-    if (tmpDir) rmSync(tmpDir, { recursive: true, force: true })
-  }
+  })
 }
 
 if (import.meta.main && process.argv.includes('--selfcheck')) {
