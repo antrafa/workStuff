@@ -25,10 +25,19 @@ export const NAV: NavGroup[] = [
     ],
   },
   {
-    label: 'Deploy',
+    label: 'Ferramentas',
     items: [
+      { path: '/conversores', label: 'Conversores', hint: 'JWT, base64, URL, timestamp, UUID, cron, JSON, diff, regex, hash', icon: Wrench },
+      { path: '/servicos', label: 'Serviços locais', hint: 'Portas em escuta, containers e projetos compose', icon: Server },
+      { path: '/agenda', label: 'Verificações agendadas', hint: 'Avisa quando pipeline, certificado ou pods mudam de estado', icon: BellRing },
+      { path: '/gerador', label: 'Gerador de dados', hint: 'CPF, CNPJ, pessoa e empresa de teste', icon: Dices },
       { path: '/maquina', label: 'Máquina', hint: 'O que falta instalar para trabalhar', icon: Stethoscope },
       { path: '/perfil', label: 'Perfil de equipe', hint: 'Exporta e importa a configuração para outra pessoa', icon: Users },
+    ],
+  },
+  {
+    label: 'Deploy',
+    items: [
       { path: '/repositorios', label: 'Repositórios', hint: 'Navega no GitLab/GitHub e clona com a hierarquia de pastas', icon: GitBranch },
       { path: '/pipelines', label: 'Pipelines', hint: 'Esteiras do GitLab CI e GitHub Actions, com a falha explicada pela IA', icon: Workflow },
       { path: '/revisao', label: 'Revisão antes do MR', hint: 'A IA revisa o diff da sua branch contra a base', icon: GitPullRequest },
@@ -46,15 +55,6 @@ export const NAV: NavGroup[] = [
       { path: '/upgrade', label: 'Upgrade', hint: 'APIs removidas, certificados e credenciais antes de atualizar', icon: ArrowUpCircle },
       { path: '/runbooks', label: 'Runbooks', hint: 'Procedimentos em Markdown com passos kubectl executáveis', icon: BookOpen },
       { path: '/performance', label: 'Performance', hint: 'CPU, memória e restarts no tempo', icon: Activity },
-    ],
-  },
-  {
-    label: 'Ferramentas',
-    items: [
-      { path: '/conversores', label: 'Conversores', hint: 'JWT, base64, URL, timestamp, UUID, cron, JSON, diff, regex, hash', icon: Wrench },
-      { path: '/servicos', label: 'Serviços locais', hint: 'Portas em escuta, containers e projetos compose', icon: Server },
-      { path: '/agenda', label: 'Verificações agendadas', hint: 'Avisa quando pipeline, certificado ou pods mudam de estado', icon: BellRing },
-      { path: '/gerador', label: 'Gerador de dados', hint: 'CPF, CNPJ, pessoa e empresa de teste', icon: Dices },
     ],
   },
 
