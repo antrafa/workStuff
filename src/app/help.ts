@@ -276,7 +276,7 @@ export const HELP: Record<string, Help> = {
   '/fabrica': {
     purpose: 'Orquestra o ciclo de desenvolvimento com sete agentes de IA (Analyst, Architect, Implementer, Tester, Reviewer, Security e Documenter) em Git Worktrees isoladas, com portões verificados por código e aprovação humana antes de qualquer envio.',
     steps: [
-      'Clique em "Nova Tarefa", importe uma issue do GitLab ou GitHub ou digite uma tarefa manual. Se quiser, informe o comando de verificação (ex.: npm run typecheck && npm test).',
+      'Primeira vez? "Modo guiado" confere bwrap e CLIs, lê o repositório, ajuda a escrever a demanda e escolhe modelos e teto de custo. Para criar direto, use "Nova Tarefa" (importa issue do GitLab ou GitHub, ou tarefa manual).',
       'O Analyst escreve os critérios de aceite. Se houver dúvida de negócio, a tarefa para em "aguardando respostas" até você responder.',
       'O Architect gera o plano. Revise, edite se quiser e clique em "Aprovar e Construir".',
       'O Implementer codifica na worktree. Se um portão reprovar (sem alteração, arquivo declarado ausente, verificação falhando), ele recebe a falha e corrige, até 3 tentativas.',
@@ -288,6 +288,8 @@ export const HELP: Record<string, Help> = {
       'O comando de verificação roda dentro do bwrap: executa código escrito pelo agente, então só a worktree e os caches de build são graváveis. Sem bwrap, a verificação não roda e o QA aparece como reprovado.',
       'O veredito da revisão é calculado em código: bloqueia achado high ou critical com confiança 75 ou mais, e critério de aceite não atendido.',
       'O custo e os tokens aparecem quando o provedor os informa (Claude e Codex).',
+      'Na linha do tempo, clique em qualquer fase para ver tudo dela num modal: o resultado (critérios, plano, achados, comando e saída do portão), a saída do agente ao vivo e cada ferramenta chamada.',
+      'Sem script de teste, a verificação usa o typecheck ou o build do projeto, para ao menos provar que compila.',
       'Teto de custo: conferido antes de cada agente, somando todas as execuções da tarefa. Ao atingir, a tarefa para com erro; aumente o teto na própria tarefa e tente de novo. Uma execução pode passar um pouco do teto, porque o custo só chega quando ela termina.',
       'Modelo por agente: em "Nova Tarefa", escolha um modelo forte para especificar, planejar e revisar e um mais barato para construir, testar e documentar.',
       'Você também pode acionar qualquer um dos agentes de forma independente na aba de Agentes Especializados, sempre em modo leitura.',

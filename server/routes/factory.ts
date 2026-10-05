@@ -4,6 +4,8 @@ import { Router, type Response } from 'express'
 import { openInEditor, pickFolder } from '../lib/desktop.ts'
 import { openSse } from '../lib/sse.ts'
 import { repoInfo } from '../lib/review/git.ts'
+import { which } from '../lib/run.ts'
+import { detectVerifyCommand } from '../lib/factory/gates.ts'
 import { defaultFactoryStore } from '../lib/factory/store.ts'
 import { getWorktreeDiff, removeWorktree, mergeWorktreeLocal, pushWorktreeBranch, targetBranchOf } from '../lib/factory/worktree.ts'
 import { SPECIALIZED_AGENTS } from '../lib/factory/agents.ts'
@@ -279,6 +281,23 @@ factoryRouter.post('/tasks', async (req, res) => {
   } catch (e) {
     res.status(500).json({ error: (e as Error).message })
   }
+})
+
+// What the guided wizard checks before the first task: sandbox, AI CLIs and, when a folder is
+// given, whether it is a git repo, its default base, pending changes and the verify command.
+factoryRouter.get('/preflight', async (req, res) => {
+  const repoPath = String(req.query.repoPath ?? '').trim()
+  const [bwrap, claude, codex, agy] = await Promise.all(['bwrap', 'claude', 'codex', 'agy'].map(async b => Boolean(await which(b))))
+  let repo: Record<string, unknown> | null = null
+  if (repoPath) {
+    try {
+      const info = await repoInfo(repoPath)
+      repo = { ok: true, current: info.current, defaultBase: info.defaultBase ?? info.current, dirty: info.dirty, verifyCommand: detectVerifyCommand(repoPath) }
+    } catch (e) {
+      repo = { ok: false, error: (e as Error).message }
+    }
+  }
+  res.json({ bwrap, providers: { claude, codex, agy }, settings: readSettings(), repo })
 })
 
 // Seletor de pasta nativa

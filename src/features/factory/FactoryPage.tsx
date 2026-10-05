@@ -3,6 +3,7 @@ import {
   Activity,
   Bot,
   Boxes,
+  Compass,
   Factory,
   Plus,
   RefreshCw,
@@ -20,6 +21,15 @@ import { StandaloneAgentTab } from './StandaloneAgentTab'
 import { FactoryTimelineGrid } from './timeline/FactoryTimelineGrid'
 import { FactoryTraceVisualizer } from './timeline/FactoryTraceVisualizer'
 import { isTaskRunning } from './factoryRun'
+import { FactoryWizard, WIZARD_SEEN_KEY } from './FactoryWizard'
+
+function wizardSeen(): boolean {
+  try {
+    return localStorage.getItem(WIZARD_SEEN_KEY) === '1'
+  } catch {
+    return true
+  }
+}
 
 export default function FactoryPage() {
   const [activeTab, setActiveTab] = useState<'timeline' | 'board' | 'agents'>('timeline')
@@ -29,6 +39,11 @@ export default function FactoryPage() {
   const [visualizerTask, setVisualizerTask] = useState<FactoryTask | null>(null)
 
   const tasksLoader = useAsync(() => api.get<FactoryTask[]>('/factory/tasks'))
+  const [wizardOpen, setWizardOpen] = useState(false)
+  // First visit with an empty pipeline: start guided
+  useEffect(() => {
+    if (tasksLoader.data?.length === 0 && !wizardSeen()) setWizardOpen(true)
+  }, [tasksLoader.data])
 
   // The board refreshes itself while something runs; the trace visualizer polls its own task
   const hasActive = Boolean(tasksLoader.data?.some(isTaskRunning))
@@ -77,6 +92,9 @@ export default function FactoryPage() {
           </Link>
           <button type="button" className="btn btn-sm" onClick={handleRefresh} title="Atualizar tarefas">
             <RefreshCw size={14} /> Atualizar
+          </button>
+          <button type="button" className="btn btn-sm" onClick={() => setWizardOpen(true)} title="Passo a passo: pré-requisitos, repositório, demanda e custo">
+            <Compass size={14} /> Modo guiado
           </button>
           <button type="button" className="btn btn-sm btn-primary" onClick={() => setModalOpen(true)}>
             <Plus size={15} /> Nova Tarefa
@@ -177,6 +195,24 @@ export default function FactoryPage() {
               <StandaloneAgentTab />
             )}
           </>
+        )}
+
+        {wizardOpen && (
+          <FactoryWizard
+            onClose={() => {
+              try {
+                localStorage.setItem(WIZARD_SEEN_KEY, '1')
+              } catch {
+                // private window: it opens again next visit
+              }
+              setWizardOpen(false)
+            }}
+            onStarted={task => {
+              setWizardOpen(false)
+              handleRefresh()
+              setVisualizerTask(task)
+            }}
+          />
         )}
 
         {/* New task modal */}

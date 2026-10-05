@@ -2,14 +2,9 @@ import { useState, useEffect } from 'react'
 import { FolderOpen, GitPullRequest, Plus, Search, Cpu } from 'lucide-react'
 import { Modal, Segmented } from '@/ui'
 import { api } from '@/lib/api'
-import { AGENT_ORDER, AGENT_UI } from './factoryRun'
+import { AGENT_ORDER, AGENT_UI, CLAUDE_SPLIT } from './factoryRun'
 import type { SpecializedAgentId } from '../../../server/lib/factory/types.ts'
 
-// Claude only: judgment (spec, plan, review) on the strong model, typing (build, tests, docs) on the cheap one
-const CLAUDE_SPLIT: Record<SpecializedAgentId, string> = {
-  analyst: 'opus', architect: 'opus', reviewer: 'opus', security: 'opus',
-  implementer: 'sonnet', tester: 'sonnet', documenter: 'sonnet',
-}
 
 type Issue = {
   id: string

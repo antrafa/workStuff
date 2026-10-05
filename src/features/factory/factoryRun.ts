@@ -35,6 +35,12 @@ export const AGENT_UI: Record<SpecializedAgentId, { name: string; role: string; 
 }
 export { AGENT_ORDER }
 
+// Claude only: judgment (spec, plan, review) on the strong model, typing (build, tests, docs) on the cheap one
+export const CLAUDE_SPLIT: Record<SpecializedAgentId, string> = {
+  analyst: 'opus', architect: 'opus', reviewer: 'opus', security: 'opus',
+  implementer: 'sonnet', tester: 'sonnet', documenter: 'sonnet',
+}
+
 export { taskUsage }
 
 // One label and one badge tone per state, for every place that shows a state.
