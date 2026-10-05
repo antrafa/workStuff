@@ -175,6 +175,8 @@ export type FactoryTask = {
   baseBranch: string
   branchName: string
   worktreePath?: string
+  // Worktree commit the last automatic review saw: where an interrupted adjust goes back to
+  reviewedHead?: string
   plan?: string
   // Developer answers to the Analyst's questions, fed into the next planning run
   clarifications?: string

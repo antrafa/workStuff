@@ -373,6 +373,7 @@ async function finishReview(
       testsRan: tests.command,
     },
     securityReport: { passed: outcome.passed, findings: outcome.findings, criteria: outcome.review.criteria, summary, fixRounds: outcome.fixRounds },
+    reviewedHead: await headOf(worktreePath),
     handoffs: { ...handoffs, review: outcome.review, security: outcome.security },
   })
 }

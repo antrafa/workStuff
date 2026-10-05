@@ -7,7 +7,8 @@ import { repoInfo } from '../lib/review/git.ts'
 import { which } from '../lib/run.ts'
 import { detectVerifyCommand } from '../lib/factory/gates.ts'
 import { defaultFactoryStore } from '../lib/factory/store.ts'
-import { getWorktreeDiff, removeWorktree, mergeWorktreeLocal, pushWorktreeBranch, targetBranchOf } from '../lib/factory/worktree.ts'
+import { existsSync } from 'node:fs'
+import { getWorktreeDiff, removeWorktree, mergeWorktreeLocal, pushWorktreeBranch, resetWorktree, targetBranchOf } from '../lib/factory/worktree.ts'
 import { SPECIALIZED_AGENTS } from '../lib/factory/agents.ts'
 import { runFactoryAgent } from '../lib/factory/runner.ts'
 import { adjustTask, buildTask, planTask, type ExecContext } from '../lib/factory/pipeline.ts'
@@ -95,17 +96,38 @@ function refuseState(res: Response, task: FactoryTask, allowed: FactoryTaskState
 }
 
 // A task stuck in a running state with no live execution (server restarted,
-// node --watch reload, crash) is moved to 'error' so the user can retry.
+// node --watch reload, crash) is moved to 'error' so the user can retry. One that had been
+// reviewed (an adjust was running) goes back to that review instead: "retry" from 'error'
+// rebuilds the worktree from scratch and would throw the reviewed work away.
 async function reconcileTask(task: FactoryTask): Promise<FactoryTask> {
   const executing = isExecuting(task.id)
-  if (!executing && RUNNING_STATES.includes(task.state)) {
-    const msg = 'Execução interrompida: o servidor foi reiniciado durante o processamento. Tente novamente.'
-    await defaultFactoryStore.failRunningSpans(task.id, msg)
-    const fixed: FactoryTask = { ...task, state: 'error', error: msg, updatedAt: new Date().toISOString() }
-    await defaultFactoryStore.saveTask(fixed)
-    return { ...((await defaultFactoryStore.getTask(task.id)) ?? fixed), executing: false }
+  if (executing || !RUNNING_STATES.includes(task.state)) return { ...task, executing }
+
+  await defaultFactoryStore.failRunningSpans(task.id, 'Execução interrompida: o servidor foi reiniciado.')
+  // Re-read: building from `task` would put back the spans just closed
+  const fresh = (await defaultFactoryStore.getTask(task.id)) ?? task
+  const backToReview = await restoreReviewedWork(fresh)
+  const fixed: FactoryTask = {
+    ...fresh,
+    state: backToReview ? 'review' : 'error',
+    error: backToReview
+      ? 'O servidor foi reiniciado durante o ajuste: a worktree voltou ao ponto da última revisão. Peça o ajuste de novo.'
+      : 'Execução interrompida: o servidor foi reiniciado durante o processamento. Tente novamente.',
+    updatedAt: new Date().toISOString(),
   }
-  return { ...task, executing }
+  await defaultFactoryStore.saveTask(fixed)
+  return { ...fixed, executing: false }
+}
+
+async function restoreReviewedWork(task: FactoryTask): Promise<boolean> {
+  if (!task.reviewedHead || !task.worktreePath || !existsSync(task.worktreePath)) return false
+  try {
+    await resetWorktree(task.worktreePath, task.reviewedHead)
+    return true
+  } catch (e) {
+    console.error(`[factory] não foi possível voltar ${task.id} à última revisão:`, e)
+    return false
+  }
 }
 
 // Provider and model become CLI arguments later: validate them here, at the boundary.
