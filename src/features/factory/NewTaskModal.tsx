@@ -2,6 +2,14 @@ import { useState, useEffect } from 'react'
 import { FolderOpen, GitPullRequest, Plus, Search, Cpu } from 'lucide-react'
 import { Modal, Segmented } from '@/ui'
 import { api } from '@/lib/api'
+import { AGENT_ORDER, AGENT_UI } from './factoryRun'
+import type { SpecializedAgentId } from '../../../server/lib/factory/types.ts'
+
+// Claude only: judgment (spec, plan, review) on the strong model, typing (build, tests, docs) on the cheap one
+const CLAUDE_SPLIT: Record<SpecializedAgentId, string> = {
+  analyst: 'opus', architect: 'opus', reviewer: 'opus', security: 'opus',
+  implementer: 'sonnet', tester: 'sonnet', documenter: 'sonnet',
+}
 
 type Issue = {
   id: string
@@ -32,6 +40,9 @@ export function NewTaskModal({ open, onClose, onCreated }: Props) {
   const [repoPath, setRepoPath] = useState('')
   const [baseBranch, setBaseBranch] = useState('')
   const [verifyCommand, setVerifyCommand] = useState('')
+  const [budgetUsd, setBudgetUsd] = useState('')
+  const [agentModels, setAgentModels] = useState<Partial<Record<SpecializedAgentId, string>>>({})
+  const [defaultModel, setDefaultModel] = useState('')
   // null until Configurações answers: the server then applies the configured provider
   const [provider, setProvider] = useState<SettingsResponse['provider'] | null>(null)
   const [saving, setSaving] = useState(false)
@@ -50,6 +61,7 @@ export function NewTaskModal({ open, onClose, onCreated }: Props) {
       api.get<SettingsResponse>('/factory/settings')
         .then(res => {
           if (res?.provider) setProvider(res.provider)
+          if (res?.model) setDefaultModel(res.model)
         })
         .catch(() => {})
     }
@@ -106,6 +118,8 @@ export function NewTaskModal({ open, onClose, onCreated }: Props) {
         baseBranch: baseBranch.trim() || undefined,
         provider: provider ?? undefined,
         verifyCommand: verifyCommand.trim() || undefined,
+        budgetUsd: budgetUsd.trim() || undefined,
+        agentModels,
         source: pickedIssue
           ? { type: pickedIssue.provider, repoPath, issueIid: pickedIssue.number, issueUrl: pickedIssue.url }
           : { type: 'manual', repoPath },
@@ -116,6 +130,8 @@ export function NewTaskModal({ open, onClose, onCreated }: Props) {
       setDescription('')
       setRepoPath('')
       setVerifyCommand('')
+      setBudgetUsd('')
+      setAgentModels({})
     } catch (err) {
       setError((err as Error).message)
     } finally {
@@ -236,6 +252,47 @@ export function NewTaskModal({ open, onClose, onCreated }: Props) {
                 Roda depois de cada entrega do Implementer, dentro do sandbox. Ex.: npm run typecheck &amp;&amp; npm test
               </span>
             </label>
+
+            <label className="stack" style={{ gap: 4 }}>
+              <span className="eyebrow">Teto de custo em US$ (opcional)</span>
+              <input
+                className="input mono"
+                type="number"
+                min="0.01"
+                step="0.01"
+                placeholder="sem teto"
+                value={budgetUsd}
+                onChange={e => setBudgetUsd(e.target.value)}
+              />
+              <span className="muted" style={{ fontSize: 12 }}>
+                Conferido antes de cada agente, somando todas as execuções da tarefa. Só vale para provedores que informam custo (Claude); uma execução pode passar um pouco do teto.
+              </span>
+            </label>
+
+            <details>
+              <summary className="eyebrow" style={{ cursor: 'pointer' }}>Modelo por agente (opcional)</summary>
+              <div className="stack" style={{ gap: 8, marginTop: 8 }}>
+                <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
+                  <button type="button" className="btn btn-sm" onClick={() => setAgentModels(CLAUDE_SPLIT)}>
+                    Claude: opus para julgar, sonnet para construir
+                  </button>
+                  <button type="button" className="btn btn-sm" onClick={() => setAgentModels({})}>Limpar</button>
+                </div>
+                {AGENT_ORDER.map(id => (
+                  <label key={id} className="row" style={{ gap: 8 }}>
+                    <span style={{ width: 110, fontSize: 13, color: AGENT_UI[id].color }}>{AGENT_UI[id].name}</span>
+                    <input
+                      className="input mono"
+                      style={{ flex: 1 }}
+                      placeholder={defaultModel || 'modelo padrão'}
+                      value={agentModels[id] ?? ''}
+                      onChange={e => setAgentModels(m => ({ ...m, [id]: e.target.value.trim() }))}
+                    />
+                  </label>
+                ))}
+                <span className="muted" style={{ fontSize: 12 }}>Vazio usa o modelo da tarefa. O id precisa existir no provedor escolhido.</span>
+              </div>
+            </details>
 
             <div className="row" style={{ justifyContent: 'flex-end', marginTop: 12 }}>
               <button type="button" className="btn" onClick={close} disabled={saving}>

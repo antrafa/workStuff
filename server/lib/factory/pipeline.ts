@@ -27,6 +27,7 @@ import {
   parseSpecEnvelope,
   parseTestEnvelope,
 } from './envelopes.ts'
+import { taskUsage } from './types.ts'
 import type { BuildEnvelope, ExecutionSpan, FactoryTask, PlanEnvelope, ReviewEnvelope, SecurityFinding, SpecEnvelope, SpecializedAgentId } from './types.ts'
 import type { RunResult } from '../ai/runner.ts'
 
@@ -72,12 +73,14 @@ async function agentStep<E>(
   parse: (text: string) => E,
 ): Promise<{ result: RunResult; envelope: E }> {
   throwIfCancelled(ctx.signal)
-  const spanId = await store.startSpan(ctx.taskId, { ...meta, kind: 'agent', agentId })
+  await assertWithinBudget(task)
+  const model = task.agentModels?.[agentId] || task.model
+  const spanId = await store.startSpan(ctx.taskId, { ...meta, kind: 'agent', agentId, model })
   const result = await runFactoryAgent({
     ...run,
     agentId,
     provider: task.provider,
-    model: task.model,
+    model,
     effort: task.effort,
     signal: ctx.signal,
     onEvent: event => {
@@ -96,6 +99,17 @@ async function agentStep<E>(
   const envelope = parse(result.text)
   await store.finishSpan(ctx.taskId, spanId, { status: 'success', envelope, usage: result.usage ?? undefined })
   return { result, envelope }
+}
+
+// Checked before each agent run, from the spans stored so far (retries and earlier runs included).
+// ponytail: the CLI reports cost only when a run ends, so one run can overshoot the cap; a mid-run
+// stop needs streamed usage. Providers that report no cost (agy) are never capped.
+async function assertWithinBudget(task: FactoryTask): Promise<void> {
+  if (!task.budgetUsd) return
+  const spent = taskUsage(await reload(task)).costUsd ?? 0
+  if (spent >= task.budgetUsd) {
+    throw new Error(`Teto de custo atingido: US$ ${spent.toFixed(2)} gastos de US$ ${task.budgetUsd.toFixed(2)}. Aumente o teto da tarefa para continuar.`)
+  }
 }
 
 // A deterministic step (git, gates) in its own span; `fails` turns a result into a failed span.

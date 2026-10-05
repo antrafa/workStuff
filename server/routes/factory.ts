@@ -9,7 +9,7 @@ import { getWorktreeDiff, removeWorktree, mergeWorktreeLocal, pushWorktreeBranch
 import { SPECIALIZED_AGENTS } from '../lib/factory/agents.ts'
 import { runFactoryAgent } from '../lib/factory/runner.ts'
 import { adjustTask, buildTask, planTask, type ExecContext } from '../lib/factory/pipeline.ts'
-import { type FactoryTask, type FactoryTaskState, type SpecializedAgentId } from '../lib/factory/types.ts'
+import { AGENT_ORDER, type FactoryTask, type FactoryTaskState, type SpecializedAgentId } from '../lib/factory/types.ts'
 import { listSources, resolveToken } from '../lib/repos/sources.ts'
 import { call, type Conn } from '../lib/repos/providers.ts'
 import { readSettings } from '../lib/settingsStore.ts'
@@ -108,7 +108,28 @@ async function reconcileTask(task: FactoryTask): Promise<FactoryTask> {
 
 // Provider and model become CLI arguments later: validate them here, at the boundary.
 const MODEL_ID = /^[\w.:/-]{1,200}$/
-function taskOptions(b: Record<string, any>, current?: FactoryTask): Pick<FactoryTask, 'provider' | 'model' | 'verifyCommand'> {
+function agentModelsOf(raw: unknown): FactoryTask['agentModels'] {
+  if (raw === null || raw === undefined) return undefined
+  if (typeof raw !== 'object') throw new Error('modelos por agente inválidos')
+  const out: NonNullable<FactoryTask['agentModels']> = {}
+  for (const [id, model] of Object.entries(raw)) {
+    if (!AGENT_ORDER.includes(id as SpecializedAgentId)) throw new Error(`agente desconhecido: ${id}`)
+    if (!model) continue
+    if (!MODEL_ID.test(String(model))) throw new Error(`id de modelo inválido para ${id}`)
+    out[id as SpecializedAgentId] = String(model)
+  }
+  return Object.keys(out).length ? out : undefined
+}
+
+function budgetOf(raw: unknown): number | undefined {
+  if (raw === null || raw === undefined || raw === '') return undefined
+  const n = Number(raw)
+  if (!Number.isFinite(n) || n <= 0 || n > 10_000) throw new Error('teto de custo inválido: use um valor em US$ maior que zero')
+  return n
+}
+
+type TaskOptions = Pick<FactoryTask, 'provider' | 'model' | 'verifyCommand' | 'agentModels' | 'budgetUsd'>
+function taskOptions(b: Record<string, any>, current?: FactoryTask): TaskOptions {
   if (b.provider !== undefined && !isProviderId(b.provider)) throw new Error('provedor inválido: use claude, agy ou codex')
   if (b.model && !MODEL_ID.test(String(b.model))) throw new Error('id de modelo inválido')
   const settings = readSettings()
@@ -117,6 +138,9 @@ function taskOptions(b: Record<string, any>, current?: FactoryTask): Pick<Factor
     model: b.model !== undefined ? String(b.model) || undefined : current?.model ?? settings.model,
     // The developer's own command, run inside the jail like the autodetected one
     verifyCommand: b.verifyCommand !== undefined ? String(b.verifyCommand).trim() || undefined : current?.verifyCommand,
+    // undefined in the body keeps the current value; null or '' clears it
+    agentModels: 'agentModels' in b ? agentModelsOf(b.agentModels) : current?.agentModels,
+    budgetUsd: 'budgetUsd' in b ? budgetOf(b.budgetUsd) : current?.budgetUsd,
   }
 }
 
@@ -219,7 +243,13 @@ factoryRouter.post('/tasks', async (req, res) => {
       return
     }
 
-    const options = taskOptions(b)
+    let options: TaskOptions
+    try {
+      options = taskOptions(b)
+    } catch (e) {
+      res.status(400).json({ error: (e as Error).message })
+      return
+    }
     const info = await repoInfo(b.source.repoPath).catch(() => null)
     const baseBranch = b.baseBranch || info?.defaultBase || info?.current || 'main'
     const id = `fac-${Date.now()}`

@@ -6,7 +6,7 @@ import './factory.css'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { api } from '@/lib/api'
 import { streamPost } from '@/lib/stream'
-import { AGENT_ORDER, RUNNING_STATES, type ExecutionSpan, type FactoryTask, type FactoryTaskState, type SpecializedAgentId } from '../../../server/lib/factory/types.ts'
+import { AGENT_ORDER, RUNNING_STATES, taskUsage, type ExecutionSpan, type FactoryTask, type FactoryTaskState, type SpecializedAgentId } from '../../../server/lib/factory/types.ts'
 
 export type FactoryAction = 'plan' | 'approve-plan' | 'adjust'
 
@@ -35,17 +35,7 @@ export const AGENT_UI: Record<SpecializedAgentId, { name: string; role: string; 
 }
 export { AGENT_ORDER }
 
-// Tokens and cost of every agent run of a task (only what the providers reported).
-export function taskUsage(task: FactoryTask) {
-  let costUsd = 0
-  let tokens = 0
-  let priced = false
-  for (const s of task.spans ?? []) {
-    if (s.usage?.costUsd !== undefined) (costUsd += s.usage.costUsd), (priced = true)
-    tokens += (s.usage?.inputTokens ?? 0) + (s.usage?.outputTokens ?? 0)
-  }
-  return { costUsd: priced ? costUsd : null, tokens }
-}
+export { taskUsage }
 
 // One label and one badge tone per state, for every place that shows a state.
 // `review` waits for a person: it is a call to act (signal), not a success.

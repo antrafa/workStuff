@@ -54,6 +54,7 @@ export function TaskReviewDrawer({ task, onClose, onUpdate }: Props) {
   // Every hook must run before this early return, or opening a card crashes the drawer
   const [stopping, setStopping] = useState(false)
   const [answers, setAnswers] = useState('')
+  const [budgetDraft, setBudgetDraft] = useState(task?.budgetUsd ? String(task.budgetUsd) : '')
   // null: the Architect's plan as is; a string: the developer's edited version
   const [editedPlan, setEditedPlan] = useState<string | null>(null)
 
@@ -73,6 +74,15 @@ export function TaskReviewDrawer({ task, onClose, onUpdate }: Props) {
     setTaskProvider(newProvider)
     try {
       await api.patch(`/factory/tasks/${task.id}`, { provider: newProvider })
+      onUpdate()
+    } catch (err) {
+      setError((err as Error).message)
+    }
+  }
+
+  const handleBudgetSave = async () => {
+    try {
+      await api.patch(`/factory/tasks/${task.id}`, { budgetUsd: budgetDraft.trim() || null })
       onUpdate()
     } catch (err) {
       setError((err as Error).message)
@@ -208,6 +218,7 @@ export function TaskReviewDrawer({ task, onClose, onUpdate }: Props) {
               <span>·</span>
               <span className="mono" title="Somado do que os CLIs informaram em cada execução de agente">
                 {usage.costUsd !== null ? `US$ ${usage.costUsd.toFixed(2)}` : ''}
+                {task.budgetUsd ? ` de US$ ${task.budgetUsd.toFixed(2)}` : ''}
                 {usage.tokens > 0 ? ` ${(usage.tokens / 1000).toFixed(0)}k tokens` : ''}
               </span>
             </>
@@ -253,6 +264,19 @@ export function TaskReviewDrawer({ task, onClose, onUpdate }: Props) {
                     <option value="codex">Codex</option>
                     <option value="claude">Claude Code</option>
                   </select>
+                  <span className="muted" style={{ fontSize: 12 }}>Teto US$:</span>
+                  <input
+                    className="input mono"
+                    type="number"
+                    min="0.01"
+                    step="0.01"
+                    style={{ width: 90, padding: '4px 8px', fontSize: 12 }}
+                    placeholder="sem teto"
+                    value={budgetDraft}
+                    onChange={e => setBudgetDraft(e.target.value)}
+                    disabled={isExecuting}
+                  />
+                  <button type="button" className="btn btn-sm" onClick={handleBudgetSave} disabled={isExecuting}>Salvar</button>
                 </div>
   
                 <div className="row" style={{ gap: 8 }}>

@@ -70,7 +70,7 @@ const now = new Date().toISOString()
 const task: Task = {
   id: 'fac-e2e', title: 'Feature AMBIGUO', description: 'd', source: { type: 'manual', repoPath: repo },
   state: 'intake', baseBranch: 'main', branchName: 'factory/fac-e2e', provider: 'claude',
-  verifyCommand: 'grep -q ok feature.txt', createdAt: now, updatedAt: now, spans: [],
+  verifyCommand: 'grep -q ok feature.txt', model: 'base-model', agentModels: { architect: 'plan-model' }, createdAt: now, updatedAt: now, spans: [],
 }
 await store.saveTask(task)
 const ctx = { taskId: task.id, signal: new AbortController().signal, send: () => {} }
@@ -101,6 +101,22 @@ try {
   assert.match(log, /^fix: corrige achados/m)
   assert.match(log, /^feat: feature/m)
   await removeWorktree(repo, wt, done.branchName)
+
+  // Model per agent: the override goes to its agent only, the others keep the task model
+  const modelOf = (agent: string) => new Set(done.spans!.filter(s => s.agentId === agent).map(s => s.model))
+  assert.deepEqual(modelOf('architect'), new Set(['plan-model']))
+  assert.deepEqual(modelOf('implementer'), new Set(['base-model']))
+
+  // Budget: each fake run costs US$ 0.01; with a 0.015 cap the second run still starts
+  // (0.01 spent) and the third is refused before it spends anything
+  const capped: Task = { ...task, id: 'fac-budget', branchName: 'factory/fac-budget', title: 'Feature', budgetUsd: 0.015, spans: [] }
+  await store.saveTask(capped)
+  const cappedCtx = { ...ctx, taskId: capped.id }
+  const planned2 = await planTask(cappedCtx, capped)
+  await assert.rejects(buildTask(cappedCtx, planned2), /Teto de custo atingido: US\$ 0\.02 gastos de US\$ 0\.01/)
+  const after = await store.getTask(capped.id)
+  assert.equal(after?.spans?.filter(s => s.kind === 'agent').length, 2, 'nenhum agente começou depois do teto')
+  if (after?.worktreePath) await removeWorktree(repo, after.worktreePath, after.branchName)
   console.log('factory pipeline e2e: ok')
 } finally {
   rmSync(tmp, { recursive: true, force: true })

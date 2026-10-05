@@ -116,7 +116,7 @@ export function FactoryTraceVisualizer({ task, onBack, onUpdate, onOpenReview }:
   const lanes: LaneDef[] = [
     { id: 'engineer', name: 'Engenheiro', role: 'Usuário (Human-in-the-loop)', color: 'var(--fx-engineer)', icon: User },
     { id: 'code', name: 'Workspace', role: 'Código (Git Worktree & Commits)', color: 'var(--fx-code)', icon: Code2 },
-    ...AGENT_ORDER.map(id => ({ id, ...AGENT_UI[id], model: liveTask.model || liveTask.provider, icon: AGENT_ICON[id] })),
+    ...AGENT_ORDER.map(id => ({ id, ...AGENT_UI[id], model: liveTask.agentModels?.[id] || liveTask.model || liveTask.provider, icon: AGENT_ICON[id] })),
     { id: 'gates', name: 'Portões', role: 'Portões Mecânicos de Aceitação', color: 'var(--fx-gates)', icon: ShieldCheck },
   ]
 

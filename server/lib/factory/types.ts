@@ -56,6 +56,8 @@ export type ExecutionSpan = {
   details?: Record<string, unknown>
   envelope?: unknown
   usage?: AgentUsage
+  // Model the agent ran with (task model or its per-agent override)
+  model?: string
 }
 
 // Analyst -> Architect: what "done" means, before anyone plans how.
@@ -178,6 +180,10 @@ export type FactoryTask = {
   clarifications?: string
   // Shell command that verifies the change (tests, lint, build); autodetected when empty
   verifyCommand?: string
+  // Model per agent, overriding `model` (e.g. a frontier model to plan, a cheap one to build)
+  agentModels?: Partial<Record<SpecializedAgentId, string>>
+  // Spending cap for the whole task in USD; checked before each agent run
+  budgetUsd?: number
   provider: 'claude' | 'codex' | 'agy'
   model?: string
   effort?: string
@@ -191,4 +197,17 @@ export type FactoryTask = {
   error?: string
   spans?: ExecutionSpan[]
   handoffs?: TaskHandoffs
+}
+
+// Tokens and cost of every agent run of a task (only what the providers reported).
+// Shared by the budget check on the server and the cost shown in the web app.
+export function taskUsage(task: Pick<FactoryTask, 'spans'>): { costUsd: number | null; tokens: number } {
+  let costUsd = 0
+  let tokens = 0
+  let priced = false
+  for (const s of task.spans ?? []) {
+    if (s.usage?.costUsd !== undefined) (costUsd += s.usage.costUsd), (priced = true)
+    tokens += (s.usage?.inputTokens ?? 0) + (s.usage?.outputTokens ?? 0)
+  }
+  return { costUsd: priced ? costUsd : null, tokens }
 }
