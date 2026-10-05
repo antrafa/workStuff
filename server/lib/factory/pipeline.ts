@@ -213,12 +213,14 @@ type ReviewOutcome = { review: ReviewEnvelope; security: ReviewEnvelope; finding
 async function reviewSquad(ctx: ExecContext, task: FactoryTask, worktreePath: string, round: number, previous: SecurityFinding[], tests: TestsGateResult, spec?: SpecEnvelope) {
   const { diff } = await getWorktreeDiff(worktreePath, task.baseBranch)
   const suffix = round > 0 ? ` (rodada ${round + 1})` : ''
+  // Each reviewer re-checks only its own earlier findings: handed the merged list, Security repeated the Reviewer's
+  const own = (agentId: SpecializedAgentId) => previous.filter(f => f.agentId === agentId)
   ctx.send({ type: 'status', message: `Reviewer e Security: revisando o diff em paralelo${suffix}...` })
   const settled = await Promise.allSettled([
     agentStep(ctx, task, 'reviewer', { name: `Revisão de código${suffix}`, phase: 'qa_security' },
-      { prompt: formatReviewPrompt(task, diff, spec, previous, tests), cwd: worktreePath }, t => parseReviewEnvelope(t, 'reviewer')),
+      { prompt: formatReviewPrompt(task, diff, spec, own('reviewer'), tests), cwd: worktreePath }, t => parseReviewEnvelope(t, 'reviewer')),
     agentStep(ctx, task, 'security', { name: `Auditoria de segurança${suffix}`, phase: 'qa_security' },
-      { prompt: formatSecurityPrompt(task, diff, previous), cwd: worktreePath }, t => parseReviewEnvelope(t, 'security')),
+      { prompt: formatSecurityPrompt(task, diff, own('security')), cwd: worktreePath }, t => parseReviewEnvelope(t, 'security')),
   ])
   const rejected = settled.find(s => s.status === 'rejected')
   if (rejected) throw rejected.reason
