@@ -450,7 +450,8 @@ factoryRouter.post('/tasks/:id/adjust', async (req, res) => {
     res.status(404).json({ error: 'tarefa ou worktree nao encontrada' })
     return
   }
-  if (refuseState(res, task, ['review', 'error'], 'pedir ajuste')) return
+  // Not from 'error': a build that died midway has no review to adjust, and a failed adjust lands in 'review'
+  if (refuseState(res, task, ['review'], 'pedir ajuste')) return
   const feedback = String(req.body?.feedback ?? '').trim()
   if (!feedback) {
     res.status(400).json({ error: 'feedback e obrigatorio' })

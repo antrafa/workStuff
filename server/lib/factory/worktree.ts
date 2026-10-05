@@ -190,6 +190,15 @@ export async function commitWorktree(
   return (await git(worktreePath, ['rev-parse', 'HEAD'])).trim()
 }
 
+export const headOf = async (worktreePath: string) => (await git(worktreePath, ['rev-parse', 'HEAD'])).trim()
+
+// Back to a known commit, dropping later commits and uncommitted files. Only for the factory's own
+// worktree, never the user's checkout. The dependency symlinks are untracked, so they are kept explicitly.
+export async function resetWorktree(worktreePath: string, sha: string): Promise<void> {
+  await git(worktreePath, ['reset', '--hard', '-q', sha])
+  await git(worktreePath, ['clean', '-fdq', ...DEP_DIRS.flatMap(d => ['-e', d])])
+}
+
 // Files changed since the last commit, dependency symlinks left out.
 export async function uncommittedFiles(worktreePath: string): Promise<string[]> {
   const status = await git(worktreePath, ['status', '--porcelain', '--untracked-files=all'])
@@ -293,6 +302,16 @@ if (import.meta.main && process.argv.includes('--selfcheck')) {
     await discardFiles(worktreePath, ['app.ts', 'novo.ts'])
     assert.deepEqual(await uncommittedFiles(worktreePath), ['NOTES.md'], 'só a documentação sobrevive')
     rmSync(join(worktreePath, 'NOTES.md'))
+
+    // Ajuste que falhou volta ao commit revisado: commit novo e arquivo solto somem, o symlink fica
+    const reviewed = await headOf(worktreePath)
+    writeFileSync(join(worktreePath, 'app.ts'), 'ajuste\n')
+    await commitWorktree(worktreePath, 'fix: ajuste')
+    writeFileSync(join(worktreePath, 'solto.ts'), 'x\n')
+    await resetWorktree(worktreePath, reviewed)
+    assert.equal(await headOf(worktreePath), reviewed, 'commit do ajuste descartado')
+    assert.deepEqual(await uncommittedFiles(worktreePath), [], 'arquivo solto descartado')
+    assert.ok(existsSync(join(worktreePath, 'node_modules', 'fake-pkg', 'index.js')), 'symlink de dependências preservado')
 
     // Verificação de diff
     const { diff, stat } = await getWorktreeDiff(worktreePath, 'main')

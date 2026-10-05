@@ -3,7 +3,7 @@
 // HTTP concerns (SSE, state guards) stay in server/routes/factory.ts.
 
 import { defaultFactoryStore as store } from './store.ts'
-import { commitWorktree, createWorktree, discardFiles, getWorktreeDiff, uncommittedFiles } from './worktree.ts'
+import { commitWorktree, createWorktree, discardFiles, getWorktreeDiff, headOf, resetWorktree, uncommittedFiles } from './worktree.ts'
 import { runFactoryAgent } from './runner.ts'
 import { gateArtifactsExist, gateDiffNotEmpty, gateTestsPass, nonDocFiles, type TestsGateResult } from './gates.ts'
 import { ExecutionCancelledError, throwIfCancelled } from './executions.ts'
@@ -324,9 +324,20 @@ export async function buildTask(ctx: ExecContext, task: FactoryTask): Promise<Fa
 }
 
 // The developer's feedback goes through the same gates and the same review squad as the first build.
-// The developer's feedback goes through the same gates and the same review squad as the first build.
+// A failed or stopped adjust puts the worktree back where the last review left it: the task returns
+// to 'review' showing that review, and a merge must not carry commits nobody reviewed.
 export async function adjustTask(ctx: ExecContext, task: FactoryTask, feedback: string): Promise<FactoryTask> {
   const worktreePath = task.worktreePath!
+  const reviewedHead = await headOf(worktreePath)
+  try {
+    return await adjustReviewedWork(ctx, task, worktreePath, feedback)
+  } catch (e) {
+    await resetWorktree(worktreePath, reviewedHead)
+    throw e
+  }
+}
+
+async function adjustReviewedWork(ctx: ExecContext, task: FactoryTask, worktreePath: string, feedback: string): Promise<FactoryTask> {
   await startPhase(task, { state: 'building' })
   const spec = task.handoffs?.spec
   const plan = task.handoffs?.plan

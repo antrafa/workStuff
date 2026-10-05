@@ -38,6 +38,11 @@ if (sys.includes('o Analyst')) {
   try { fs.writeFileSync(${JSON.stringify(join(tmp, 'agent-home', '.claude', 'settings.json'))}, '{}') } catch { realWritable = false }
   const cfg = process.env.CLAUDE_CONFIG_DIR
   fs.writeFileSync(cfg + '/jail-seen.json', JSON.stringify({ cfg, realWritable, creds: JSON.parse(fs.readFileSync(cfg + '/.credentials.json', 'utf-8')) }))
+  if (prompt.includes('AJUSTE_IMPOSSIVEL')) {
+    fs.writeFileSync('meio-feito.txt', 'x\\n')
+    console.log(JSON.stringify({ type: 'result', is_error: false, result: env({ status: 'error', changedFiles: [], summary: 'não dá' }), total_cost_usd: 0.01 }))
+    process.exit(0)
+  }
   const stubborn = prompt.includes('TEIMOSO')
   const content = prompt.includes('bloqueiam') && !stubborn ? 'ok\\nX tratado\\n' : prompt.includes('NÃO passou') || stubborn ? 'ok\\n' : 'bug\\n'
   fs.writeFileSync('feature.txt', content)
@@ -144,7 +149,14 @@ try {
   assert.equal(stubborn.built.securityReport?.fixRounds, 0, 'correção que não muda nada encerra o laço')
   assert.equal(stubborn.built.spans!.filter(s => s.agentId === 'reviewer').length, 1, 'sem revisão repetida do mesmo código')
 
-  await removeWorktree(repo, stubborn.built.worktreePath!, stubborn.built.branchName)
+  // A failed adjust goes back to the reviewed commit: nothing unreviewed reaches a merge
+  const { adjustTask } = await import('../server/lib/factory/pipeline.ts')
+  const wtS = stubborn.built.worktreePath!
+  const reviewedHead = execFileSync('git', ['-C', wtS, 'rev-parse', 'HEAD'], { encoding: 'utf-8' })
+  await assert.rejects(adjustTask(stubborn.c, stubborn.built, 'AJUSTE_IMPOSSIVEL'), /bloqueio/)
+  assert.equal(execFileSync('git', ['-C', wtS, 'rev-parse', 'HEAD'], { encoding: 'utf-8' }), reviewedHead)
+  assert.ok(!existsSync(join(wtS, 'meio-feito.txt')), 'alteração do ajuste que falhou descartada')
+  await removeWorktree(repo, wtS, stubborn.built.branchName)
 
   // Budget: each fake run costs US$ 0.01; with a 0.015 cap the second run still starts
   // (0.01 spent) and the third is refused before it spends anything
