@@ -88,7 +88,7 @@ Cada agente recebe o que precisa dos anteriores: os critérios do Analyst chegam
 | Provedor | Leitura | Escrita |
 |---|---|---|
 | Claude Code | `--tools Read Grep Glob`, `--strict-mcp-config` | `Read Edit Write Glob Grep Bash` com `--dangerously-skip-permissions`, **sempre dentro do bwrap** |
-| Codex | `-s read-only` | `-s workspace-write` (sandbox do próprio Codex, escrita só dentro de `-C`) |
+| Codex | `-s read-only` | `--dangerously-bypass-approvals-and-sandbox`, **sempre dentro do bwrap** (o sandbox do próprio Codex não sobe dentro dele) |
 | Antigravity | `--mode plan`, dentro do bwrap sem pasta gravável | `--mode accept-edits`, dentro do bwrap com a worktree gravável |
 
 Os mesmos agentes podem ser chamados avulsos na aba **Agentes Especializados**. Nesse caso rodam sempre em modo leitura, no seu próprio checkout.
@@ -318,13 +318,16 @@ flowchart LR
 
 - **Worktree, nunca o seu checkout.** Toda escrita da Fábrica acontece em `~/.workstuff/worktrees`. O seu repositório só muda no merge local, que você pede.
 - **Jail `bwrap`.** O disco inteiro é montado somente leitura (`--ro-bind / /`). Ficam graváveis apenas as pastas necessárias:
-  - Agentes Claude com escrita: a worktree, `~/.claude`, `~/.claude.json` e um tmp próprio.
+  - Agentes Claude e Codex com escrita: a worktree, um tmp e uma pasta de configuração própria ao lado da worktree (`<worktree>.agent-home/claude` via `CLAUDE_CONFIG_DIR`, `<worktree>.agent-home/codex` via `CODEX_HOME`), nunca o `~/.claude` ou o `~/.codex` reais: um hook, servidor MCP ou arquivo de instrução plantado ali rodaria fora do jail na execução seguinte. Do Claude entra só o token de acesso, sem o refresh token, para uma renovação dentro do jail não deslogar o seu CLI; do Codex, `auth.json` e `config.toml`. A pasta persiste entre as execuções da tarefa (o `--resume` depende dela) e é apagada com a worktree.
   - Antigravity: a worktree (só em escrita), `~/.gemini` e um tmp. O Antigravity grava em disco mesmo em modo plano, então nunca roda fora do jail.
-  - Verificação do projeto: a worktree, um tmp e os caches de build (`~/.m2`, `~/.npm`, `~/.gradle`, `~/.cache/go-build`, `~/go/pkg/mod`, `~/.cache/pip`).
+  - Verificação do projeto: a worktree, um tmp e só as pastas de cache do Maven e do Gradle (`~/.m2/repository`, `~/.m2/wrapper`, as subpastas de `~/.gradle` menos `init.d`). `settings.xml`, `init.d` e `gradle.properties` ficam somente leitura, porque executam código no seu próximo build. npm, Go e pip usam um cache descartável no tmp do jail.
+- **`.git` da worktree somente leitura.** O arquivo `.git` diz ao git onde está o repositório, e a esteira roda git na worktree fora do jail; ele é montado somente leitura em todo jail.
+- **Hooks do git desligados.** Todo git da esteira roda com `core.hooksPath=/dev/null`: um hook do repositório (husky, lint-staged) leria scripts e configurações da worktree, que o agente escreveu.
 - **Verificação no jail.** A suíte de testes executa código que o agente escreveu. Rodar fora do jail anularia o isolamento do agente, então sem `bwrap` a verificação não roda e o QA aparece reprovado.
 - **`.git` somente leitura para os agentes.** Os commits são feitos pela esteira, em código.
 - **Nada vai ao remoto sem você.** O push só acontece em "Criar MR/PR".
-- **Validação na fronteira.** Provedor, modelo, modelos por agente e teto são validados ao criar ou editar a tarefa, porque viram argumentos de linha de comando.
+- **Validação na fronteira.** Provedor, modelo, modelos por agente, teto e branch base são validados ao criar ou editar a tarefa, porque viram argumentos de linha de comando.
+- **Só o localhost chama a API.** Uma requisição cujo `Host` ou `Origin` não seja `localhost`, `127.0.0.1` ou `[::1]` recebe 403 (`server/lib/localOrigin.ts`): sem isso, uma página aberta no navegador dispararia ações da Fábrica.
 - **Processos sem shell**, com uma exceção: o comando de verificação roda como `sh -c`, dentro do jail, porque é o seu comando.
 
 ## 11. Modelos, custo e teto
@@ -451,7 +454,8 @@ O selfcheck de `agents.ts` falha se um agente da ordem ficar sem definição, e 
 - **Revisão de rodada 2 em diante** recebe o diff completo, não só o que mudou desde a rodada anterior.
 - **`tasks.json` é reescrito a cada evento de span**: suficiente para um usuário; com muitas tarefas paralelas, trocar por banco.
 - **MR/PR** depende de uma conexão em Repositórios que corresponda ao projeto.
-- **`bwrap` só existe no Linux**: no macOS e no Windows, Claude com escrita e Antigravity não rodam, e a verificação não executa.
+- **`bwrap` só existe no Linux**: no macOS e no Windows, agentes com escrita e Antigravity não rodam, e a verificação não executa.
+- **O que o jail ainda não fecha**: a rede fica aberta e a home fica legível (um agente manipulado pode ler um token e enviá-lo); um jar dos caches compartilhados do Maven e do Gradle pode ser trocado; o Antigravity grava no `~/.gemini` real.
 
 ## 20. Solução de problemas
 
@@ -460,7 +464,7 @@ O selfcheck de `agents.ts` falha se um agente da ordem ficar sem definição, e 
 | Falha no commit com `paths are ignored ... node_modules` | Versão antiga do servidor (corrigido em `0b7f7d0`): com `node_modules` sem barra no `.gitignore`, o link era recusado. | Reinicie o `npm run dev` se ele não recarregou sozinho e use "Tentar novamente". |
 | A correção foi enviada, mas o erro continua igual | O `node --watch` não reiniciou o servidor. | Pare o `npm run dev` com Ctrl+C e suba de novo. |
 | QA reprovado com "bwrap (bubblewrap) não está instalado" | Sem `bwrap`, a verificação não roda fora do sandbox. | Instale o pacote `bubblewrap` (a tela Máquina mostra o comando). |
-| "o agente com escrita só roda dentro do bwrap" | Claude com escrita sem `bwrap`. | Instale o `bubblewrap` ou use Codex. |
+| "o agente com escrita só roda dentro do bwrap" / "o Codex com escrita só roda dentro do bwrap" | Agente com escrita sem `bwrap`. | Instale o `bubblewrap` (a tela Máquina mostra o comando). |
 | Verificação passa em 0 s | Nenhum comando detectado. | Informe o comando de verificação da tarefa. |
 | "Teto de custo atingido" | O gasto somado chegou ao teto. | Aumente o teto na gaveta e tente de novo. |
 | Tarefa em "falhou" com "o servidor foi reiniciado" | O servidor caiu ou recarregou no meio da execução. | "Tentar novamente". |
