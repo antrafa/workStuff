@@ -245,7 +245,7 @@ export function StandaloneAgentTab() {
         <label className="stack" style={{ gap: 4 }}>
           <span className="eyebrow">Instrução para o {activeMeta.name}</span>
           <textarea
-            className="input"
+            className="textarea"
             rows={4}
             placeholder={activeMeta.placeholder}
             value={prompt}

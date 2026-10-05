@@ -232,7 +232,7 @@ export function NewTaskModal({ open, onClose, onCreated }: Props) {
             <label className="stack" style={{ gap: 4 }}>
               <span className="eyebrow">Descrição dos Requisitos</span>
               <textarea
-                className="input"
+                className="textarea"
                 rows={4}
                 placeholder="Explique o que precisa ser feito, arquivos afetados ou critérios de aceitação..."
                 value={description}

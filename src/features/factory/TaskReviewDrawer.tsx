@@ -349,7 +349,7 @@ export function TaskReviewDrawer({ task, onClose, onUpdate }: Props) {
               {spec.openQuestions.map(q => <li key={q} style={{ marginBottom: 6 }}>{q}</li>)}
             </ol>
             <textarea
-              className="input"
+              className="textarea"
               rows={5}
               placeholder="Responda às perguntas na ordem. As respostas entram na especificação e no plano."
               value={answers}
@@ -391,7 +391,7 @@ export function TaskReviewDrawer({ task, onClose, onUpdate }: Props) {
                 )}
               </div>
               {editedPlan !== null ? (
-                <textarea className="input mono" rows={16} value={editedPlan} onChange={e => setEditedPlan(e.target.value)} disabled={processing} />
+                <textarea className="textarea mono" rows={16} value={editedPlan} onChange={e => setEditedPlan(e.target.value)} disabled={processing} />
               ) : task.plan ? (
                 <div style={{ maxHeight: 380, overflowY: 'auto' }}>
                   <Markdown>{task.plan}</Markdown>
