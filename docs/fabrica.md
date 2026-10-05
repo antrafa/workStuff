@@ -78,8 +78,8 @@ Durante tudo isso, a linha do tempo mostra cada fase ao vivo; clicar numa fase a
 | **Implementer** | Construção, correções, ajustes | escrita | worktree, no sandbox | `BuildEnvelope`: arquivos alterados, mensagem de commit, resumo, ou bloqueio | Portões |
 | **Tester** | Depois do primeiro commit | escrita | worktree, no sandbox | `TestEnvelope`: testes executados, cobertura, parecer | Portão de verificação |
 | **Reviewer** | Revisão, em paralelo com Security | leitura | worktree | `ReviewEnvelope`: achados, checagem de cada critério, rascunho do MR | Veredito em código |
-| **Security** | Revisão, em paralelo com Reviewer | leitura | worktree | `ReviewEnvelope`: achados de segurança | Veredito em código |
-| **Documenter** | Depois da revisão | escrita | worktree, no sandbox | `DocsEnvelope`: documentação alterada, descrição final do MR | Portão "só documentação" |
+| **Security** | Revisão, em paralelo com Reviewer; nas rodadas de correção, só se teve achados | leitura | worktree | `ReviewEnvelope`: achados de segurança | Veredito em código |
+| **Documenter** | Depois da revisão, se alguma documentação cita os arquivos alterados | escrita | worktree, no sandbox | `DocsEnvelope`: documentação alterada, descrição final do MR | Portão "só documentação" |
 
 Cada agente recebe o que precisa dos anteriores: os critérios do Analyst chegam ao Architect, ao Implementer, ao Tester e ao Reviewer; os cenários de teste do Architect chegam ao Tester; os achados da rodada anterior chegam aos revisores da rodada seguinte.
 
@@ -154,15 +154,16 @@ O código da esteira está em `server/lib/factory/pipeline.ts`. As rotas (`serve
 1. **Reviewer** e **Security** recebem o diff completo contra a base (até 80.000 caracteres; acima disso o prompt avisa que o diff foi cortado) e rodam ao mesmo tempo. O Reviewer recebe também o comando, o código de saída e o final da saída da última verificação: ele só lê, então é esse resultado que comprova um critério como "o fluxo continua funcionando". Se um falhar, a esteira espera o outro terminar antes de marcar a falha, para nada continuar escrevendo depois.
 2. Os achados são fundidos: o mais grave primeiro, e o mesmo `arquivo:linha` apontado pelos dois fica uma vez só.
 3. O **veredito** é calculado em código ([seção 9](#9-o-veredito-da-revisão)).
-4. Com bloqueio, o Implementer recebe os achados bloqueantes e os critérios não atendidos e corrige, passando pelos mesmos portões. Commit `fix: corrige achados da revisão automática (rodada N)`. A rodada seguinte recebe os achados anteriores e confere se foram resolvidos.
+4. Com bloqueio, o Implementer recebe os achados bloqueantes e os critérios não atendidos e corrige, passando pelos mesmos portões. Commit `fix: corrige achados da revisão automática (rodada N)`. Na rodada seguinte, cada revisor recebe só os próprios achados anteriores e confere se foram resolvidos. O Security só roda de novo se tiver tido achados: uma auditoria limpa vale para a correção de um achado do Reviewer.
 5. Até **2 rodadas** automáticas. Depois disso, o que sobrou vai para você.
 6. Uma correção que não altera nenhum arquivo encerra as rodadas na hora: revisar o mesmo código de novo só traria os mesmos achados. A tarefa vai para você com um achado que diz isso.
 
 ### 5.5 Documentação
 
-1. O **Documenter** recebe a demanda, a especificação, os arquivos alterados e o rascunho do Reviewer.
-2. O portão "só documentação" descarta qualquer alteração fora de documentação (`.md`, `.mdx`, `.rst`, `.adoc`, `.txt`, `docs/`, `README*`, `CHANGELOG*`, `CONTRIBUTING*`): arquivos rastreados voltam para o último commit e arquivos novos são apagados.
-3. Commit `docs: ...` do que sobrou.
+1. Antes, a esteira procura documentação versionada que cite pelo caminho algum arquivo alterado (`docsCiting`). Sem nenhuma, o Documenter não roda e a descrição do MR é o rascunho do Reviewer.
+2. O **Documenter** recebe a demanda, a especificação, os arquivos alterados e o rascunho do Reviewer.
+3. O portão "só documentação" descarta qualquer alteração fora de documentação (`.md`, `.mdx`, `.rst`, `.adoc`, `.txt`, `docs/`, `README*`, `CHANGELOG*`, `CONTRIBUTING*`): arquivos rastreados voltam para o último commit e arquivos novos são apagados.
+4. Commit `docs: ...` do que sobrou.
 
 ### 5.6 Revisão humana
 
@@ -240,6 +241,7 @@ stateDiagram-v2
 | Arquivo no repositório | Comando |
 |---|---|
 | `package.json` com `test` real | `npm test` |
+| `package.json` sem teste, com `check` | `npm run check` |
 | `package.json` sem teste, com `typecheck` | `npm run typecheck` |
 | `package.json` sem teste, com `build` | `npm run build` |
 | `pom.xml` | `mvn -q test` |
