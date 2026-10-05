@@ -151,11 +151,12 @@ O código da esteira está em `server/lib/factory/pipeline.ts`. As rotas (`serve
 
 ### 5.4 Revisão em dupla (`reviewAndFix`)
 
-1. **Reviewer** e **Security** recebem o diff completo contra a base (até 80.000 caracteres) e rodam ao mesmo tempo. Se um falhar, a esteira espera o outro terminar antes de marcar a falha, para nada continuar escrevendo depois.
+1. **Reviewer** e **Security** recebem o diff completo contra a base (até 80.000 caracteres; acima disso o prompt avisa que o diff foi cortado) e rodam ao mesmo tempo. O Reviewer recebe também o comando, o código de saída e o final da saída da última verificação: ele só lê, então é esse resultado que comprova um critério como "o fluxo continua funcionando". Se um falhar, a esteira espera o outro terminar antes de marcar a falha, para nada continuar escrevendo depois.
 2. Os achados são fundidos: o mais grave primeiro, e o mesmo `arquivo:linha` apontado pelos dois fica uma vez só.
 3. O **veredito** é calculado em código ([seção 9](#9-o-veredito-da-revisão)).
 4. Com bloqueio, o Implementer recebe os achados bloqueantes e os critérios não atendidos e corrige, passando pelos mesmos portões. Commit `fix: corrige achados da revisão automática (rodada N)`. A rodada seguinte recebe os achados anteriores e confere se foram resolvidos.
 5. Até **2 rodadas** automáticas. Depois disso, o que sobrou vai para você.
+6. Uma correção que não altera nenhum arquivo encerra as rodadas na hora: revisar o mesmo código de novo só traria os mesmos achados. A tarefa vai para você com um achado que diz isso.
 
 ### 5.5 Documentação
 
@@ -177,7 +178,7 @@ Ao concluir (MR ou merge), a worktree é removida; no merge local a branch tamb�
 
 ### 5.7 Ajuste (`adjustTask`)
 
-O pedido de ajuste passa pelo mesmo caminho da construção: Implementer com laço de correção, commit, e a revisão em dupla com as rodadas automáticas. Uma falha durante o ajuste devolve a tarefa para `review`, porque o trabalho já commitado continua intacto.
+O pedido de ajuste passa pelo mesmo caminho da construção: Implementer com laço de correção, commit, e a revisão em dupla com as rodadas automáticas. Um ajuste que falha ou é parado volta a worktree ao commit da última revisão (`resetWorktree`) e devolve a tarefa para `review`: a revisão na tela continua valendo para o código que está lá, e um merge não leva commit que ninguém revisou. O ajuste só pode ser pedido a partir de `review`.
 
 ### 5.8 Branch base
 
@@ -197,6 +198,7 @@ stateDiagram-v2
   building --> qa_security
   qa_security --> review
   review --> building: ajuste
+  building --> review: ajuste falhou ou parado (volta ao commit revisado)
   review --> done: MR ou merge local
   planning --> error
   building --> error
@@ -295,6 +297,13 @@ A régua de severidade é avaliada por consequência real e não por regra quebr
 | `low` | Estilo, legibilidade, preferência. |
 
 Cada revisor lista no máximo 12 achados, do mais grave ao menos grave, e é instruído a não decidir a aprovação.
+
+**Revisão incompleta bloqueia** (`incompleteReview`). Antes do veredito, a esteira confere se a revisão aconteceu de fato:
+
+- Reviewer ou Security sem envelope JSON, ou com `status: "error"`;
+- Reviewer que avaliou menos critérios do que a especificação tem (a contagem, não o texto: revisores reescrevem os critérios).
+
+Em qualquer desses casos a revisão não passa e não há rodada automática, porque o Implementer não tem o que corrigir: a tarefa vai para você com um achado `high` explicando o motivo.
 
 ## 10. Segurança e isolamento
 
