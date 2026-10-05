@@ -73,7 +73,7 @@ async function runExecution(
         ...current,
         // A failed adjust goes back to review: the committed work is intact, and from 'error'
         // the UI offers "retry", which calls approve-plan and rebuilds the worktree from scratch.
-        state: cancelled || kind === 'adjust' ? stateAfterCancel(kind) : 'error',
+        state: cancelled || kind === 'adjust' ? stateAfterCancel(kind, current) : 'error',
         error: cancelled ? undefined : msg,
         updatedAt: new Date().toISOString(),
       })

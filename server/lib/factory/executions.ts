@@ -4,7 +4,7 @@
 // to stop one is an explicit cancel.
 
 import assert from 'node:assert/strict'
-import type { FactoryTaskState } from './types.ts'
+import type { FactoryTask, FactoryTaskState } from './types.ts'
 
 export { RUNNING_STATES } from './types.ts'
 
@@ -80,8 +80,9 @@ export function throwIfCancelled(signal: AbortSignal): void {
 
 // State to return to after a stop, so the user can resume from the last
 // human checkpoint instead of landing in a dead end.
-export function stateAfterCancel(kind: ExecutionKind): FactoryTaskState {
-  if (kind === 'plan') return 'intake'
+// A stopped re-plan keeps the plan it was replacing: it can still be approved.
+export function stateAfterCancel(kind: ExecutionKind, task?: Pick<FactoryTask, 'plan'>): FactoryTaskState {
+  if (kind === 'plan') return task?.plan ? 'waiting_approval' : 'intake'
   if (kind === 'build') return 'waiting_approval'
   return 'review'
 }
@@ -106,6 +107,7 @@ if (import.meta.main && process.argv.includes('--selfcheck')) {
   endExecution('t1', s2)
 
   assert.equal(stateAfterCancel('plan'), 'intake')
+  assert.equal(stateAfterCancel('plan', { plan: 'p' }), 'waiting_approval', 'replanejamento parado mantém o plano')
   assert.equal(stateAfterCancel('build'), 'waiting_approval')
   assert.equal(stateAfterCancel('adjust'), 'review')
 
