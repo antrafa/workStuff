@@ -206,11 +206,16 @@ export async function pushWorktreeBranch(
   return await git(worktreePath, ['push', '-u', remote, branchName])
 }
 
+// The base may be a remote-tracking ref (`origin/main`, picked from origin/HEAD): the worktree
+// starts from it, but a merge or an MR targets the branch itself.
+export const targetBranchOf = (base: string) => base.replace(/^origin\//, '')
+
 export async function mergeWorktreeLocal(
   repoPath: string,
   branchName: string,
-  targetBranch: string,
+  base: string,
 ): Promise<void> {
+  const targetBranch = targetBranchOf(base)
   // 1. Verifica se o repositório principal tem alterações não salvas
   const dirty = (await git(repoPath, ['status', '--porcelain'])).trim()
   if (dirty) {
@@ -309,6 +314,8 @@ if (import.meta.main && process.argv.includes('--selfcheck')) {
       /alterações pendentes/
     )
     rmSync(join(repoDir, 'dirty.txt'))
+    assert.equal(targetBranchOf('origin/main'), 'main')
+    assert.equal(targetBranchOf('develop'), 'develop')
 
     console.log('factory worktree selfcheck: ok')
   } finally {

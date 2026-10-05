@@ -5,7 +5,7 @@ import { openInEditor, pickFolder } from '../lib/desktop.ts'
 import { openSse } from '../lib/sse.ts'
 import { repoInfo } from '../lib/review/git.ts'
 import { defaultFactoryStore } from '../lib/factory/store.ts'
-import { getWorktreeDiff, removeWorktree, mergeWorktreeLocal, pushWorktreeBranch } from '../lib/factory/worktree.ts'
+import { getWorktreeDiff, removeWorktree, mergeWorktreeLocal, pushWorktreeBranch, targetBranchOf } from '../lib/factory/worktree.ts'
 import { SPECIALIZED_AGENTS } from '../lib/factory/agents.ts'
 import { runFactoryAgent } from '../lib/factory/runner.ts'
 import { adjustTask, buildTask, planTask, type ExecContext } from '../lib/factory/pipeline.ts'
@@ -532,7 +532,7 @@ factoryRouter.post('/tasks/:id/finish', async (req, res) => {
               headers,
               body: JSON.stringify({
                 source_branch: task.branchName,
-                target_branch: task.baseBranch,
+                target_branch: targetBranchOf(task.baseBranch),
                 title,
                 description,
               }),
@@ -554,7 +554,7 @@ factoryRouter.post('/tasks/:id/finish', async (req, res) => {
                 body: JSON.stringify({
                   title,
                   head: task.branchName,
-                  base: task.baseBranch,
+                  base: targetBranchOf(task.baseBranch),
                   body: description,
                 }),
                 signal: AbortSignal.timeout(20_000),
