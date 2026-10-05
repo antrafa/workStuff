@@ -130,6 +130,8 @@ export function detectVerifyCommand(worktreePath: string): string | null {
     try {
       const scripts = JSON.parse(readFileSync(pkgJsonPath, 'utf-8')).scripts ?? {}
       if (scripts.test && !scripts.test.includes('no test specified')) return 'npm test'
+      // The project's own "everything green" script (this repo's), ahead of a bare typecheck
+      if (scripts.check) return 'npm run check'
       // No tests: at least prove it compiles, or the gate only checks that something changed
       if (scripts.typecheck) return 'npm run typecheck'
       if (scripts.build) return 'npm run build'
@@ -268,6 +270,8 @@ if (import.meta.main && process.argv.includes('--selfcheck')) {
 
     writeFileSync(join(tmp, 'package.json'), JSON.stringify({ scripts: { test: 'echo "Error: no test specified"', typecheck: 'tsc', build: 'vite build' } }))
     assert.equal(detectVerifyCommand(tmp), 'npm run typecheck', 'sem teste, ao menos compila')
+    writeFileSync(join(tmp, 'package.json'), JSON.stringify({ scripts: { check: 'node x', typecheck: 'tsc' } }))
+    assert.equal(detectVerifyCommand(tmp), 'npm run check', 'check antes do typecheck')
     rmSync(join(tmp, 'package.json'))
 
     writeFileSync(join(tmp, 'pom.xml'), '<project/>')
