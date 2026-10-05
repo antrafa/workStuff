@@ -83,7 +83,7 @@ Every page has a **?** next to its title (hover shows what the page is for) and 
 
 workStuff runs commands on your machine and against real clusters, so its defaults are restrictive.
 
-- **Local only.** The API listens on `127.0.0.1` and must not be exposed to a network.
+- **Local only.** The API listens on `127.0.0.1` and must not be exposed to a network. Requests whose `Host` or `Origin` is not localhost get 403, so a web page open in the browser cannot drive it.
 - **No shell.** Processes are started directly. The only exception is the Machine page's automatic fixes, which come from a fixed table on the server and never from the request.
 - **Read-only AI agents.** No provider runs with auto-approve:
   - `claude` gets only the `Read`, `Grep` and `Glob` tools, with `--strict-mcp-config`.

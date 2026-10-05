@@ -1,4 +1,5 @@
 import express, { type ErrorRequestHandler } from 'express'
+import { localOriginOnly } from './lib/localOrigin.ts'
 import { DATA_DIR } from './lib/paths.ts'
 import { aiProvidersRouter } from './routes/aiProviders.ts'
 import { analysisRouter } from './routes/analysis.ts'
@@ -29,6 +30,7 @@ import { statusRouter } from './routes/status.ts'
 const PORT = Number(process.env.PORT ?? 3101)
 const app = express()
 
+app.use(localOriginOnly)
 app.use(express.json({ limit: '1mb' }))
 app.use('/api/settings', settingsRouter)
 app.use('/api/ai/providers', aiProvidersRouter)
