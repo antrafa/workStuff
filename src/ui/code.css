@@ -1,0 +1,132 @@
+/* Bloco de código destacado (Markdown) e passo de comando executável (Runbooks, Runbooks de dev). */
+.code-block {
+  margin: 0 0 14px;
+  border: 1px solid var(--code-line);
+  border-radius: var(--r-lg);
+  background: var(--code-bg);
+  overflow: hidden;
+}
+.code-block-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 30px;
+  padding: 2px 6px 2px 12px;
+  background: var(--code-head);
+  border-bottom: 1px solid var(--code-line);
+  font: 600 10.5px var(--font-mono);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--code-muted);
+}
+.code-block-head .spacer {
+  flex: 1;
+}
+.code-block-head .btn {
+  color: var(--code-muted);
+}
+.code-block-head .btn:hover {
+  color: var(--code-ink);
+  background: var(--code-line);
+}
+.code-block pre {
+  margin: 0;
+  padding: 12px 14px;
+  overflow-x: auto;
+  font: 12.5px/1.6 var(--font-mono);
+  color: var(--code-ink);
+  background: none;
+  border: 0;
+  white-space: pre;
+}
+
+.cmd-step {
+  display: flex;
+  flex-direction: column;
+  margin: 4px 0 14px;
+  border: 1px solid var(--code-line);
+  border-left: 3px solid var(--info);
+  border-radius: var(--r-lg);
+  background: var(--code-bg);
+  overflow: hidden;
+}
+.cmd-step-line {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px 10px 12px 14px;
+}
+.cmd-step-line code {
+  flex: 1;
+  min-width: 0;
+  font: 13px/1.55 var(--font-mono);
+  color: var(--code-ink);
+  word-break: break-all;
+}
+.cmd-prompt {
+  font: 600 13px/1.55 var(--font-mono);
+  color: var(--code-prompt);
+  user-select: none;
+}
+.cmd-write {
+  border-left-color: var(--code-warn);
+}
+.cmd-blocked {
+  border-left-color: var(--code-line);
+}
+.cmd-write .cmd-prompt {
+  color: var(--code-warn);
+}
+.cmd-step-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+.cmd-step-actions .btn-ghost {
+  color: var(--code-muted);
+}
+.cmd-kind {
+  font: 600 10px var(--font-mono);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 2px 7px;
+  border-radius: var(--r-sm);
+  border: 1px solid var(--code-line);
+  color: var(--code-muted);
+}
+.cmd-write .cmd-kind {
+  color: var(--code-warn);
+  border-color: color-mix(in srgb, var(--code-warn) 45%, transparent);
+}
+.cmd-kind {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.cmd-blocked .cmd-step-line code {
+  color: var(--code-muted);
+}
+.cmd-note {
+  padding: 0 14px 10px 36px;
+  font-size: 12px;
+  color: var(--code-muted);
+}
+.cmd-out {
+  margin: 0;
+  padding: 10px 14px;
+  max-height: 280px;
+  overflow: auto;
+  border-top: 1px solid var(--code-line);
+  background: color-mix(in srgb, var(--code-bg) 70%, #000);
+  font: 12px/1.55 var(--font-mono);
+  color: var(--code-ink);
+  white-space: pre-wrap;
+}
+.cmd-out.is-ok {
+  box-shadow: inset 3px 0 0 var(--ok);
+}
+.cmd-out.is-fail {
+  box-shadow: inset 3px 0 0 var(--crit);
+  color: #ffb4ae;
+}

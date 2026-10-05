@@ -68,6 +68,14 @@
   --font-sans: 'Archivo', system-ui, sans-serif;
   --font-mono: 'Fragment Mono', ui-monospace, Menlo, monospace;
   --hatch: repeating-linear-gradient(-45deg, var(--frame) 0 6px, transparent 6px 12px);
+  /* Blocos de código e comandos: terminal escuro nos dois temas, para saltar do texto corrido */
+  --code-bg: #07080b;
+  --code-head: #12151b;
+  --code-line: #343945;
+  --code-ink: #e4e7ec;
+  --code-muted: #8a90a0;
+  --code-prompt: #7cb7ff;
+  --code-warn: #f2c14e;
   --r-sm: 3px;
   --r: 4px;
   --r-lg: 6px;

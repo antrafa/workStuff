@@ -1,0 +1,44 @@
+import './code.css'
+import { Lock, Play, Zap } from 'lucide-react'
+import { CopyButton } from './CopyButton'
+
+export type CommandResult = { ok: boolean; output: string }
+
+type Props = {
+  command: string
+  kind: 'read' | 'write' | 'blocked'
+  reason?: string
+  result?: CommandResult | 'running'
+  disabled?: boolean
+  onRun: () => void
+}
+
+// One executable step of a runbook: the command as a terminal line, what it does to the
+// machine (read or write), and its output underneath.
+export function CommandStep({ command, kind, reason, result, disabled, onRun }: Props) {
+  return (
+    <div className={`cmd-step cmd-${kind}`}>
+      <div className="cmd-step-line">
+        <span className="cmd-prompt">$</span>
+        <code>{command}</code>
+        <div className="cmd-step-actions">
+          <span className="cmd-kind" title={reason}>
+            {kind === 'blocked' && <Lock size={10} />}
+            {kind === 'read' ? 'leitura' : kind === 'write' ? 'escrita' : 'bloqueado'}
+          </span>
+          <CopyButton value={command} />
+          {kind !== 'blocked' && (
+            <button className={`btn btn-sm ${kind === 'write' ? 'btn-danger' : 'btn-primary'}`} disabled={disabled || result === 'running'} onClick={onRun}>
+              {kind === 'write' ? <><Zap size={12} /> Executar</> : <><Play size={12} /> Rodar</>}
+            </button>
+          )}
+        </div>
+      </div>
+      {kind === 'blocked' && reason && <div className="cmd-note">{reason}</div>}
+      {result === 'running' && <div className="cmd-note">executando…</div>}
+      {result && result !== 'running' && (
+        <pre className={`cmd-out ${result.ok ? 'is-ok' : 'is-fail'}`}>{result.output || '(executado, sem saída)'}</pre>
+      )}
+    </div>
+  )
+}

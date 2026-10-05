@@ -1,4 +1,6 @@
 import './markdown.css'
+import './code.css'
+import { CopyButton } from './CopyButton'
 import { useEffect, useId, useState, type ReactElement, type ReactNode } from 'react'
 import ReactMarkdown, { type Components } from 'react-markdown'
 import remarkGfm from 'remark-gfm'
@@ -28,7 +30,16 @@ const COMPONENTS: Components = {
     const lang = /language-(\w+)/.exec(child?.props?.className ?? '')?.[1]
     const text = String(child?.props?.children ?? '').replace(/\n$/, '')
     if (lang === 'mermaid') return <Mermaid chart={text} />
-    return <pre className="code"><code>{text}</code></pre>
+    return (
+      <div className="code-block">
+        <div className="code-block-head">
+          <span>{lang ?? 'código'}</span>
+          <span className="spacer" />
+          <CopyButton value={text} />
+        </div>
+        <pre><code>{text}</code></pre>
+      </div>
+    )
   },
   code: ({ children }) => <code className="inline">{children}</code>,
   table: ({ children }) => (

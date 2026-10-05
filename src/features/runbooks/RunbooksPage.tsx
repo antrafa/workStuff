@@ -1,8 +1,8 @@
 import './runbooks.css'
-import { BookOpen, FolderOpen, Lock, Play, RotateCcw, Zap } from 'lucide-react'
+import { BookOpen, FolderOpen, RotateCcw, Zap } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router'
-import { Async, ConfirmModal, Empty, Markdown, Modal, Page, SkeletonRows } from '@/ui'
+import { Async, CommandStep, ConfirmModal, Empty, Markdown, Modal, Page, SkeletonRows } from '@/ui'
 import { api } from '@/lib/api'
 import { useAsync } from '@/lib/useAsync'
 
@@ -179,7 +179,15 @@ function RunbookDoc({ file }: { file: string }) {
       )}
       <section className="card card-pad stack">
         {doc.segments.map((s, i) => s.type === 'text' ? <Markdown key={i}>{s.md}</Markdown> : (
-          <StepCard key={i} step={s} result={results[s.id]} disabled={!doc.session} onRun={() => (s.check.kind === 'write' ? setConfirming(s) : run(s))} />
+          <CommandStep
+            key={i}
+            command={s.check.kind === 'blocked' ? s.line : `kubectl ${s.check.args.join(' ')}`}
+            kind={s.check.kind}
+            reason={s.check.kind === 'blocked' ? s.check.reason : undefined}
+            result={results[s.id]}
+            disabled={!doc.session}
+            onRun={() => (s.check.kind === 'write' ? setConfirming(s) : run(s))}
+          />
         ))}
       </section>
       {confirming && confirming.check.kind === 'write' && (
@@ -189,26 +197,6 @@ function RunbookDoc({ file }: { file: string }) {
           <p className="muted" style={{ fontSize: 12.5 }}>A execução fica registrada em ~/.workstuff/runbook-audit.log.</p>
         </ConfirmModal>
       )}
-    </div>
-  )
-}
-
-function StepCard({ step, result, disabled, onRun }: { step: Extract<Segment, { type: 'step' }>; result: Result | 'running' | undefined; disabled: boolean; onRun: () => void }) {
-  const c = step.check
-  const preview = c.kind === 'blocked' ? step.line : `kubectl ${c.args.join(' ')}`
-  return (
-    <div className={`rb-step rb-${c.kind}`}>
-      <div className="row" style={{ flexWrap: 'nowrap' }}>
-        <code className="mono spacer rb-cmd">{preview}</code>
-        {c.kind === 'blocked'
-          ? <span className="badge" title={c.reason}><Lock size={11} /> bloqueado</span>
-          : <button className={`btn btn-sm ${c.kind === 'write' ? 'btn-danger' : ''}`} disabled={disabled || result === 'running'} onClick={onRun}>
-              {c.kind === 'write' ? <><Zap size={12} /> Executar (escrita)</> : <><Play size={12} /> Rodar</>}
-            </button>}
-      </div>
-      {c.kind === 'blocked' && <div className="muted" style={{ fontSize: 12 }}>{c.reason}</div>}
-      {result === 'running' && <div className="muted" style={{ fontSize: 12 }}>rodando…</div>}
-      {result && result !== 'running' && <pre className={`code rb-out${result.ok ? '' : ' rb-fail'}`}>{result.output || '(sem saída)'}</pre>}
     </div>
   )
 }

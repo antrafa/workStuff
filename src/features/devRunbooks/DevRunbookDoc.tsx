@@ -1,7 +1,7 @@
 import './devRunbooks.css'
-import { FolderOpen, Lock, Play, Zap } from 'lucide-react'
+import { FolderOpen, Zap } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
-import { ConfirmModal, Markdown, SkeletonRows, useToast } from '@/ui'
+import { CommandStep, ConfirmModal, Markdown, SkeletonRows, useToast } from '@/ui'
 import { api } from '@/lib/api'
 
 type Check =
@@ -116,9 +116,11 @@ export function DevRunbookDoc({ file, initialValues = {} }: { file: string; init
           s.type === 'text' ? (
             <Markdown key={i}>{s.md}</Markdown>
           ) : (
-            <StepCard
+            <CommandStep
               key={i}
-              step={s}
+              command={s.check.kind === 'blocked' ? s.line : `${s.check.bin} ${s.check.args.join(' ')}`}
+              kind={s.check.kind}
+              reason={s.check.kind === 'blocked' ? s.check.reason : undefined}
               result={results[s.id]}
               onRun={() => (s.check.kind === 'write' ? setConfirming(s) : run(s))}
             />
@@ -151,56 +153,6 @@ export function DevRunbookDoc({ file, initialValues = {} }: { file: string; init
             A execução fica registrada em ~/.workstuff/dev-runbook-audit.log.
           </p>
         </ConfirmModal>
-      )}
-    </div>
-  )
-}
-
-function StepCard({
-  step,
-  result,
-  onRun,
-}: {
-  step: { type: 'step' } & Step
-  result: Result | 'running' | undefined
-  onRun: () => void
-}) {
-  const c = step.check
-  const preview = c.kind === 'blocked' ? step.line : `${c.bin} ${c.args.join(' ')}`
-
-  return (
-    <div className={`drb-step drb-${c.kind}`}>
-      <div className="row" style={{ flexWrap: 'nowrap', alignItems: 'center' }}>
-        <code className="mono spacer drb-cmd">{preview}</code>
-        {c.kind === 'blocked' ? (
-          <span className="badge" title={c.reason}>
-            <Lock size={11} /> bloqueado
-          </span>
-        ) : (
-          <button
-            className={`btn btn-sm ${c.kind === 'write' ? 'btn-danger' : ''}`}
-            disabled={result === 'running'}
-            onClick={onRun}
-          >
-            {c.kind === 'write' ? (
-              <>
-                <Zap size={12} /> Executar (escrita)
-              </>
-            ) : (
-              <>
-                <Play size={12} /> Rodar
-              </>
-            )}
-          </button>
-        )}
-      </div>
-
-      {c.kind === 'blocked' && <div className="muted" style={{ fontSize: 12 }}>{c.reason}</div>}
-      {result === 'running' && <div className="muted" style={{ fontSize: 12 }}>executando comando…</div>}
-      {result && result !== 'running' && (
-        <pre className={`code drb-out${result.ok ? '' : ' drb-fail'}`}>
-          {result.output || '(comando executado com sucesso, sem saída)'}
-        </pre>
       )}
     </div>
   )
