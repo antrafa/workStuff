@@ -10,6 +10,11 @@ import { join } from 'node:path'
 
 const tmp = mkdtempSync(join(tmpdir(), 'workstuff-pipeline-'))
 process.env.WORKSTUFF_HOME = join(tmp, 'home')
+// Fake user home with a Claude login: the jailed agents get a copy, never the real ~/.claude
+const agentHome = join(tmp, 'agent-home')
+process.env.WORKSTUFF_AGENT_HOME = agentHome
+mkdirSync(join(agentHome, '.claude'), { recursive: true })
+writeFileSync(join(agentHome, '.claude', '.credentials.json'), JSON.stringify({ claudeAiOauth: { accessToken: 'a', refreshToken: 'r' } }))
 
 // The fake CLI answers by agent (from the system prompt) and by what the prompt asks.
 const bin = join(tmp, 'bin')
@@ -28,6 +33,11 @@ if (sys.includes('o Analyst')) {
 } else if (sys.includes('o Architect')) {
   out = '## Plano\\n1. criar feature.txt\\n' + env({ plan: 'p', targetFiles: ['feature.txt'], testScenarios: ['cen1'] })
 } else if (sys.includes('o Implementer')) {
+  // What the jail gave this agent: its own config home with the login, and a read-only real one
+  let realWritable = true
+  try { fs.writeFileSync(${JSON.stringify(join(tmp, 'agent-home', '.claude', 'settings.json'))}, '{}') } catch { realWritable = false }
+  const cfg = process.env.CLAUDE_CONFIG_DIR
+  fs.writeFileSync(cfg + '/jail-seen.json', JSON.stringify({ cfg, realWritable, creds: JSON.parse(fs.readFileSync(cfg + '/.credentials.json', 'utf-8')) }))
   const content = prompt.includes('bloqueiam') ? 'ok\\nX tratado\\n' : prompt.includes('NÃO passou') ? 'ok\\n' : 'bug\\n'
   fs.writeFileSync('feature.txt', content)
   out = env({ changedFiles: ['feature.txt'], commitMessage: 'feat: feature', summary: 'feito' })
@@ -98,6 +108,10 @@ try {
   assert.equal(done.handoffs?.docs?.mrDescription, 'descrição final')
   assert.ok(done.spans!.every(s => s.status !== 'running'))
   assert.ok(done.spans!.some(s => s.usage?.costUsd === 0.01), 'custo por agente registrado')
+  const jailSeen = JSON.parse(readFileSync(`${wt}.agent-home/claude/jail-seen.json`, 'utf-8'))
+  assert.equal(jailSeen.cfg, `${wt}.agent-home/claude`, 'agente com escrita usa a config própria da worktree')
+  assert.equal(jailSeen.realWritable, false, '~/.claude real somente leitura dentro do jail')
+  assert.deepEqual(jailSeen.creds, { claudeAiOauth: { accessToken: 'a' } }, 'login copiado sem o refresh token')
   const log = execFileSync('git', ['-C', wt, 'log', '--format=%s', 'main..HEAD'], { encoding: 'utf-8' })
   assert.match(log, /^docs: /m)
   assert.match(log, /^test: /m)
