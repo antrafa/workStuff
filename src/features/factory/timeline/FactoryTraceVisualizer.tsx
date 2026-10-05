@@ -1,8 +1,6 @@
-import { useState, useEffect, useMemo, useRef } from 'react'
+import { useState, useEffect } from 'react'
 import {
   ArrowLeft,
-  ChevronDown,
-  ChevronRight,
   Code2,
   Cpu,
   GitBranch,
@@ -17,16 +15,15 @@ import {
   User,
   Wrench,
   MessageSquare,
-  AlertTriangle,
   BookOpen,
   ClipboardList,
   ShieldAlert,
 } from 'lucide-react'
-import { Chips, Markdown } from '@/ui'
 import { api } from '@/lib/api'
 import type { FactoryTask } from '../../../../server/lib/factory/types.ts'
 import { FactoryStatusChip } from './FactoryStatusChip'
 import { FactoryStatChip } from './FactoryStatChip'
+import { PhaseDetailModal } from './PhaseDetailModal'
 import { AGENT_ORDER, AGENT_UI, fmtDuration, runFactoryAction, useLiveTask } from '../factoryRun'
 import type { SpecializedAgentId } from '../../../../server/lib/factory/types.ts'
 
@@ -62,20 +59,11 @@ export function FactoryTraceVisualizer({ task, onBack, onUpdate, onOpenReview }:
   const [processing, setProcessing] = useState(false)
   const { task: liveTask, events: consolidatedEvents, running: isExecuting, refresh, paused, setPaused } = useLiveTask(task, processing)
   const [selectedSpanId, setSelectedSpanId] = useState<string | null>(null)
-  const [eventFilter, setEventFilter] = useState<'all' | 'tools' | 'text' | 'status'>('all')
-  const [openAccordions, setOpenAccordions] = useState<Record<string, boolean>>({
-    request: true,
-    description: true,
-    gates: true,
-    outputs: true,
-  })
   const [statusMessage, setStatusMessage] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [stopping, setStopping] = useState(false)
   const [isRefreshing, setIsRefreshing] = useState(false)
   const [currentTime, setCurrentTime] = useState(Date.now())
-  const [autoScroll, setAutoScroll] = useState(true)
-  const eventsEndRef = useRef<HTMLDivElement | null>(null)
 
   // Timer em tempo real durante a execução para atualizar duração e escala temporal
   useEffect(() => {
@@ -90,26 +78,6 @@ export function FactoryTraceVisualizer({ task, onBack, onUpdate, onOpenReview }:
     setIsRefreshing(true)
     await refresh()
     setIsRefreshing(false)
-  }
-
-  const displayedEvents = useMemo(() => {
-    return consolidatedEvents.filter(ev => {
-      if (eventFilter === 'tools') return ev.type === 'tool' || ev.type === 'tool-result'
-      if (eventFilter === 'text') return ev.type === 'text'
-      if (eventFilter === 'status') return ev.type === 'status' || ev.type === 'error'
-      return true
-    })
-  }, [consolidatedEvents, eventFilter])
-
-  // Auto-scroll nos eventos da execução
-  useEffect(() => {
-    if (autoScroll && eventsEndRef.current) {
-      eventsEndRef.current.scrollIntoView({ behavior: 'smooth' })
-    }
-  }, [displayedEvents.length, autoScroll])
-
-  const toggleAccordion = (key: string) => {
-    setOpenAccordions(prev => ({ ...prev, [key]: !prev[key] }))
   }
 
   // Definição das Raias do Waterfall
@@ -127,8 +95,8 @@ export function FactoryTraceVisualizer({ task, onBack, onUpdate, onOpenReview }:
   const taskEndTime = isExecuting ? currentTime : new Date(liveTask.updatedAt).getTime()
   const totalDurationMs = Math.max(taskEndTime - taskStartTime, 5000)
 
-  // Seleciona span ativo padrão se nenhum estiver selecionado
-  const activeSpan = spans.find(s => s.id === selectedSpanId) || spans[spans.length - 1] || null
+  // Clicking a phase opens its detail modal; read from the live task so it updates while running
+  const selectedSpan = spans.find(s => s.id === selectedSpanId) ?? null
 
   // Ticks temporais da escala
   const ticks = [
@@ -216,7 +184,7 @@ export function FactoryTraceVisualizer({ task, onBack, onUpdate, onOpenReview }:
           <span style={{ fontSize: 13, color: 'var(--muted)' }}>
             Fábrica de Software &gt; execuções &gt;{' '}
             <b style={{ color: 'var(--fx-architect)', fontFamily: 'var(--font-mono)' }}>{liveTask.id}</b>
-            {activeSpan && <span> &gt; <b style={{ color: 'var(--fx-implementer)' }}>{activeSpan.name}</b></span>}
+            {selectedSpan && <span> &gt; <b style={{ color: 'var(--fx-implementer)' }}>{selectedSpan.name}</b></span>}
           </span>
         </div>
 
@@ -358,7 +326,7 @@ export function FactoryTraceVisualizer({ task, onBack, onUpdate, onOpenReview }:
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0, color: 'var(--muted)', fontFamily: 'var(--font-mono)' }}>
             <span>Tempo ativo: <strong style={{ color: 'var(--ok)' }}>{fmtDuration(totalDurationMs)}</strong></span>
             <span>|</span>
-            <span>{displayedEvents.length} eventos</span>
+            <span>{consolidatedEvents.length} eventos</span>
           </div>
         </div>
       )}
@@ -508,7 +476,7 @@ export function FactoryTraceVisualizer({ task, onBack, onUpdate, onOpenReview }:
                     const sDur = span.durationMs ?? (sEnd - sStart)
                     const startPct = Math.max(0, Math.min(88, ((sStart - taskStartTime) / totalDurationMs) * 100))
                     const widthPct = Math.max(10, Math.min(100 - startPct, (sDur / totalDurationMs) * 100))
-                    const isSelected = (activeSpan?.id === span.id)
+                    const isSelected = (selectedSpan?.id === span.id)
 
                     return (
                       <button
@@ -637,414 +605,8 @@ export function FactoryTraceVisualizer({ task, onBack, onUpdate, onOpenReview }:
         </div>
       </div>
 
-      {/* 4. PAINEL DE DETALHES DA FASE (PHASE DETAIL INSPECTOR) */}
-      {activeSpan && (
-        <div
-          style={{
-            margin: '0 20px 30px',
-            borderRadius: 'var(--r-lg)',
-            border: '1px solid var(--line)',
-            background: 'var(--surface)',
-            overflow: 'hidden',
-          }}
-        >
-          {/* Header do Inspector */}
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              padding: '12px 20px',
-              borderBottom: '1px solid var(--line)',
-              background: 'var(--surface-2)',
-              flexWrap: 'wrap',
-              gap: 10,
-            }}
-          >
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <span style={{ fontSize: 16, fontWeight: 700, color: 'var(--ink)' }}>{activeSpan.name}</span>
-              <FactoryStatusChip span={activeSpan.status} />
-              <FactoryStatChip kind="runtime" value={activeSpan.durationMs} />
-            </div>
-
-            <div style={{ display: 'flex', alignItems: 'center', gap: 14, fontSize: 12, color: 'var(--muted)' }}>
-              <span>Proprietário: <b style={{ color: 'var(--fx-architect)' }}>{activeSpan.agentId || 'sistema'}</b></span>
-              <span>·</span>
-              <span>Tipo: <b style={{ color: 'var(--fx-implementer)' }}>{activeSpan.kind}</b></span>
-            </div>
-          </div>
-
-          {/* Grid Split de 2 Colunas com minWidth: 0 */}
-          <div
-            style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))',
-              gap: 20,
-              padding: 20,
-              minWidth: 0,
-            }}
-          >
-            {/* Coluna Esquerda: Acordeões de Entrada, Plano, Portões e Envelopes */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 12, minWidth: 0 }}>
-              {/* Acordeão: Pedido / Requisitos */}
-              <div style={{ borderRadius: 8, border: '1px solid var(--line)', background: 'var(--surface)', overflow: 'hidden' }}>
-                <button
-                  type="button"
-                  onClick={() => toggleAccordion('request')}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    width: '100%',
-                    padding: '10px 14px',
-                    background: 'var(--surface-2)',
-                    border: 'none',
-                    color: 'var(--ink)',
-                    cursor: 'pointer',
-                    fontSize: 13,
-                    fontWeight: 600,
-                  }}
-                >
-                  <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                    {openAccordions.request ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-                    Pedido / Requisitos da Demanda
-                  </span>
-                </button>
-                {openAccordions.request && (
-                  <div style={{ padding: 14, fontSize: 13, color: 'var(--ink-2)', lineHeight: 1.5 }}>
-                    {liveTask.description || liveTask.title}
-                  </div>
-                )}
-              </div>
-
-              {/* Acordeão: Descrição & Plano Técnico */}
-              {liveTask.plan && (
-                <div style={{ borderRadius: 8, border: '1px solid var(--line)', background: 'var(--surface)', overflow: 'hidden' }}>
-                  <button
-                    type="button"
-                    onClick={() => toggleAccordion('description')}
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'space-between',
-                      width: '100%',
-                      padding: '10px 14px',
-                      background: 'var(--surface-2)',
-                      border: 'none',
-                      color: 'var(--ink)',
-                      cursor: 'pointer',
-                      fontSize: 13,
-                      fontWeight: 600,
-                    }}
-                  >
-                    <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                      {openAccordions.description ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-                      Plano Técnico do Architect
-                    </span>
-                  </button>
-                  {openAccordions.description && (
-                    <div style={{ padding: 14, maxHeight: 300, overflowY: 'auto' }}>
-                      <Markdown>{liveTask.plan}</Markdown>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* Acordeão: Portões de Aceitação (Gates) */}
-              <div style={{ borderRadius: 8, border: '1px solid var(--line)', background: 'var(--surface)', overflow: 'hidden' }}>
-                <button
-                  type="button"
-                  onClick={() => toggleAccordion('gates')}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    width: '100%',
-                    padding: '10px 14px',
-                    background: 'var(--surface-2)',
-                    border: 'none',
-                    color: 'var(--ink)',
-                    cursor: 'pointer',
-                    fontSize: 13,
-                    fontWeight: 600,
-                  }}
-                >
-                  <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                    {openAccordions.gates ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-                    Portões Mecânicos de Aceitação
-                  </span>
-                </button>
-                {openAccordions.gates && (
-                  <div style={{ padding: 14, display: 'flex', flexDirection: 'column', gap: 10 }}>
-                    <div style={{ padding: 10, borderRadius: 6, background: 'var(--surface-2)', borderLeft: '3px solid var(--ok)', fontSize: 12 }}>
-                      <div style={{ fontWeight: 600, color: 'var(--ink)' }}>Portão 1: Verificação de Alterações Git (Diff Not Empty)</div>
-                      <div style={{ color: 'var(--muted)', marginTop: 2 }}>
-                        {liveTask.diffStat ? `${liveTask.diffStat.filesChanged} arquivos modificados (+${liveTask.diffStat.insertions} / -${liveTask.diffStat.deletions})` : 'Validado na worktree'}
-                      </div>
-                    </div>
-
-                    <div style={{ padding: 10, borderRadius: 6, background: 'var(--surface-2)', borderLeft: '3px solid var(--ok)', fontSize: 12 }}>
-                      <div style={{ fontWeight: 600, color: 'var(--ink)' }}>Portão 2: Suíte Determinística de Testes (Tests Pass)</div>
-                      {liveTask.qaReport?.output && (
-                        <pre style={{ margin: '6px 0 0', padding: 8, background: 'var(--bg)', borderRadius: 4, fontSize: 11, maxHeight: 120, overflowY: 'auto' }}>
-                          {liveTask.qaReport.output}
-                        </pre>
-                      )}
-                      <div style={{ color: 'var(--muted)', marginTop: 2 }}>
-                        {liveTask.qaReport?.passed ? 'Todos os testes passaram com código de saída 0.' : 'Nenhuma falha reportada.'}
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {/* Acordeão: Envelopes de Handoff */}
-              {liveTask.handoffs && Object.keys(liveTask.handoffs).length > 0 && (
-                <div style={{ borderRadius: 8, border: '1px solid var(--line)', background: 'var(--surface)', overflow: 'hidden' }}>
-                  <button
-                    type="button"
-                    onClick={() => toggleAccordion('outputs')}
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'space-between',
-                      width: '100%',
-                      padding: '10px 14px',
-                      background: 'var(--surface-2)',
-                      border: 'none',
-                      color: 'var(--ink)',
-                      cursor: 'pointer',
-                      fontSize: 13,
-                      fontWeight: 600,
-                    }}
-                  >
-                    <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                      {openAccordions.outputs ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-                      Envelopes Estruturados de Handoff
-                    </span>
-                  </button>
-                  {openAccordions.outputs && (
-                    <div style={{ padding: 14 }}>
-                      <pre style={{ margin: 0, padding: 10, background: 'var(--bg)', borderRadius: 6, fontSize: 11, maxHeight: 220, overflowY: 'auto', color: 'var(--fx-implementer)' }}>
-                        {JSON.stringify(liveTask.handoffs, null, 2)}
-                      </pre>
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-
-            {/* Coluna Direita: Tabela de Eventos da Sessão Consolidada */}
-            <div
-              style={{
-                borderRadius: 8,
-                border: '1px solid var(--line)',
-                background: 'var(--surface)',
-                display: 'flex',
-                flexDirection: 'column',
-                overflow: 'hidden',
-                maxHeight: 560,
-                minWidth: 0,
-              }}
-            >
-              {/* Header com Filtros */}
-              <div
-                style={{
-                  padding: '10px 14px',
-                  background: 'var(--surface-2)',
-                  borderBottom: '1px solid var(--line)',
-                  fontSize: 13,
-                  fontWeight: 600,
-                  color: 'var(--ink)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  gap: 8,
-                  flexWrap: 'wrap',
-                }}
-              >
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <span>Eventos da Execução ({displayedEvents.length})</span>
-                  {isExecuting && (
-                    <span className="badge badge-ok">
-                      <span className="live-dot" style={{ width: 5, height: 5, background: 'var(--ok)' }} />
-                      tempo real
-                    </span>
-                  )}
-                </div>
-
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <label
-                    style={{
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: 5,
-                      fontSize: 11,
-                      color: autoScroll ? 'var(--signal)' : 'var(--muted)',
-                      cursor: 'pointer',
-                      userSelect: 'none',
-                    }}
-                  >
-                    <input
-                      type="checkbox"
-                      checked={autoScroll}
-                      onChange={e => setAutoScroll(e.target.checked)}
-                      style={{ cursor: 'pointer', accentColor: 'var(--signal)' }}
-                    />
-                    Auto-rolagem
-                  </label>
-
-                  <Chips
-                    options={[
-                      { id: 'all', label: 'Todos' },
-                      { id: 'tools', label: 'Ferramentas' },
-                      { id: 'text', label: 'Mensagens' },
-                      { id: 'status', label: 'Status' },
-                    ]}
-                    value={eventFilter}
-                    onChange={setEventFilter}
-                  />
-              </div>
-            </div>
-
-            {/* Lista Formatada de Eventos */}
-              <div style={{ flex: 1, overflowY: 'auto', padding: 10, display: 'flex', flexDirection: 'column', gap: 8 }}>
-                {displayedEvents.length === 0 ? (
-                  <div style={{ padding: 28, textAlign: 'center', color: 'var(--muted)', fontSize: 12 }}>
-                    Nenhum evento registrado nesta categoria até o momento.
-                  </div>
-                ) : (
-                  displayedEvents.map((ev, idx) => {
-                    const isTool = ev.type === 'tool' || ev.type === 'tool-result'
-                    const isError = ev.type === 'error' || Boolean(ev.isError)
-                    const isText = ev.type === 'text'
-
-                    return (
-                      <div
-                        key={idx}
-                        style={{
-                          padding: '8px 12px',
-                          borderRadius: 6,
-                          background: isError
-                            ? 'var(--crit-soft)'
-                            : isTool
-                            ? 'color-mix(in srgb, var(--fx-implementer) 5%, transparent)'
-                            : isText
-                            ? 'color-mix(in srgb, var(--fx-architect) 5%, transparent)'
-                            : 'var(--surface-2)',
-                          borderLeft: isError
-                            ? '3px solid var(--crit)'
-                            : isTool
-                            ? '3px solid var(--fx-implementer)'
-                            : isText
-                            ? '3px solid var(--fx-architect)'
-                            : '3px solid var(--info)',
-                          borderTop: '1px solid var(--line)',
-                          borderRight: '1px solid var(--line)',
-                          borderBottom: '1px solid var(--line)',
-                          fontSize: 12,
-                        }}
-                      >
-                        {/* Header do Item de Evento */}
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
-                          <span
-                            style={{
-                              color: isError
-                                ? 'var(--crit)'
-                                : isTool
-                                ? 'var(--fx-implementer)'
-                                : isText
-                                ? 'var(--fx-architect)'
-                                : 'var(--info)',
-                              fontWeight: 600,
-                              fontSize: 11,
-                              display: 'flex',
-                              alignItems: 'center',
-                              gap: 6,
-                            }}
-                          >
-                            {isTool && <Wrench size={12} />}
-                            {isText && <MessageSquare size={12} />}
-                            {isError && <AlertTriangle size={12} />}
-                            {ev.type === 'text'
-                              ? 'Mensagem do Agente'
-                              : ev.type === 'tool'
-                              ? `Ferramenta: ${ev.tool}`
-                              : ev.type === 'tool-result'
-                              ? `Resultado: ${ev.tool}`
-                              : ev.type}
-                          </span>
-                          <span style={{ color: 'var(--muted)', fontSize: 10, fontFamily: 'var(--font-mono)' }}>
-                            #{idx + 1}
-                          </span>
-                        </div>
-
-                        {/* Conteúdo com quebra e formatação legível */}
-                        {isText ? (
-                          <div
-                            style={{
-                              color: 'var(--ink)',
-                              fontSize: 12,
-                              lineHeight: 1.5,
-                              whiteSpace: 'pre-wrap',
-                              wordBreak: 'break-word',
-                              background: 'var(--bg)',
-                              padding: 8,
-                              borderRadius: 4,
-                              maxHeight: 220,
-                              overflowY: 'auto',
-                            }}
-                          >
-                            {ev.text}
-                          </div>
-                        ) : ev.input ? (
-                          <pre
-                            style={{
-                              margin: 0,
-                              padding: 6,
-                              background: 'var(--bg)',
-                              borderRadius: 4,
-                              color: 'var(--ink-2)',
-                              fontSize: 11,
-                              whiteSpace: 'pre-wrap',
-                              wordBreak: 'break-word',
-                              maxHeight: 140,
-                              overflowY: 'auto',
-                            }}
-                          >
-                            {typeof ev.input === 'object' ? JSON.stringify(ev.input, null, 2) : String(ev.input)}
-                          </pre>
-                        ) : ev.content ? (
-                          <pre
-                            style={{
-                              margin: 0,
-                              padding: 6,
-                              background: 'var(--bg)',
-                              borderRadius: 4,
-                              color: 'var(--ink-2)',
-                              fontSize: 11,
-                              whiteSpace: 'pre-wrap',
-                              wordBreak: 'break-word',
-                              maxHeight: 140,
-                              overflowY: 'auto',
-                            }}
-                          >
-                            {typeof ev.content === 'object' ? JSON.stringify(ev.content, null, 2) : String(ev.content)}
-                          </pre>
-                        ) : (
-                          <div style={{ color: 'var(--ink)', fontSize: 11, lineHeight: 1.4 }}>
-                            {ev.message || ev.text}
-                          </div>
-                        )}
-                      </div>
-                    )
-                  })
-                )}
-                <div ref={eventsEndRef} />
-              </div>
-            </div>
-          </div>
-        </div>
+      {selectedSpan && (
+        <PhaseDetailModal span={selectedSpan} events={consolidatedEvents} onClose={() => setSelectedSpanId(null)} />
       )}
     </div>
   )
