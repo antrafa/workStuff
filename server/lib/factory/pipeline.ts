@@ -210,17 +210,23 @@ type ReviewOutcome = { review: ReviewEnvelope; security: ReviewEnvelope; finding
 
 // Reviewer and Security run in parallel. allSettled: when one fails, the other
 // is still awaited, so nothing keeps writing after the run is marked failed.
-async function reviewSquad(ctx: ExecContext, task: FactoryTask, worktreePath: string, round: number, previous: SecurityFinding[], tests: TestsGateResult, spec?: SpecEnvelope) {
+// Each reviewer re-checks only its own earlier findings: handed the merged list, Security repeated
+// the Reviewer's. `keptSecurity` is the clean audit of an earlier round, reused instead of a rerun.
+async function reviewSquad(
+  ctx: ExecContext, task: FactoryTask, worktreePath: string, round: number,
+  previous: SecurityFinding[], tests: TestsGateResult, spec?: SpecEnvelope, keptSecurity?: ReviewEnvelope,
+) {
   const { diff } = await getWorktreeDiff(worktreePath, task.baseBranch)
   const suffix = round > 0 ? ` (rodada ${round + 1})` : ''
-  // Each reviewer re-checks only its own earlier findings: handed the merged list, Security repeated the Reviewer's
   const own = (agentId: SpecializedAgentId) => previous.filter(f => f.agentId === agentId)
-  ctx.send({ type: 'status', message: `Reviewer e Security: revisando o diff em paralelo${suffix}...` })
+  ctx.send({ type: 'status', message: keptSecurity ? `Reviewer: revisando a correção${suffix}...` : `Reviewer e Security: revisando o diff em paralelo${suffix}...` })
   const settled = await Promise.allSettled([
     agentStep(ctx, task, 'reviewer', { name: `Revisão de código${suffix}`, phase: 'qa_security' },
       { prompt: formatReviewPrompt(task, diff, spec, own('reviewer'), tests), cwd: worktreePath }, t => parseReviewEnvelope(t, 'reviewer')),
-    agentStep(ctx, task, 'security', { name: `Auditoria de segurança${suffix}`, phase: 'qa_security' },
-      { prompt: formatSecurityPrompt(task, diff, own('security')), cwd: worktreePath }, t => parseReviewEnvelope(t, 'security')),
+    keptSecurity
+      ? Promise.resolve({ envelope: keptSecurity })
+      : agentStep(ctx, task, 'security', { name: `Auditoria de segurança${suffix}`, phase: 'qa_security' },
+        { prompt: formatSecurityPrompt(task, diff, own('security')), cwd: worktreePath }, t => parseReviewEnvelope(t, 'security')),
   ])
   const rejected = settled.find(s => s.status === 'rejected')
   if (rejected) throw rejected.reason
@@ -234,8 +240,12 @@ const incompleteFinding = (description: string): SecurityFinding => ({ severity:
 async function reviewAndFix(ctx: ExecContext, task: FactoryTask, worktreePath: string, tests: TestsGateResult, spec?: SpecEnvelope, plan?: PlanEnvelope): Promise<ReviewOutcome> {
   let previous: SecurityFinding[] = []
   let latestTests = tests
+  // ponytail: a fix for a Reviewer finding is not re-audited when Security found nothing; rerun it
+  // when the fix touches what it audits (spawn, auth, dependencies) if that ever bites.
+  let cleanSecurity: ReviewEnvelope | undefined
   for (let round = 0; ; round++) {
-    const { review, security } = await reviewSquad(ctx, task, worktreePath, round, previous, latestTests, spec)
+    const { review, security } = await reviewSquad(ctx, task, worktreePath, round, previous, latestTests, spec, cleanSecurity)
+    cleanSecurity = security.status === 'ok' && security.findings.length === 0 ? security : undefined
     const findings = mergeFindings(review.findings, security.findings)
     const outcome = (passed: boolean, extra: SecurityFinding[] = []) =>
       ({ review, security, findings: [...extra, ...findings], passed, fixRounds: round, tests: round > 0 ? latestTests : undefined })

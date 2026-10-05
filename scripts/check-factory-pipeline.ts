@@ -114,6 +114,8 @@ try {
   assert.equal(done.qaReport?.passed, true)
   assert.ok(existsSync(join(wt, 'README.md')) && !existsSync(join(wt, 'sneaky.ts')), 'Documenter só mexe em documentação')
   assert.equal(done.handoffs?.docs?.mrDescription, 'descrição final')
+  assert.equal(done.spans!.filter(s => s.agentId === 'security').length, 1, 'Security limpo na rodada 1 não roda de novo na correção')
+  assert.equal(done.spans!.filter(s => s.agentId === 'reviewer').length, 2, 'Reviewer confere a correção')
   assert.ok(done.spans!.every(s => s.status !== 'running'))
   assert.ok(done.spans!.some(s => s.usage?.costUsd === 0.01), 'custo por agente registrado')
   const jailSeen = JSON.parse(readFileSync(`${wt}.agent-home/claude/jail-seen.json`, 'utf-8'))
