@@ -75,7 +75,8 @@ const git = (...args: string[]) => execFileSync('git', ['-C', repo, ...args], { 
 git('init', '-b', 'main')
 git('config', 'user.name', 'Test')
 git('config', 'user.email', 'test@local')
-writeFileSync(join(repo, 'README.md'), '# repo\n')
+// Cites the file the fake Implementer writes, so the Documenter has something to keep current
+writeFileSync(join(repo, 'README.md'), '# repo\n\nVeja feature.txt.\n')
 // Like this project: `node_modules` without the slash, so the worktree's dependency symlink is ignored
 writeFileSync(join(repo, '.gitignore'), 'node_modules\n')
 mkdirSync(join(repo, 'node_modules'))

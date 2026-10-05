@@ -5,7 +5,7 @@
 import { defaultFactoryStore as store } from './store.ts'
 import { commitWorktree, createWorktree, discardFiles, getWorktreeDiff, headOf, resetWorktree, uncommittedFiles } from './worktree.ts'
 import { runFactoryAgent } from './runner.ts'
-import { gateArtifactsExist, gateDiffNotEmpty, gateTestsPass, nonDocFiles, type TestsGateResult } from './gates.ts'
+import { docsCiting, gateArtifactsExist, gateDiffNotEmpty, gateTestsPass, nonDocFiles, type TestsGateResult } from './gates.ts'
 import { ExecutionCancelledError, throwIfCancelled } from './executions.ts'
 import {
   computeVerdict,
@@ -269,9 +269,14 @@ async function reviewAndFix(ctx: ExecContext, task: FactoryTask, worktreePath: s
 
 // ── Documenter ───────────────────────────────────────────────────────────────
 
+// Skipped when no documentation names a changed file: in the one real task it changed nothing and
+// cost 7%. The MR description then falls back to the Reviewer's draft.
 async function document(ctx: ExecContext, task: FactoryTask, worktreePath: string, review: ReviewEnvelope, spec?: SpecEnvelope) {
-  ctx.send({ type: 'status', message: 'Documenter: atualizando a documentação afetada e a descrição do MR...' })
   const { stat } = await getWorktreeDiff(worktreePath, task.baseBranch)
+  const citing = await codeStep(ctx, 'code', { name: 'Documentação que cita os arquivos alterados', phase: 'qa_security' },
+    () => docsCiting(worktreePath, stat.files), undefined, docs => ({ docs }))
+  if (citing.length === 0) return undefined
+  ctx.send({ type: 'status', message: 'Documenter: atualizando a documentação afetada e a descrição do MR...' })
   const { envelope: docs } = await agentStep(ctx, task, 'documenter', { name: 'Documentação e descrição do MR', phase: 'qa_security' },
     { prompt: formatDocsPrompt(task, stat.files, review, spec), cwd: worktreePath }, parseDocsEnvelope)
 
