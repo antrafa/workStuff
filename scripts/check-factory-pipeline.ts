@@ -38,14 +38,17 @@ if (sys.includes('o Analyst')) {
   try { fs.writeFileSync(${JSON.stringify(join(tmp, 'agent-home', '.claude', 'settings.json'))}, '{}') } catch { realWritable = false }
   const cfg = process.env.CLAUDE_CONFIG_DIR
   fs.writeFileSync(cfg + '/jail-seen.json', JSON.stringify({ cfg, realWritable, creds: JSON.parse(fs.readFileSync(cfg + '/.credentials.json', 'utf-8')) }))
-  const content = prompt.includes('bloqueiam') ? 'ok\\nX tratado\\n' : prompt.includes('NÃO passou') ? 'ok\\n' : 'bug\\n'
+  const stubborn = prompt.includes('TEIMOSO')
+  const content = prompt.includes('bloqueiam') && !stubborn ? 'ok\\nX tratado\\n' : prompt.includes('NÃO passou') || stubborn ? 'ok\\n' : 'bug\\n'
   fs.writeFileSync('feature.txt', content)
   out = env({ changedFiles: ['feature.txt'], commitMessage: 'feat: feature', summary: 'feito' })
 } else if (sys.includes('o Tester')) {
   fs.writeFileSync('feature.test.txt', 'teste\\n')
   out = env({ testSuitePassed: true, testsRan: ['t1'], details: 'cobertura ok' })
+} else if (sys.includes('o Reviewer') && prompt.includes('PROSA')) {
+  out = 'Revisei tudo e está certo.'
 } else if (sys.includes('o Reviewer')) {
-  const second = prompt.includes('rodada anterior')
+  const second = prompt.includes('rodada anterior') && !prompt.includes('TEIMOSO')
   out = env({ findings: second ? [] : [{ severity: 'high', confidence: 90, file: 'feature.txt', line: 1, description: 'falta X' }],
     criteria: [{ criterion: 'Dado x, quando y, então ok', met: true, evidence: 'feature.txt' }], mrDescription: 'rascunho', summary: 'revisado' })
 } else if (sys.includes('o Security')) {
@@ -123,6 +126,25 @@ try {
   const modelOf = (agent: string) => new Set(done.spans!.filter(s => s.agentId === agent).map(s => s.model))
   assert.deepEqual(modelOf('architect'), new Set(['plan-model']))
   assert.deepEqual(modelOf('implementer'), new Set(['base-model']))
+
+  // Failure paths that used to pass silently. Each builds a fresh task on the same repo.
+  const runCase = async (id: string, title: string) => {
+    const t: Task = { ...task, id, branchName: `factory/${id}`, title, spans: [] }
+    await store.saveTask(t)
+    const c = { ...ctx, taskId: id }
+    return { c, built: await buildTask(c, await planTask(c, t)) }
+  }
+  const prose = await runCase('fac-prose', 'Feature PROSA')
+  assert.equal(prose.built.securityReport?.passed, false, 'Reviewer sem envelope não aprova')
+  assert.match(prose.built.securityReport!.findings[0].description, /Reviewer não concluiu/)
+  await removeWorktree(repo, prose.built.worktreePath!, prose.built.branchName)
+
+  const stubborn = await runCase('fac-stubborn', 'Feature TEIMOSO')
+  assert.equal(stubborn.built.securityReport?.passed, false)
+  assert.equal(stubborn.built.securityReport?.fixRounds, 0, 'correção que não muda nada encerra o laço')
+  assert.equal(stubborn.built.spans!.filter(s => s.agentId === 'reviewer').length, 1, 'sem revisão repetida do mesmo código')
+
+  await removeWorktree(repo, stubborn.built.worktreePath!, stubborn.built.branchName)
 
   // Budget: each fake run costs US$ 0.01; with a 0.015 cap the second run still starts
   // (0.01 spent) and the third is refused before it spends anything

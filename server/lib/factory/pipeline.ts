@@ -19,6 +19,7 @@ import {
   formatSecurityPrompt,
   formatSpecPrompt,
   formatTestPrompt,
+  incompleteReview,
   mergeFindings,
   parseBuildEnvelope,
   parseDocsEnvelope,
@@ -206,13 +207,13 @@ type ReviewOutcome = { review: ReviewEnvelope; security: ReviewEnvelope; finding
 
 // Reviewer and Security run in parallel. allSettled: when one fails, the other
 // is still awaited, so nothing keeps writing after the run is marked failed.
-async function reviewSquad(ctx: ExecContext, task: FactoryTask, worktreePath: string, round: number, previous: SecurityFinding[], spec?: SpecEnvelope) {
+async function reviewSquad(ctx: ExecContext, task: FactoryTask, worktreePath: string, round: number, previous: SecurityFinding[], tests: TestsGateResult, spec?: SpecEnvelope) {
   const { diff } = await getWorktreeDiff(worktreePath, task.baseBranch)
   const suffix = round > 0 ? ` (rodada ${round + 1})` : ''
   ctx.send({ type: 'status', message: `Reviewer e Security: revisando o diff em paralelo${suffix}...` })
   const settled = await Promise.allSettled([
     agentStep(ctx, task, 'reviewer', { name: `Revisão de código${suffix}`, phase: 'qa_security' },
-      { prompt: formatReviewPrompt(task, diff, spec, previous), cwd: worktreePath }, t => parseReviewEnvelope(t, 'reviewer')),
+      { prompt: formatReviewPrompt(task, diff, spec, previous, tests), cwd: worktreePath }, t => parseReviewEnvelope(t, 'reviewer')),
     agentStep(ctx, task, 'security', { name: `Auditoria de segurança${suffix}`, phase: 'qa_security' },
       { prompt: formatSecurityPrompt(task, diff, previous), cwd: worktreePath }, t => parseReviewEnvelope(t, 'security')),
   ])
@@ -222,17 +223,30 @@ async function reviewSquad(ctx: ExecContext, task: FactoryTask, worktreePath: st
   return { review, security }
 }
 
-async function reviewAndFix(ctx: ExecContext, task: FactoryTask, worktreePath: string, spec?: SpecEnvelope, plan?: PlanEnvelope): Promise<ReviewOutcome> {
+// A review the code cannot trust becomes a blocking finding for the human, never a pass.
+const incompleteFinding = (description: string): SecurityFinding => ({ severity: 'high', confidence: 100, description })
+
+async function reviewAndFix(ctx: ExecContext, task: FactoryTask, worktreePath: string, tests: TestsGateResult, spec?: SpecEnvelope, plan?: PlanEnvelope): Promise<ReviewOutcome> {
   let previous: SecurityFinding[] = []
-  let tests: TestsGateResult | undefined
+  let latestTests = tests
   for (let round = 0; ; round++) {
-    const { review, security } = await reviewSquad(ctx, task, worktreePath, round, previous, spec)
+    const { review, security } = await reviewSquad(ctx, task, worktreePath, round, previous, latestTests, spec)
     const findings = mergeFindings(review.findings, security.findings)
+    const outcome = (passed: boolean, extra: SecurityFinding[] = []) =>
+      ({ review, security, findings: [...extra, ...findings], passed, fixRounds: round, tests: round > 0 ? latestTests : undefined })
+
+    const incomplete = incompleteReview(review, security, spec?.acceptanceCriteria)
+    if (incomplete.length) return outcome(false, incomplete.map(incompleteFinding))
     const verdict = computeVerdict(findings, review.criteria)
-    if (verdict.passed || round >= MAX_FIX_ROUNDS) return { review, security, findings, passed: verdict.passed, fixRounds: round, tests }
+    if (verdict.passed || round >= MAX_FIX_ROUNDS) return outcome(verdict.passed)
 
     const fixed = await implementWithGates(ctx, task, worktreePath, formatFixFindingsPrompt(task, verdict.blocking, verdict.unmet, plan), `Correção dos achados da revisão (rodada ${round + 1})`, plan)
-    tests = fixed.tests
+    // The diff gate compares with the base, so a fix that changed nothing still passes it; reviewing
+    // the same code again would only buy the same findings.
+    if ((await uncommittedFiles(worktreePath)).length === 0) {
+      return outcome(false, [incompleteFinding(`A correção automática da rodada ${round + 1} não alterou nenhum arquivo; os achados abaixo continuam para você decidir.`)])
+    }
+    latestTests = fixed.tests
     await commit(ctx, worktreePath, `fix: corrige achados da revisão automática (rodada ${round + 1})`)
     previous = findings
   }
@@ -302,13 +316,14 @@ export async function buildTask(ctx: ExecContext, task: FactoryTask): Promise<Fa
     tests = await runTests(ctx, current, worktreePath, 'Portão: verificação com os testes novos')
   }
 
-  const outcome = await reviewAndFix(ctx, current, worktreePath, spec, plan)
+  const outcome = await reviewAndFix(ctx, current, worktreePath, tests, spec, plan)
   tests = outcome.tests ?? tests
   const docs = await document(ctx, current, worktreePath, outcome.review, spec)
 
   return finishReview(current, worktreePath, outcome, tests, testEnv.details || testerRun.text, { spec, plan, build: built.build, test: testEnv, docs })
 }
 
+// The developer's feedback goes through the same gates and the same review squad as the first build.
 // The developer's feedback goes through the same gates and the same review squad as the first build.
 export async function adjustTask(ctx: ExecContext, task: FactoryTask, feedback: string): Promise<FactoryTask> {
   const worktreePath = task.worktreePath!
@@ -319,7 +334,7 @@ export async function adjustTask(ctx: ExecContext, task: FactoryTask, feedback: 
   await commit(ctx, worktreePath, built.build.commitMessage || `fix: ajuste conforme revisão de "${task.title.slice(0, 40)}"`)
 
   const current = await saveState(task, { state: 'qa_security' })
-  const outcome = await reviewAndFix(ctx, current, worktreePath, spec, plan)
+  const outcome = await reviewAndFix(ctx, current, worktreePath, built.tests, spec, plan)
   const tests = outcome.tests ?? built.tests
   const summary = tests.passed ? `Verificação passou após o ajuste "${feedback.slice(0, 120)}".` : `Verificação falhou após o ajuste "${feedback.slice(0, 120)}".`
   return finishReview(current, worktreePath, outcome, tests, summary, { ...current.handoffs, build: built.build })

@@ -254,10 +254,11 @@ function parseFinding(f: any, agentId: SpecializedAgentId): SecurityFinding {
   }
 }
 
+// No envelope means no review: "zero findings" read from prose would pass the verdict unchecked.
 export function parseReviewEnvelope(text: string, agentId: SpecializedAgentId = 'reviewer'): ReviewEnvelope {
   const parsed = extractJsonFromMarkdown(text)
   if (!parsed || typeof parsed !== 'object') {
-    return { status: 'ok', findings: [], criteria: [], mrDescription: text, summary: text.slice(0, 1000) }
+    return { status: 'error', findings: [], criteria: [], mrDescription: '', summary: text.slice(0, 1000) }
   }
   const criteria: CriterionCheck[] = Array.isArray(parsed.criteria)
     ? parsed.criteria.map((c: any) => ({ criterion: String(c?.criterion ?? c), met: c?.met === true, evidence: String(c?.evidence ?? '') }))
@@ -273,18 +274,37 @@ export function parseReviewEnvelope(text: string, agentId: SpecializedAgentId = 
 
 const FINDING_EXAMPLE = { severity: 'high', confidence: 85, file: 'src/exemplo.ts', line: 42, description: 'O que está errado, a consequência e a correção' }
 
+// The reviewers only read; the verification is run by the pipeline and its result is evidence for them.
+type VerifyResult = { command?: string; exitCode: number; passed: boolean; skipped?: boolean; output: string }
+function verifyBlock(tests?: VerifyResult): string {
+  if (!tests) return ''
+  if (tests.skipped && !tests.command) return 'Verificação automática: nenhum comando de verificação foi detectado no repositório.'
+  return [
+    `Verificação automática, rodada pela esteira (você não precisa nem consegue rodar comandos): \`${tests.command}\` terminou com código ${tests.exitCode} (${tests.passed ? 'passou' : 'falhou'}).`,
+    `Final da saída:\n\`\`\`\n${tests.output.slice(-3000)}\n\`\`\``,
+  ].join('\n')
+}
+
+// A cut diff must say so, or a review of the first 80k characters comes back clean for the rest.
+const MAX_REVIEW_DIFF = 80_000
+function diffBlock(diff: string): string {
+  if (diff.length <= MAX_REVIEW_DIFF) return `Diff das alterações:\n\`\`\`diff\n${diff}\n\`\`\``
+  return `Diff das alterações (truncado: ${MAX_REVIEW_DIFF} de ${diff.length} caracteres; leia o restante dos arquivos alterados com Read):\n\`\`\`diff\n${diff.slice(0, MAX_REVIEW_DIFF)}\n\`\`\``
+}
+
 function previousFindingsBlock(previous: SecurityFinding[]): string {
   if (previous.length === 0) return ''
   return `Achados da rodada anterior (confira se foram corrigidos; repita apenas os que continuam):\n${previous.map(findingLine).join('\n')}`
 }
 
-export function formatReviewPrompt(task: FactoryTask, diff: string, spec?: SpecEnvelope, previous: SecurityFinding[] = []): string {
+export function formatReviewPrompt(task: FactoryTask, diff: string, spec?: SpecEnvelope, previous: SecurityFinding[] = [], tests?: VerifyResult): string {
   return [
     `Revise as alterações da branch contra a base ${task.baseBranch}.`,
     `Demanda: ${task.title}`,
     specBlock(spec),
+    verifyBlock(tests),
     previousFindingsBlock(previous),
-    `Diff das alterações:\n\`\`\`diff\n${diff.slice(0, 80_000)}\n\`\`\``,
+    diffBlock(diff),
     envelopeInstruction({
       status: 'ok',
       findings: [FINDING_EXAMPLE],
@@ -300,7 +320,7 @@ export function formatSecurityPrompt(task: FactoryTask, diff: string, previous: 
     `Audite a segurança das alterações da branch contra a base ${task.baseBranch}.`,
     `Demanda: ${task.title}`,
     previousFindingsBlock(previous),
-    `Diff das alterações:\n\`\`\`diff\n${diff.slice(0, 80_000)}\n\`\`\``,
+    diffBlock(diff),
     envelopeInstruction({ status: 'ok', findings: [FINDING_EXAMPLE], summary: 'Parecer de segurança em poucas frases' }),
   ].filter(Boolean).join('\n\n')
 }
@@ -312,6 +332,19 @@ export function computeVerdict(findings: SecurityFinding[], criteria: CriterionC
   const blocking = findings.filter(f => (f.severity === 'critical' || f.severity === 'high') && (f.confidence ?? MIN_CONFIDENCE) >= MIN_CONFIDENCE)
   const unmet = criteria.filter(c => !c.met)
   return { passed: blocking.length === 0 && unmet.length === 0, blocking, unmet }
+}
+
+// Why a review cannot be trusted, if it cannot: a reviewer with no envelope or a declared error,
+// or fewer criteria checked than the spec has (one left out would pass unchecked). Counting, not
+// matching text: reviewers rephrase criteria. The Implementer cannot fix this, so it goes to the human.
+export function incompleteReview(review: ReviewEnvelope, security: ReviewEnvelope, expectedCriteria: string[] = []): string[] {
+  const reasons: string[] = []
+  if (review.status === 'error') reasons.push(`O Reviewer não concluiu a revisão (sem envelope ou com erro): ${review.summary.slice(0, 300)}`)
+  if (security.status === 'error') reasons.push(`O Security não concluiu a auditoria (sem envelope ou com erro): ${security.summary.slice(0, 300)}`)
+  if (review.status !== 'error' && review.criteria.length < expectedCriteria.length) {
+    reasons.push(`O Reviewer avaliou ${review.criteria.length} de ${expectedCriteria.length} critérios de aceite; os demais não foram verificados.`)
+  }
+  return reasons
 }
 
 // Worst first; the same file:line reported by both reviewers stays once (the more severe).
@@ -393,6 +426,13 @@ if (import.meta.main && process.argv.includes('--selfcheck')) {
   assert.equal(computeVerdict([{ severity: 'critical', description: 'talvez', confidence: 40 }]).passed, true, 'confiança baixa não bloqueia')
   assert.equal(computeVerdict([], review.criteria).unmet.length, 1, 'critério não atendido bloqueia')
 
+  const prose = parseReviewEnvelope('Revisei e está tudo certo.')
+  assert.equal(prose.status, 'error', 'revisão sem envelope não é uma revisão aprovada')
+  const okEnv = parseReviewEnvelope('```json\n{"findings":[],"criteria":[{"criterion":"c1","met":true}]}\n```')
+  assert.deepEqual(incompleteReview(okEnv, okEnv, ['c1']), [])
+  assert.equal(incompleteReview(prose, okEnv).length, 1, 'Reviewer sem envelope torna a revisão incompleta')
+  assert.match(incompleteReview(okEnv, okEnv, ['c1', 'c2'])[0], /1 de 2 critérios/, 'critério omitido não passa calado')
+
   const merged = mergeFindings(
     [{ severity: 'medium', description: 'a', file: 'x.ts', line: 1 }, { severity: 'low', description: 'b' }],
     [{ severity: 'critical', description: 'c', file: 'x.ts', line: 1 }],
@@ -406,6 +446,9 @@ if (import.meta.main && process.argv.includes('--selfcheck')) {
   }
   assert.ok(formatTestPrompt(task, { command: 'npm test', output: 'ok', passed: true }, planEnv).includes('s1'), 'Tester recebe os cenários do plano')
   assert.ok(formatReviewPrompt(task, '+x', spec).includes('Dado a, quando b, então c'), 'Reviewer recebe os critérios')
+  const withTests = formatReviewPrompt(task, '+x', spec, [], { command: 'npm test', exitCode: 1, passed: false, output: 'FALHOU em a.test' })
+  assert.ok(withTests.includes('`npm test` terminou com código 1') && withTests.includes('FALHOU em a.test'), 'Reviewer recebe o resultado da verificação')
+  assert.match(formatSecurityPrompt(task, 'x'.repeat(80_001)), /truncado: 80000 de 80001/, 'diff cortado avisa o revisor')
   assert.ok(formatCorrectionPrompt(task, 'boom', true).includes('boom'))
   assert.ok(!formatCorrectionPrompt(task, 'boom', true).includes('Demanda'), 'sessão retomada não repete a demanda')
   assert.ok(formatDocsPrompt(task, ['a.ts']).includes('Closes #7'))
