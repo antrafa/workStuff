@@ -220,9 +220,9 @@ stateDiagram-v2
 | `done` | concluída | MR aberto ou merge feito. |
 | `error` | falhou | A execução falhou; a mensagem fica em `task.error`. |
 
-**Parar uma execução** volta ao último ponto de decisão humana (`stateAfterCancel`): planejamento volta para `intake`, construção para `waiting_approval`, ajuste para `review`. Fechar a aba ou o console **não** para nada: só o botão Parar para.
+**Parar uma execução** volta ao último ponto de decisão humana (`stateAfterCancel`): planejamento volta para `intake` (ou para `waiting_approval`, se já havia um plano: um replanejamento parado mantém o plano anterior), construção para `waiting_approval`, ajuste para `review`. Parar encerra também os processos que o agente iniciou (`npm test`, um build): o jail tem o próprio espaço de processos (`--unshare-pid`). Fechar a aba ou o console **não** para nada: só o botão Parar para.
 
-**Servidor reiniciado no meio:** a execução vive na memória do processo. Ao listar as tarefas, uma tarefa num estado de execução sem execução viva é movida para `error`, com a mensagem de que o servidor reiniciou, e os spans abertos são fechados como falha (`reconcileTask`).
+**Servidor reiniciado no meio:** a execução vive na memória do processo. Ao listar as tarefas, uma tarefa num estado de execução sem execução viva é reconciliada (`reconcileTask`): os spans abertos são fechados como falha e ela vai para `error`, com a mensagem de que o servidor reiniciou. A exceção é a tarefa que já tinha passado por uma revisão (um ajuste estava rodando): a worktree volta ao commit dessa revisão (`reviewedHead`) e a tarefa volta para `review`, porque "tentar de novo" a partir de `error` refaria a construção do zero e jogaria fora o trabalho revisado.
 
 **Tentar de novo** a partir de `error`: com plano, reconstrói a worktree do zero e refaz a construção; sem plano, refaz o planejamento.
 
@@ -374,7 +374,7 @@ Prefixo `/api/factory`, em `server/routes/factory.ts`. As ações longas respond
 | `POST /tasks` | Cria uma tarefa: título, descrição, repositório, base, provedor, modelo, modelos por agente, teto, comando de verificação, issue de origem. |
 | `GET /tasks/:id` | Uma tarefa. |
 | `PATCH /tasks/:id` | Edita título, descrição, provedor, modelo, modelos por agente, teto, comando de verificação. |
-| `DELETE /tasks/:id` | Para a execução, remove worktree e branch, apaga a tarefa e a sessão. |
+| `DELETE /tasks/:id` | Para a execução, remove worktree e branch, apaga a tarefa e a sessão. Responde 409 se a execução não parar em 5 s, para ela não regravar a tarefa apagada. |
 | `GET /tasks/:id/session` | A sessão completa. |
 | `GET /tasks/:id/events` | Stream SSE da sessão: tudo o que já foi gravado, depois o que for chegando. |
 | `POST /tasks/:id/plan` | Planejamento (SSE). Aceita `answers` às dúvidas do Analyst. |
@@ -383,7 +383,7 @@ Prefixo `/api/factory`, em `server/routes/factory.ts`. As ações longas respond
 | `POST /tasks/:id/cancel` | Para a execução em andamento. |
 | `GET /tasks/:id/diff` | Diff e estatísticas da worktree. |
 | `POST /tasks/:id/open-editor` | Abre a worktree no editor. |
-| `POST /tasks/:id/finish` | `mode: "mr"` (push e MR/PR) ou `"local_merge"`. |
+| `POST /tasks/:id/finish` | `mode: "mr"` (push e MR/PR) ou `"local_merge"`; outro valor responde 400. Registrado como execução: um segundo clique recebe 409 em vez de fazer um segundo merge. |
 | `POST /agents/run` | Executa um agente avulso, em modo leitura (SSE). |
 | `GET /preflight` | Para o modo guiado: `bwrap`, CLIs instalados, configurações e, com `repoPath`, branch, base, pendências e comando de verificação detectado. |
 | `GET /issues` | Issues abertas das conexões de Repositórios (até 30 por conexão). |
