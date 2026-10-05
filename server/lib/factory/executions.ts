@@ -8,7 +8,8 @@ import type { FactoryTaskState } from './types.ts'
 
 export { RUNNING_STATES } from './types.ts'
 
-export type ExecutionKind = 'plan' | 'build' | 'adjust'
+// 'finish' is not cancellable: it is registered so a double click cannot merge or push twice
+export type ExecutionKind = 'plan' | 'build' | 'adjust' | 'finish'
 
 type Execution = {
   kind: ExecutionKind

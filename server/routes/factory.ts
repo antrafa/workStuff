@@ -525,122 +525,135 @@ factoryRouter.post('/tasks/:id/finish', async (req, res) => {
       return
     }
     if (refuseState(res, task, ['review'], 'finalizar')) return
-
     const mode = req.body?.mode || 'local_merge'
-    let prUrl = task.prUrl
-    let warning: string | undefined
-
-    if (mode === 'local_merge') {
-      await mergeWorktreeLocal(task.source.repoPath, task.branchName, task.baseBranch)
-    } else if (mode === 'mr') {
-      // 1. Envia a branch para o repositório remoto via git push
-      if (task.worktreePath) {
-        try {
-          await pushWorktreeBranch(task.worktreePath, task.branchName)
-        } catch (pushErr) {
-          throw new Error(`Falha ao enviar branch para o servidor remoto: ${(pushErr as Error).message}`)
-        }
-      }
-
-      // 2. Busca conexão Git ativa para tentar criar o Pull/Merge Request oficial
-      const sources = listSources()
-      const src = sources.find(s => {
-        const remote = task.source.remoteUrl || task.source.issueUrl
-        if (task.source.repoPath.includes(s.id) || (remote && s.basePath && remote.includes(s.basePath))) {
-          return true
-        }
-        return false
-      })
-
-      if (src) {
-        try {
-          const token = await resolveToken(src.provider, src.tokenSource, src.id)
-          const conn: Conn = { provider: src.provider, url: src.url, token }
-          const title = task.title
-          const summary = task.handoffs?.docs?.mrDescription || task.handoffs?.review?.mrDescription || task.description
-          // Closes the originating issue when the MR is merged (GitLab and GitHub both read it)
-          const description = task.source.issueIid && !summary.includes(`#${task.source.issueIid}`) ? `${summary}\n\nCloses #${task.source.issueIid}` : summary
-
-          const apiBase = conn.provider === 'gitlab'
-            ? `${conn.url}/api/v4`
-            : conn.url === 'https://github.com'
-              ? 'https://api.github.com'
-              : `${conn.url}/api/v3`
-          const headers: Record<string, string> = {
-            'Content-Type': 'application/json',
-            ...(conn.provider === 'gitlab'
-              ? (conn.token ? { 'PRIVATE-TOKEN': conn.token } : {})
-              : { Accept: 'application/vnd.github+json', ...(conn.token ? { Authorization: `Bearer ${conn.token}` } : {}) }),
-          }
-
-          if (src.provider === 'gitlab') {
-            const encoded = encodeURIComponent(src.basePath.replace(/^\//, ''))
-            const resp = await fetch(`${apiBase}/projects/${encoded}/merge_requests`, {
-              method: 'POST',
-              headers,
-              body: JSON.stringify({
-                source_branch: task.branchName,
-                target_branch: targetBranchOf(task.baseBranch),
-                title,
-                description,
-              }),
-              signal: AbortSignal.timeout(20_000),
-            })
-            if (resp.ok) {
-              const data = await resp.json() as { web_url?: string }
-              prUrl = data.web_url
-            } else {
-              warning = `Branch enviada, mas o GitLab recusou o MR (HTTP ${resp.status}): ${(await resp.text()).slice(0, 300)}`
-            }
-          } else if (src.provider === 'github') {
-            const parts = src.basePath.split('/').filter(Boolean)
-            if (parts.length >= 2) {
-              const [owner, repo] = parts
-              const resp = await fetch(`${apiBase}/repos/${owner}/${repo}/pulls`, {
-                method: 'POST',
-                headers,
-                body: JSON.stringify({
-                  title,
-                  head: task.branchName,
-                  base: targetBranchOf(task.baseBranch),
-                  body: description,
-                }),
-                signal: AbortSignal.timeout(20_000),
-              })
-              if (resp.ok) {
-                const data = await resp.json() as { html_url?: string }
-                prUrl = data.html_url
-              } else {
-                warning = `Branch enviada, mas o GitHub recusou o PR (HTTP ${resp.status}): ${(await resp.text()).slice(0, 300)}`
-              }
-            }
-          }
-        } catch (e) {
-          warning = `Branch enviada, mas a abertura do MR falhou: ${(e as Error).message}`
-        }
-      } else {
-        warning = `Branch ${task.branchName} enviada, mas nenhuma conexão de Repositórios corresponde a este projeto; abra o MR manualmente.`
-      }
+    if (mode !== 'mr' && mode !== 'local_merge') {
+      res.status(400).json({ error: `modo de finalização inválido: ${mode}` })
+      return
     }
-
-    if (task.worktreePath) {
-      await removeWorktree(task.source.repoPath, task.worktreePath, mode === 'local_merge' ? task.branchName : undefined)
+    // Same tick as refuseState: a second click finds this execution and gets 409
+    const signal = beginExecution(task.id, 'finish')
+    try {
+      await finishTask(task, mode, res)
+    } finally {
+      endExecution(task.id, signal)
     }
-
-    const updatedTask: FactoryTask = {
-      ...task,
-      state: 'done',
-      worktreePath: undefined,
-      prUrl: prUrl || task.prUrl,
-      updatedAt: new Date().toISOString(),
-    }
-    await defaultFactoryStore.saveTask(updatedTask)
-
-    res.json({ ...updatedTask, warning })
   } catch (e) {
     res.status(500).json({ error: (e as Error).message })
   }
 })
+
+async function finishTask(task: FactoryTask, mode: 'mr' | 'local_merge', res: Response): Promise<void> {
+  let prUrl = task.prUrl
+  let warning: string | undefined
+
+  if (mode === 'local_merge') {
+    await mergeWorktreeLocal(task.source.repoPath, task.branchName, task.baseBranch)
+  } else if (mode === 'mr') {
+    // 1. Envia a branch para o repositório remoto via git push
+    if (task.worktreePath) {
+      try {
+        await pushWorktreeBranch(task.worktreePath, task.branchName)
+      } catch (pushErr) {
+        throw new Error(`Falha ao enviar branch para o servidor remoto: ${(pushErr as Error).message}`)
+      }
+    }
+
+    // 2. Busca conexão Git ativa para tentar criar o Pull/Merge Request oficial
+    const sources = listSources()
+    const src = sources.find(s => {
+      const remote = task.source.remoteUrl || task.source.issueUrl
+      if (task.source.repoPath.includes(s.id) || (remote && s.basePath && remote.includes(s.basePath))) {
+        return true
+      }
+      return false
+    })
+
+    if (src) {
+      try {
+        const token = await resolveToken(src.provider, src.tokenSource, src.id)
+        const conn: Conn = { provider: src.provider, url: src.url, token }
+        const title = task.title
+        const summary = task.handoffs?.docs?.mrDescription || task.handoffs?.review?.mrDescription || task.description
+        // Closes the originating issue when the MR is merged (GitLab and GitHub both read it)
+        const description = task.source.issueIid && !summary.includes(`#${task.source.issueIid}`) ? `${summary}\n\nCloses #${task.source.issueIid}` : summary
+
+        const apiBase = conn.provider === 'gitlab'
+          ? `${conn.url}/api/v4`
+          : conn.url === 'https://github.com'
+            ? 'https://api.github.com'
+            : `${conn.url}/api/v3`
+        const headers: Record<string, string> = {
+          'Content-Type': 'application/json',
+          ...(conn.provider === 'gitlab'
+            ? (conn.token ? { 'PRIVATE-TOKEN': conn.token } : {})
+            : { Accept: 'application/vnd.github+json', ...(conn.token ? { Authorization: `Bearer ${conn.token}` } : {}) }),
+        }
+
+        if (src.provider === 'gitlab') {
+          const encoded = encodeURIComponent(src.basePath.replace(/^\//, ''))
+          const resp = await fetch(`${apiBase}/projects/${encoded}/merge_requests`, {
+            method: 'POST',
+            headers,
+            body: JSON.stringify({
+              source_branch: task.branchName,
+              target_branch: targetBranchOf(task.baseBranch),
+              title,
+              description,
+            }),
+            signal: AbortSignal.timeout(20_000),
+          })
+          if (resp.ok) {
+            const data = await resp.json() as { web_url?: string }
+            prUrl = data.web_url
+          } else {
+            warning = `Branch enviada, mas o GitLab recusou o MR (HTTP ${resp.status}): ${(await resp.text()).slice(0, 300)}`
+          }
+        } else if (src.provider === 'github') {
+          const parts = src.basePath.split('/').filter(Boolean)
+          if (parts.length >= 2) {
+            const [owner, repo] = parts
+            const resp = await fetch(`${apiBase}/repos/${owner}/${repo}/pulls`, {
+              method: 'POST',
+              headers,
+              body: JSON.stringify({
+                title,
+                head: task.branchName,
+                base: targetBranchOf(task.baseBranch),
+                body: description,
+              }),
+              signal: AbortSignal.timeout(20_000),
+            })
+            if (resp.ok) {
+              const data = await resp.json() as { html_url?: string }
+              prUrl = data.html_url
+            } else {
+              warning = `Branch enviada, mas o GitHub recusou o PR (HTTP ${resp.status}): ${(await resp.text()).slice(0, 300)}`
+            }
+          }
+        }
+      } catch (e) {
+        warning = `Branch enviada, mas a abertura do MR falhou: ${(e as Error).message}`
+      }
+    } else {
+      warning = `Branch ${task.branchName} enviada, mas nenhuma conexão de Repositórios corresponde a este projeto; abra o MR manualmente.`
+    }
+  }
+
+  if (task.worktreePath) {
+    await removeWorktree(task.source.repoPath, task.worktreePath, mode === 'local_merge' ? task.branchName : undefined)
+  }
+
+  const updatedTask: FactoryTask = {
+    ...task,
+    state: 'done',
+    worktreePath: undefined,
+    prUrl: prUrl || task.prUrl,
+    updatedAt: new Date().toISOString(),
+  }
+  await defaultFactoryStore.saveTask(updatedTask)
+
+  res.json({ ...updatedTask, warning })
+}
 
 // Exclui tarefa e limpa worktree
 factoryRouter.delete('/tasks/:id', async (req, res) => {
