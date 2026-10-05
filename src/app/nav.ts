@@ -27,12 +27,12 @@ export const NAV: NavGroup[] = [
   {
     label: 'Ferramentas',
     items: [
+      { path: '/maquina', label: 'Máquina', hint: 'O que falta instalar para trabalhar', icon: Stethoscope },
+      { path: '/perfil', label: 'Perfil de equipe', hint: 'Exporta e importa a configuração para outra pessoa', icon: Users },
       { path: '/conversores', label: 'Conversores', hint: 'JWT, base64, URL, timestamp, UUID, cron, JSON, diff, regex, hash', icon: Wrench },
       { path: '/servicos', label: 'Serviços locais', hint: 'Portas em escuta, containers e projetos compose', icon: Server },
       { path: '/agenda', label: 'Verificações agendadas', hint: 'Avisa quando pipeline, certificado ou pods mudam de estado', icon: BellRing },
       { path: '/gerador', label: 'Gerador de dados', hint: 'CPF, CNPJ, pessoa e empresa de teste', icon: Dices },
-      { path: '/maquina', label: 'Máquina', hint: 'O que falta instalar para trabalhar', icon: Stethoscope },
-      { path: '/perfil', label: 'Perfil de equipe', hint: 'Exporta e importa a configuração para outra pessoa', icon: Users },
     ],
   },
   {
