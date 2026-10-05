@@ -61,7 +61,9 @@ export function jail(sandbox: Sandbox, cwd: string, bin: string, args: string[])
       ...sandbox.writable.flatMap(dir => ['--ro-bind-try', join(dir, '.git'), join(dir, '.git')]),
       '--bind', sandbox.tmpDir, sandbox.tmpDir, '--setenv', 'TMPDIR', sandbox.tmpDir,
       ...Object.entries(sandbox.env ?? {}).flatMap(([k, v]) => ['--setenv', k, v]),
-      '--die-with-parent', '--chdir', cwd,
+      // Own pid namespace: stopping bwrap also kills what the agent started (npm test, a build),
+      // which would otherwise keep writing to the worktree after the stop
+      '--unshare-pid', '--die-with-parent', '--chdir', cwd,
       bin, ...args,
     ],
   }
@@ -196,6 +198,7 @@ if (import.meta.main && process.argv.includes('--selfcheck')) {
   const claudeWrite = buildFactoryArgs('claude', { ...base, mode: 'write', sandbox })
   assert.equal(claudeWrite.bin, 'bwrap', 'claude com escrita sempre dentro do bwrap')
   assert.deepEqual(claudeWrite.args.slice(0, 3), ['--ro-bind', '/', '/'])
+  assert.ok(claudeWrite.args.includes('--unshare-pid'), 'parar o jail mata os processos que o agente iniciou')
   assert.ok(claudeWrite.args.includes('--dangerously-skip-permissions'))
   assert.throws(() => buildFactoryArgs('claude', { ...base, mode: 'write' }), /bwrap/, 'sem bwrap, recusa')
   const resumed = buildFactoryArgs('claude', { ...base, mode: 'read', resumeSessionId: 's1' }).args
