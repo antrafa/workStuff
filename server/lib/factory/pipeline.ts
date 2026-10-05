@@ -53,8 +53,11 @@ async function startPhase(task: FactoryTask, patch: Partial<FactoryTask>): Promi
 }
 
 async function saveState(task: FactoryTask, patch: Partial<FactoryTask>): Promise<FactoryTask> {
-  // Re-read so spans and tool calls recorded meanwhile are kept
-  const next = { ...(await reload(task)), ...patch, updatedAt: now() }
+  // Re-read so spans and tool calls recorded meanwhile are kept. A task deleted meanwhile stays
+  // deleted: saving the in-memory copy would bring it back.
+  const fresh = await store.getTask(task.id)
+  if (!fresh) throw new ExecutionCancelledError()
+  const next = { ...fresh, ...patch, updatedAt: now() }
   await store.saveTask(next)
   return next
 }

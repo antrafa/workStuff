@@ -660,7 +660,11 @@ factoryRouter.delete('/tasks/:id', async (req, res) => {
   try {
     const id = req.params.id as string
     cancelExecution(id)
-    await waitForIdle(id, 5000)
+    // Deleting while the run still writes would let it save the task back
+    if (!(await waitForIdle(id, 5000))) {
+      res.status(409).json({ error: 'a execução ainda está parando; tente excluir de novo em alguns segundos' })
+      return
+    }
     const task = await defaultFactoryStore.getTask(id)
     if (task && task.worktreePath) {
       await removeWorktree(task.source.repoPath, task.worktreePath, task.branchName)
