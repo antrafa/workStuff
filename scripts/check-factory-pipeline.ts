@@ -58,6 +58,9 @@ git('init', '-b', 'main')
 git('config', 'user.name', 'Test')
 git('config', 'user.email', 'test@local')
 writeFileSync(join(repo, 'README.md'), '# repo\n')
+// Like this project: `node_modules` without the slash, so the worktree's dependency symlink is ignored
+writeFileSync(join(repo, '.gitignore'), 'node_modules\n')
+mkdirSync(join(repo, 'node_modules'))
 git('add', '.')
 git('commit', '-m', 'init')
 

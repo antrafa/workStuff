@@ -29,6 +29,14 @@ export function linkWorkspaceDependencies(repoPath: string, worktreePath: string
   }
 }
 
+function isSymlink(path: string): boolean {
+  try {
+    return lstatSync(path).isSymbolicLink()
+  } catch {
+    return false
+  }
+}
+
 function unlinkSafeDependencies(worktreePath: string): void {
   for (const dir of DEP_DIRS) {
     const target = join(worktreePath, dir)
@@ -159,9 +167,12 @@ export async function commitWorktree(
   message: string,
 ): Promise<string | null> {
   if (!existsSync(worktreePath)) return null
-  // A `node_modules/` ignore rule matches directories only, not our symlink: without the
-  // exclusion `git add -A` commits the link and it ends up in the MR.
-  await git(worktreePath, ['add', '-A', '--', '.', ...DEP_DIRS.map(d => `:(exclude)${d}`)])
+  await git(worktreePath, ['add', '-A'])
+  // Our dependency symlinks never go into the MR. Unstaged after the fact instead of an
+  // `:(exclude)` pathspec: with a `node_modules` rule (no slash) the link is ignored, and
+  // git refuses any pathspec naming an ignored path. With `node_modules/` it is not ignored.
+  const links = DEP_DIRS.filter(d => isSymlink(join(worktreePath, d)))
+  if (links.length) await git(worktreePath, ['rm', '-r', '--cached', '-q', '--ignore-unmatch', '--', ...links])
   // Staged changes only: the untracked dependency symlink always shows up in `status`
   const staged = (await git(worktreePath, ['diff', '--cached', '--name-only'])).trim()
   if (!staged) {
@@ -173,8 +184,9 @@ export async function commitWorktree(
 
 // Files changed since the last commit, dependency symlinks left out.
 export async function uncommittedFiles(worktreePath: string): Promise<string[]> {
-  const status = await git(worktreePath, ['status', '--porcelain', '--untracked-files=all', '--', '.', ...DEP_DIRS.map(d => `:(exclude)${d}`)])
+  const status = await git(worktreePath, ['status', '--porcelain', '--untracked-files=all'])
   return status.split('\n').filter(Boolean).map(l => l.slice(3).replace(/^.* -> /, '').trim())
+    .filter(f => !DEP_DIRS.includes(f.replace(/\/$/, '')))
 }
 
 // Throws away uncommitted changes to these files: tracked ones go back to HEAD, new ones are deleted.
@@ -280,6 +292,15 @@ if (import.meta.main && process.argv.includes('--selfcheck')) {
     await removeWorktree(repoDir, worktreePath, branchName)
     assert.ok(!existsSync(worktreePath), 'worktree removida')
     assert.ok(existsSync(join(repoDir, 'node_modules', 'fake-pkg', 'index.js')), 'node_modules original permanece intacto no repositorio pai')
+
+    // Regressão: `.gitignore` com `node_modules` sem barra ignora o symlink, e um pathspec que o cite faz o git recusar o add
+    writeFileSync(join(repoDir, '.gitignore'), 'node_modules\n')
+    sh('commit', '-qam', 'chore: ignore sem barra')
+    const wt2 = await createWorktree(repoDir, 'wt-task-2', 'main', wtRootDir)
+    writeFileSync(join(wt2.worktreePath, 'b.ts'), 'x\n')
+    assert.ok(await commitWorktree(wt2.worktreePath, 'feat: b'), 'commit com symlink ignorado')
+    assert.deepEqual((await getWorktreeDiff(wt2.worktreePath, 'main')).stat.files, ['b.ts'], 'symlink fora do commit')
+    await removeWorktree(repoDir, wt2.worktreePath, wt2.branchName)
 
     // Teste de mergeWorktreeLocal com repositório sujo (dirty check)
     writeFileSync(join(repoDir, 'dirty.txt'), 'modificacao nao commitada\n')

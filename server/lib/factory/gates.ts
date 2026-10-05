@@ -9,6 +9,7 @@ import { homedir, tmpdir } from 'node:os'
 import { spawn } from 'node:child_process'
 import { run } from '../run.ts'
 import { jail, withSandbox } from './runner.ts'
+import { uncommittedFiles } from './worktree.ts'
 
 export type DiffGateResult = {
   passed: boolean
@@ -36,10 +37,9 @@ export type TestsGateResult = {
 // 1. Gate: Valida se há de fato arquivos alterados na worktree
 export async function gateDiffNotEmpty(worktreePath: string, baseBranch = 'main'): Promise<DiffGateResult> {
   try {
-    const status = await run('git', ['-C', worktreePath, 'status', '--porcelain']).catch(() => '')
+    // uncommittedFiles leaves the dependency symlink out: it is always "new" and would pass the gate alone
+    const statusFiles = await uncommittedFiles(worktreePath)
     const diffNames = await run('git', ['-C', worktreePath, 'diff', baseBranch, '--name-only']).catch(() => '')
-    
-    const statusFiles = status.split('\n').map(l => l.slice(3).trim()).filter(Boolean)
     const diffFiles = diffNames.split('\n').map(l => l.trim()).filter(Boolean)
     const allFiles = Array.from(new Set([...statusFiles, ...diffFiles]))
 
