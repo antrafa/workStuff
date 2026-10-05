@@ -108,8 +108,11 @@ export function detectVerifyCommand(worktreePath: string): string | null {
   const pkgJsonPath = join(worktreePath, 'package.json')
   if (existsSync(pkgJsonPath)) {
     try {
-      const test = JSON.parse(readFileSync(pkgJsonPath, 'utf-8')).scripts?.test
-      if (test && !test.includes('no test specified')) return 'npm test'
+      const scripts = JSON.parse(readFileSync(pkgJsonPath, 'utf-8')).scripts ?? {}
+      if (scripts.test && !scripts.test.includes('no test specified')) return 'npm test'
+      // No tests: at least prove it compiles, or the gate only checks that something changed
+      if (scripts.typecheck) return 'npm run typecheck'
+      if (scripts.build) return 'npm run build'
     } catch {
       // unreadable package.json: fall through to the other build files
     }
@@ -233,6 +236,10 @@ if (import.meta.main && process.argv.includes('--selfcheck')) {
     const testSkip = await gateTestsPass(tmp)
     assert.equal(testSkip.passed, true)
     assert.equal(testSkip.skipped, true)
+
+    writeFileSync(join(tmp, 'package.json'), JSON.stringify({ scripts: { test: 'echo "Error: no test specified"', typecheck: 'tsc', build: 'vite build' } }))
+    assert.equal(detectVerifyCommand(tmp), 'npm run typecheck', 'sem teste, ao menos compila')
+    rmSync(join(tmp, 'package.json'))
 
     writeFileSync(join(tmp, 'pom.xml'), '<project/>')
     assert.equal(detectVerifyCommand(tmp), 'mvn -q test')
