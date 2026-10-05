@@ -1,6 +1,6 @@
 # AGENTS.md
 
-Local, single-user panel for dev and DevOps work. `README.md` holds the feature list, the security model, scripts, the data directory and the project structure: read the **Security model** section before touching anything that spawns a process, calls an AI CLI or talks to a cluster.
+Local, single-user panel for dev and DevOps work. `README.md` holds the feature list, the security model, scripts, the data directory and the project structure: read the **Security model** section before touching anything that spawns a process, calls an AI CLI or talks to a cluster. Before changing the software factory (`server/lib/factory/`, `src/features/factory/`), read `docs/fabrica.md`: pipeline, gates, envelopes, sandbox and how to add an agent.
 
 ## Running it
 

@@ -6,6 +6,8 @@ It runs entirely on your machine. The API binds to `127.0.0.1` only, keeps its d
 
 > The user interface is in Brazilian Portuguese (pt-BR). This README is in English.
 
+Architecture and the software factory are documented in [`docs/`](docs/README.md) (in Portuguese): [architecture](docs/arquitetura.md) and [factory](docs/fabrica.md).
+
 ## Table of contents
 
 - [Features](#features)
