@@ -5,6 +5,7 @@ import { relTime } from '@/lib/format'
 import { AgentChip } from './AgentChips'
 import { setAgent, type AgentId, type AgentState, type AgentTarget, type CatalogItem } from './api'
 import { AGENT_LABEL } from './labels'
+import { tx } from '@/lib/i18n'
 
 type Props = {
   items: CatalogItem[]
@@ -13,7 +14,7 @@ type Props = {
   onAgent: (id: string, agent: AgentId, state: AgentState) => void
 }
 
-// Ativar em lote só toca o que está ausente ou desatualizado; ativo e "gerenciado fora" ficam como estão.
+// Bulk activation only touches what is missing or outdated; active and "managed elsewhere" stay as they are.
 const needsActivation = (item: CatalogItem, agent: AgentId) => ['off', 'stale'].includes(item.agents[agent].state)
 
 export function ItemsTable({ items, agents, onOpen, onAgent }: Props) {
@@ -29,23 +30,23 @@ export function ItemsTable({ items, agents, onOpen, onAgent }: Props) {
           <thead>
             <tr>
               <th style={{ width: 36 }}>
-                <input type="checkbox" checked={allSelected} onChange={() => setSelected(allSelected ? [] : items.map(i => i.id))} title="Selecionar todos os visíveis" />
+                <input type="checkbox" checked={allSelected} onChange={() => setSelected(allSelected ? [] : items.map(i => i.id))} title={tx({ en: 'Select all visible', pt: 'Selecionar todos os visíveis' })} />
               </th>
-              <th>Nome</th>
-              <th>Origem</th>
+              <th>{tx({ en: 'Name', pt: 'Nome' })}</th>
+              <th>{tx({ en: 'Source', pt: 'Origem' })}</th>
               {usedAgents.map(a => <th key={a.id}>{AGENT_LABEL[a.id]}</th>)}
-              <th>Atualizado</th>
+              <th>{tx({ en: 'Updated', pt: 'Atualizado' })}</th>
             </tr>
           </thead>
           <tbody>
             {items.map(i => (
               <tr key={i.id} className={`clickable ${selected.includes(i.id) ? 'is-selected' : ''}`} onClick={() => onOpen(i.id)}>
                 <td onClick={e => e.stopPropagation()}>
-                  <input type="checkbox" checked={selected.includes(i.id)} onChange={() => toggle(i.id)} aria-label={`Selecionar ${i.slug}`} />
+                  <input type="checkbox" checked={selected.includes(i.id)} onChange={() => toggle(i.id)} aria-label={tx({ en: `Select ${i.slug}`, pt: `Selecionar ${i.slug}` })} />
                 </td>
                 <td>
                   <div className="mono catalog-slug">{i.slug}</div>
-                  <div className="muted catalog-sub" title={i.description}>{i.description || 'sem descrição'}</div>
+                  <div className="muted catalog-sub" title={i.description}>{i.description || tx({ en: 'no description', pt: 'sem descrição' })}</div>
                 </td>
                 <td className="mono muted catalog-origin" title={i.pathLabel}>…/{i.rootLabel.split('/').slice(-2).join('/')}</td>
                 {usedAgents.map(a => (
@@ -79,12 +80,12 @@ function BulkBar({ items, agents, onAgent, onClear }: BulkProps) {
   const pending = items.filter(i => needsActivation(i, agent))
   const skills = pending.filter(i => i.kind === 'skill')
 
-  // O que vai acontecer, no mesmo idioma do servidor: skill vira link na pasta do agente; o resto vira referência.
+  // What will happen, in the server's own terms: a skill becomes a link in the agent's folder; the rest becomes a reference.
   const preview = !target || pending.length === 0
-    ? 'nada a fazer: as selecionadas já estão ativas neste agente (ou gerenciadas fora)'
+    ? tx({ en: 'nothing to do: the selected ones are already active in this agent (or managed elsewhere)', pt: 'nada a fazer: as selecionadas já estão ativas neste agente (ou gerenciadas fora)' })
     : [
         skills.length > 0 && `ln -s {${skills.map(s => s.slug).join(',')}} → ${target.skillsDir}/`,
-        pending.length > skills.length && `+ ${pending.length - skills.length} referência(s) em ${target.instructionsFile}`,
+        pending.length > skills.length && tx({ en: `+ ${pending.length - skills.length} reference(s) in ${target.instructionsFile}`, pt: `+ ${pending.length - skills.length} referência(s) em ${target.instructionsFile}` }),
       ].filter(Boolean).join('  ')
 
   const run = async () => {
@@ -98,20 +99,20 @@ function BulkBar({ items, agents, onAgent, onClear }: BulkProps) {
       }
     }
     setBusy(false)
-    toast(failed ? `${pending.length - failed} ativadas, ${failed} falharam em ${AGENT_LABEL[agent]}` : `${pending.length} ativadas em ${AGENT_LABEL[agent]}`)
+    toast(failed ? tx({ en: `${pending.length - failed} activated, ${failed} failed in ${AGENT_LABEL[agent]}`, pt: `${pending.length - failed} ativadas, ${failed} falharam em ${AGENT_LABEL[agent]}` }) : tx({ en: `${pending.length} activated in ${AGENT_LABEL[agent]}`, pt: `${pending.length} ativadas em ${AGENT_LABEL[agent]}` }))
     if (!failed) onClear()
   }
 
   return (
     <div className="bulk-bar">
-      <b>{items.length} selecionada{items.length > 1 ? 's' : ''}</b>
-      <select className="select" value={agent} onChange={e => setAgentId(e.target.value as AgentId)} title="Agente onde ativar">
+      <b>{tx({ en: `${items.length} selected`, pt: `${items.length} selecionada${items.length > 1 ? 's' : ''}` })}</b>
+      <select className="select" value={agent} onChange={e => setAgentId(e.target.value as AgentId)} title={tx({ en: 'Agent to activate in', pt: 'Agente onde ativar' })}>
         {agents.map(a => <option key={a.id} value={a.id}>{AGENT_LABEL[a.id]}</option>)}
       </select>
       <code className="mono bulk-preview" title={target ? pending.map(i => i.kind === 'skill' ? `ln -s ${i.path} ${target.skillsDir}/${i.slug}` : `${i.slug} → ${target.instructionsFile}`).join('\n') : ''}>{preview}</code>
-      <button className="btn btn-ghost" onClick={onClear}>Limpar</button>
+      <button className="btn btn-ghost" onClick={onClear}>{tx({ en: 'Clear', pt: 'Limpar' })}</button>
       <button className="btn btn-primary" disabled={busy || pending.length === 0} onClick={run}>
-        {busy && <Loader2 size={14} className="spin" />} Ativar {pending.length || ''} no {AGENT_LABEL[agent]}
+        {busy && <Loader2 size={14} className="spin" />} {tx({ en: `Activate ${pending.length || ''} in ${AGENT_LABEL[agent]}`, pt: `Ativar ${pending.length || ''} no ${AGENT_LABEL[agent]}` })}
       </button>
     </div>
   )

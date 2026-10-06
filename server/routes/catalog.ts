@@ -8,6 +8,7 @@ import { tildify } from '../lib/paths.ts'
 import {
   CatalogError, createItem, itemPath, listCatalog, readContent, reviewRequest, setAgent, setRoots, updateMeta,
 } from '../lib/catalog/catalog.ts'
+import { say } from '../lib/i18n.ts'
 
 export const catalogRouter = Router()
 
@@ -26,7 +27,7 @@ catalogRouter.get('/', (_req, res) => handle(res, listCatalog))
 catalogRouter.put('/roots', (req, res) => handle(res, () => setRoots(req.body?.roots)))
 
 catalogRouter.post('/pick-folder', async (_req, res) => {
-  res.json({ path: await pickFolder('Pasta do catálogo de IA') })
+  res.json({ path: await pickFolder(say({ en: 'AI catalog folder', pt: 'Pasta do catálogo de IA' })) })
 })
 
 catalogRouter.post('/items', (req, res) =>

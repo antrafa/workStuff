@@ -10,6 +10,7 @@ import { dataFile, expandHome, tildify } from '../paths.ts'
 import { readJson, writeJson } from '../jsonFile.ts'
 import { run } from '../run.ts'
 import { reportFileName, sanitizeReport } from './prompts.ts'
+import { say } from '../i18n.ts'
 
 export type ReportEntry = {
   report: string
@@ -47,12 +48,12 @@ export class AnalysisError extends Error {
   }
 }
 
-// Caminho do projeto vindo da tela: absoluto (ou ~) e diretório existente. É o cwd do agente.
+// Project path from the screen: absolute (or ~) and an existing directory. It is the agent's cwd.
 export function resolveProject(input: unknown) {
-  if (typeof input !== 'string' || !input.trim()) throw new AnalysisError('informe a pasta do projeto')
+  if (typeof input !== 'string' || !input.trim()) throw new AnalysisError(say({ en: 'enter the project folder', pt: 'informe a pasta do projeto' }))
   const path = expandHome(input.trim()).replace(/[\\/]+$/, '')
-  if (!isAbsolute(path)) throw new AnalysisError('use o caminho absoluto da pasta (ou começando com ~)')
-  if (!statSync(path, { throwIfNoEntry: false })?.isDirectory()) throw new AnalysisError(`pasta não encontrada: ${path}`)
+  if (!isAbsolute(path)) throw new AnalysisError(say({ en: 'use the absolute folder path (or one starting with ~)', pt: 'use o caminho absoluto da pasta (ou começando com ~)' }))
+  if (!statSync(path, { throwIfNoEntry: false })?.isDirectory()) throw new AnalysisError(say({ en: `folder not found: ${path}`, pt: `pasta não encontrada: ${path}` }))
   return path
 }
 
@@ -144,9 +145,9 @@ if (import.meta.main && process.argv.includes('--selfcheck')) {
   assert.equal(await gitCommit(tmpdir()), null, 'pasta sem git')
 
   assert.equal(resolveProject(repo + '/'), repo)
-  assert.throws(() => resolveProject('relativo/x'), /absoluto/)
-  assert.throws(() => resolveProject(join(repo, 'nao-existe')), /não encontrada/)
-  assert.throws(() => resolveProject(''), /informe/)
+  assert.throws(() => resolveProject('relativo/x'), /absolute/)
+  assert.throws(() => resolveProject(join(repo, 'nao-existe')), /not found/)
+  assert.throws(() => resolveProject(''), /enter the project folder/)
 
   const rel = writeReportFile(repo, { report: 'Intro.\n# Relatório\nok', generatedAt: '2026-09-30T12:00:00.000Z', gitCommit: first, provider: 'claude', model: 'sonnet', durationMs: 1 })
   assert.equal(rel, join('docs', 'arquitetura', 'arquitetura-2026-09-30.md'))

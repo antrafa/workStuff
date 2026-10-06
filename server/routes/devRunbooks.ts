@@ -15,6 +15,7 @@ import {
   readRoot,
   saveRoot,
 } from '../lib/devRunbooks/devRunbooks.ts'
+import { say } from '../lib/i18n.ts'
 
 export const devRunbooksRouter = Router()
 
@@ -28,7 +29,7 @@ const handle = (fn: (req: Request) => unknown) => async (req: Request, res: Resp
 
 function requireRoot() {
   const root = readRoot()
-  if (!root) throw new Error('escolha a pasta dos runbooks de dev')
+  if (!root) throw new Error(say({ en: 'choose the dev runbooks folder', pt: 'escolha a pasta dos runbooks de dev' }))
   return root
 }
 
@@ -50,13 +51,13 @@ devRunbooksRouter.put('/root', handle(req => {
     return { ok: true, root: tildify(DEFAULT_ROOT), isDefault: true }
   }
   const root = expandHome(raw)
-  if (!statSync(root, { throwIfNoEntry: false })?.isDirectory()) throw new Error(`pasta não encontrada: ${root}`)
+  if (!statSync(root, { throwIfNoEntry: false })?.isDirectory()) throw new Error(say({ en: `folder not found: ${root}`, pt: `pasta não encontrada: ${root}` }))
   saveRoot(root)
   return { ok: true, root: tildify(root), isDefault: resolve(root) === resolve(DEFAULT_ROOT) }
 }))
 
-devRunbooksRouter.post('/pick-folder', handle(async () => ({ path: await pickFolder('Pasta dos runbooks de dev') })))
-devRunbooksRouter.post('/pick-project', handle(async () => ({ path: await pickFolder('Pasta do projeto/repositório') })))
+devRunbooksRouter.post('/pick-folder', handle(async () => ({ path: await pickFolder(say({ en: 'Dev runbooks folder', pt: 'Pasta dos runbooks de dev' })) })))
+devRunbooksRouter.post('/pick-project', handle(async () => ({ path: await pickFolder(say({ en: 'Project/repository folder', pt: 'Pasta do projeto/repositório' })) })))
 
 devRunbooksRouter.post('/doc', handle(req => {
   const root = requireRoot()
@@ -79,12 +80,12 @@ devRunbooksRouter.post('/run', handle(async req => {
 
   const rawMd = readFileSync(devRunbookPath(root, file), 'utf-8')
   const seg = parseDevRunbook(rawMd).find(s => s.type === 'step' && s.id === stepId)
-  if (!seg || seg.type !== 'step') throw new Error('passo não encontrado; o arquivo pode ter mudado, recarregue')
+  if (!seg || seg.type !== 'step') throw new Error(say({ en: 'step not found; the file may have changed, reload', pt: 'passo não encontrado; o arquivo pode ter mudado, recarregue' }))
 
   const c = classify(seg.line, values)
   if (c.kind === 'blocked') throw new Error(c.reason)
   if (c.kind === 'write' && !confirmed) {
-    throw new Error('passo com modificação no ambiente: confirme na tela antes de executar')
+    throw new Error(say({ en: 'step that changes the environment: confirm on screen before running', pt: 'passo com modificação no ambiente: confirme na tela antes de executar' }))
   }
 
   // Descobre cwd a partir de valores como projeto, pasta, repo ou diretorio
@@ -102,7 +103,7 @@ devRunbooksRouter.post('/run', handle(async req => {
 
   // Sem pasta válida o comando rodaria no diretório do próprio painel (git branch -D no repo errado).
   if (!cwd && needsProject(c.bin, c.args)) {
-    throw new Error('informe a pasta do projeto (parâmetro projeto) antes de executar este passo')
+    throw new Error(say({ en: 'set the project folder (parameter projeto) before running this step', pt: 'informe a pasta do projeto (parâmetro projeto) antes de executar este passo' }))
   }
 
   const command = `${c.bin} ${c.args.join(' ')}`

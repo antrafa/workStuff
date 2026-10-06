@@ -6,8 +6,9 @@ import { AgentChips } from './AgentChips'
 import { ReviewPanel } from './ReviewPanel'
 import { fetchContent, openItem, saveMeta, type AgentId, type AgentState, type CatalogItem, type Status } from './api'
 import { KIND_SINGULAR, STATUS } from './labels'
+import { tx } from '@/lib/i18n'
 
-// onPatch recebe só o que mudou: a página junta com o estado atual, sem sobrescrever com uma cópia velha.
+// onPatch gets only what changed: the page merges it with the current state, never overwriting with a stale copy.
 type Props = { item: CatalogItem; onPatch: (patch: Partial<CatalogItem>) => void; onClose: () => void }
 type Tab = 'conteudo' | 'acompanhamento' | 'revisao'
 
@@ -15,7 +16,7 @@ export function DetailModal({ item, onPatch, onClose }: Props) {
   const [tab, setTab] = useState<Tab>('conteudo')
   const toast = useToast()
 
-  const open = () => openItem(item.id).then(() => toast('Aberto no editor')).catch((e: Error) => toast(`Não abriu: ${e.message}`))
+  const open = () => openItem(item.id).then(() => toast(tx({ en: 'Opened in the editor', pt: 'Aberto no editor' }))).catch((e: Error) => toast(tx({ en: `Not opened: ${e.message}`, pt: `Não abriu: ${e.message}` })))
   const setAgentState = (agent: AgentId, state: AgentState) => onPatch({ agents: { ...item.agents, [agent]: state } })
 
   return (
@@ -30,9 +31,9 @@ export function DetailModal({ item, onPatch, onClose }: Props) {
       }
       footer={
         <>
-          <CopyButton value={`Leia ${item.mainFile} e aplique ao que vamos fazer.`} label="Copiar prompt" />
-          <button className="btn" onClick={open} title={`Abre ${item.pathLabel} no editor`}>
-            <ExternalLink size={14} /> Abrir no editor
+          <CopyButton value={tx({ en: `Read ${item.mainFile} and apply it to what we are about to do.`, pt: `Leia ${item.mainFile} e aplique ao que vamos fazer.` })} label={tx({ en: 'Copy prompt', pt: 'Copiar prompt' })} />
+          <button className="btn" onClick={open} title={tx({ en: `Opens ${item.pathLabel} in the editor`, pt: `Abre ${item.pathLabel} no editor` })}>
+            <ExternalLink size={14} /> {tx({ en: 'Open in editor', pt: 'Abrir no editor' })}
           </button>
         </>
       }
@@ -42,13 +43,13 @@ export function DetailModal({ item, onPatch, onClose }: Props) {
         {item.description && <p style={{ margin: 0 }}>{item.description}</p>}
         <AgentChips item={item} onChange={setAgentState} />
         <div className="tabs" role="tablist">
-          <button role="tab" aria-selected={tab === 'conteudo'} onClick={() => setTab('conteudo')}>Conteúdo</button>
-          <button role="tab" aria-selected={tab === 'acompanhamento'} onClick={() => setTab('acompanhamento')}>Acompanhamento</button>
-          <button role="tab" aria-selected={tab === 'revisao'} onClick={() => setTab('revisao')}>Revisão com IA</button>
+          <button role="tab" aria-selected={tab === 'conteudo'} onClick={() => setTab('conteudo')}>{tx({ en: 'Content', pt: 'Conteúdo' })}</button>
+          <button role="tab" aria-selected={tab === 'acompanhamento'} onClick={() => setTab('acompanhamento')}>{tx({ en: 'Tracking', pt: 'Acompanhamento' })}</button>
+          <button role="tab" aria-selected={tab === 'revisao'} onClick={() => setTab('revisao')}>{tx({ en: 'AI review', pt: 'Revisão com IA' })}</button>
         </div>
         {tab === 'conteudo' && <Content id={item.id} />}
         {tab === 'acompanhamento' && <Tracking item={item} onPatch={onPatch} />}
-        {/* Montado sempre: trocar de aba não interrompe uma revisão em andamento. */}
+        {/* Always mounted: switching tabs does not interrupt a running review. */}
         <div hidden={tab !== 'revisao'}><ReviewPanel item={item} /></div>
       </div>
     </Modal>
@@ -63,7 +64,7 @@ function Content({ id }: { id: string }) {
         <div className="stack" style={{ ['--gap' as string]: '8px' }}>
           <div className="row">
             <span className="mono muted spacer" style={{ fontSize: 11.5 }}>{c.path}</span>
-            <CopyButton value={c.content} label="Copiar conteúdo" />
+            <CopyButton value={c.content} label={tx({ en: 'Copy content', pt: 'Copiar conteúdo' })} />
           </div>
           <pre className="code" style={{ whiteSpace: 'pre-wrap', maxHeight: 420 }}>{c.content}</pre>
         </div>
@@ -78,7 +79,7 @@ function Tracking({ item, onPatch }: Pick<Props, 'item' | 'onPatch'>) {
   const toast = useToast()
   const saved = useRef(item.notes)
 
-  // Grava 800ms depois da última tecla.
+  // Saves 800 ms after the last keystroke.
   useEffect(() => {
     if (notes === saved.current) return
     setSaving('saving')
@@ -91,7 +92,7 @@ function Tracking({ item, onPatch }: Pick<Props, 'item' | 'onPatch'>) {
         })
         .catch((e: Error) => {
           setSaving('error')
-          toast(`Notas não salvas: ${e.message}`)
+          toast(tx({ en: `Notes not saved: ${e.message}`, pt: `Notas não salvas: ${e.message}` }))
         })
     }, 800)
     return () => clearTimeout(t)
@@ -100,7 +101,7 @@ function Tracking({ item, onPatch }: Pick<Props, 'item' | 'onPatch'>) {
   const setStatus = (status: Status) =>
     saveMeta(item.id, { status })
       .then(() => onPatch({ status }))
-      .catch((e: Error) => toast(`Status não salvo: ${e.message}`))
+      .catch((e: Error) => toast(tx({ en: `Status not saved: ${e.message}`, pt: `Status não salvo: ${e.message}` })))
 
   return (
     <div className="stack">
@@ -108,7 +109,7 @@ function Tracking({ item, onPatch }: Pick<Props, 'item' | 'onPatch'>) {
         <span>Status</span>
         <div className="row" style={{ ['--gap' as string]: '6px' }}>
           {(Object.keys(STATUS) as Status[]).map(s => (
-            <button key={s} className="chip" aria-pressed={item.status === s} onClick={() => setStatus(s)} title={`Marcar como ${STATUS[s].label}`}>
+            <button key={s} className="chip" aria-pressed={item.status === s} onClick={() => setStatus(s)} title={tx({ en: `Mark as ${STATUS[s].label}`, pt: `Marcar como ${STATUS[s].label}` })}>
               {STATUS[s].label}
             </button>
           ))}
@@ -116,13 +117,13 @@ function Tracking({ item, onPatch }: Pick<Props, 'item' | 'onPatch'>) {
       </div>
       <label className="field">
         <span>
-          Notas{' '}
+          {tx({ en: 'Notes', pt: 'Notas' })}{' '}
           <small className={saving === 'error' ? 'error' : 'muted'}>
-            {saving === 'saving' ? 'salvando…' : saving === 'saved' ? 'salvo' : saving === 'error' ? 'não salvo' : ''}
+            {saving === 'saving' ? tx({ en: 'saving…', pt: 'salvando…' }) : saving === 'saved' ? tx({ en: 'saved', pt: 'salvo' }) : saving === 'error' ? tx({ en: 'not saved', pt: 'não salvo' }) : ''}
           </small>
         </span>
-        <textarea className="textarea" rows={5} value={notes} placeholder="O que falta, o que testar, de onde veio a ideia…" onChange={e => setNotes(e.target.value)} />
-        <small>Ficam em ~/.workstuff, nunca no arquivo do item.</small>
+        <textarea className="textarea" rows={5} value={notes} placeholder={tx({ en: 'What is missing, what to test, where the idea came from…', pt: 'O que falta, o que testar, de onde veio a ideia…' })} onChange={e => setNotes(e.target.value)} />
+        <small>{tx({ en: 'Kept in ~/.workstuff, never in the item\'s file.', pt: 'Ficam em ~/.workstuff, nunca no arquivo do item.' })}</small>
       </label>
     </div>
   )

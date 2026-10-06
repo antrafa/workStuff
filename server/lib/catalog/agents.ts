@@ -19,6 +19,7 @@ import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import type { DiscoveredItem, Kind } from './discover.ts'
 import { parseFrontmatter } from './frontmatter.ts'
+import { say } from '../i18n.ts'
 
 export type AgentId = 'claude' | 'codex' | 'gemini' | 'opencode'
 export const AGENT_IDS: AgentId[] = ['claude', 'codex', 'gemini', 'opencode']
@@ -113,18 +114,18 @@ function skillState(dir: string, item: DiscoveredItem): AgentState {
   const link = join(dir, item.slug)
   const stat = lstatSync(link, { throwIfNoEntry: false })
   if (!stat) return { state: 'off' }
-  if (!stat.isSymbolicLink()) return { state: 'elsewhere', reason: `já existe uma pasta real "${item.slug}" em ${dir}` }
+  if (!stat.isSymbolicLink()) return { state: 'elsewhere', reason: say({ en: `a real folder "${item.slug}" already exists in ${dir}`, pt: `já existe uma pasta real "${item.slug}" em ${dir}` }) }
   if (pointsTo(link, item.path)) return { state: 'on' }
-  return { state: 'elsewhere', reason: `${link} aponta para ${readlinkSync(link)}` }
+  return { state: 'elsewhere', reason: say({ en: `${link} points to ${readlinkSync(link)}`, pt: `${link} aponta para ${readlinkSync(link)}` }) }
 }
 
 function instructionState(target: InstructionTarget, item: DiscoveredItem): AgentState {
   const entry = readBlock(target.file).entries.find(e => e.id === item.id)
   if (!entry) return { state: 'off' }
   if (target.mode === 'reference' && !pointsTo(linkPath(target, item), item.mainFile)) {
-    return { state: 'stale', reason: 'o link do arquivo sumiu ou aponta para outro lugar' }
+    return { state: 'stale', reason: say({ en: 'the file\'s link is gone or points elsewhere', pt: 'o link do arquivo sumiu ou aponta para outro lugar' }) }
   }
-  if (entry.body !== expectedBody(target, item)) return { state: 'stale', reason: 'a descrição mudou desde que foi ativado' }
+  if (entry.body !== expectedBody(target, item)) return { state: 'stale', reason: say({ en: 'the description changed since it was activated', pt: 'a descrição mudou desde que foi ativado' }) }
   return { state: 'on' }
 }
 
@@ -136,8 +137,8 @@ export function stateOf(home: string, agent: AgentId, item: DiscoveredItem): Age
 
 export function activate(home: string, agent: AgentId, item: DiscoveredItem) {
   const current = stateOf(home, agent, item)
-  if (current.state === 'unsupported') throw new Error(`${KIND_LABEL[item.kind]} não é ativável em agente`)
-  if (current.state === 'elsewhere') throw new Error(`não ativei para não sobrescrever: ${current.reason}`)
+  if (current.state === 'unsupported') throw new Error(say({ en: `${KIND_LABEL[item.kind]} cannot be activated in an agent`, pt: `${KIND_LABEL[item.kind]} não é ativável em agente` }))
+  if (current.state === 'elsewhere') throw new Error(say({ en: `not activated, to avoid overwriting: ${current.reason}`, pt: `não ativei para não sobrescrever: ${current.reason}` }))
 
   const paths = agentPaths(home)
   if (item.kind === 'skill') {
@@ -162,7 +163,7 @@ export function activate(home: string, agent: AgentId, item: DiscoveredItem) {
 
 export function deactivate(home: string, agent: AgentId, item: DiscoveredItem) {
   const current = stateOf(home, agent, item)
-  if (current.state === 'elsewhere') throw new Error(`não desativei: ${current.reason}; foi criado fora do workStuff`)
+  if (current.state === 'elsewhere') throw new Error(say({ en: `not deactivated: ${current.reason}; it was created outside workStuff`, pt: `não desativei: ${current.reason}; foi criado fora do workStuff` }))
   if (current.state === 'off' || current.state === 'unsupported') return
 
   const paths = agentPaths(home)
@@ -230,8 +231,8 @@ if (import.meta.main && process.argv.includes('--selfcheck')) {
   mkdirSync(join(home, '.codex', 'skills'), { recursive: true })
   symlinkSync(other, join(home, '.codex', 'skills', 'revisar-pr'))
   assert.equal(stateOf(home, 'codex', skill).state, 'elsewhere')
-  assert.throws(() => activate(home, 'codex', skill), /não ativei/)
-  assert.throws(() => deactivate(home, 'codex', skill), /não desativei/)
+  assert.throws(() => activate(home, 'codex', skill), /not activated/)
+  assert.throws(() => deactivate(home, 'codex', skill), /not deactivated/)
   assert.equal(resolve(readlinkSync(join(home, '.codex', 'skills', 'revisar-pr'))), other)
 
   assert.equal(stateOf(home, 'claude', { ...rule, kind: 'nota' }).state, 'unsupported')

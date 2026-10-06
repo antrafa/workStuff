@@ -3,6 +3,7 @@ import { FolderOpen, Zap } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { CommandStep, ConfirmModal, Markdown, SkeletonRows, useToast } from '@/ui'
 import { api } from '@/lib/api'
+import { tx } from '@/lib/i18n'
 
 type Check =
   | { kind: 'read'; bin: string; args: string[] }
@@ -25,8 +26,8 @@ type DocResponse = {
 
 type Result = { ok: boolean; command: string; cwd?: string; output: string }
 
-// Executor de um runbook de dev: parâmetros, texto e passos com Rodar/Executar.
-// initialValues pré-preenche parâmetros (ex.: projeto vindo da aba de agentes da Fábrica).
+// Runs a dev runbook: parameters, text and steps with Run/Execute.
+// initialValues pre-fills parameters (e.g. the project coming from the Factory's agents tab).
 export function DevRunbookDoc({ file, initialValues = {} }: { file: string; initialValues?: Record<string, string> }) {
   const [values, setValues] = useState<Record<string, string>>(initialValues)
   const [doc, setDoc] = useState<DocResponse | null>(null)
@@ -45,7 +46,7 @@ export function DevRunbookDoc({ file, initialValues = {} }: { file: string; init
   }, [file, values])
 
   const vars = useMemo(() => {
-    // projeto sempre aparece: é a pasta onde os comandos rodam, mesmo quando nenhum passo usa {{projeto}}
+    // projeto always shows: it is the folder the commands run in, even when no step uses {{projeto}}
     return [...new Set(['projeto', ...(doc?.segments ?? []).flatMap(s => (s.type === 'step' ? s.vars : []))])]
   }, [doc])
 
@@ -56,7 +57,7 @@ export function DevRunbookDoc({ file, initialValues = {} }: { file: string; init
         setValues(v => ({ ...v, [vName]: res.path! }))
       }
     } catch (e) {
-      toast(`Não foi possível escolher a pasta: ${(e as Error).message}`)
+      toast(tx({ en: `Could not choose the folder: ${(e as Error).message}`, pt: `Não foi possível escolher a pasta: ${(e as Error).message}` }))
     }
   }
 
@@ -77,7 +78,7 @@ export function DevRunbookDoc({ file, initialValues = {} }: { file: string; init
     <div className="stack" style={{ minWidth: 0 }}>
       {vars.length > 0 && (
         <section className="card card-pad stack">
-          <div className="card-title" style={{ fontSize: 13 }}>Parâmetros da execução</div>
+          <div className="card-title" style={{ fontSize: 13 }}>{tx({ en: 'Run parameters', pt: 'Parâmetros da execução' })}</div>
           <div className="drb-vars">
             {vars.map(v => {
               const isPath = /projeto|pasta|diretorio|repo|repositorio/i.test(v)
@@ -90,13 +91,13 @@ export function DevRunbookDoc({ file, initialValues = {} }: { file: string; init
                         className="input mono spacer"
                         value={values[v] ?? ''}
                         onChange={e => setValues(curr => ({ ...curr, [v]: e.target.value.trim() }))}
-                        placeholder={`valor para {{${v}}}`}
+                        placeholder={tx({ en: `value for {{${v}}}`, pt: `valor para {{${v}}}` })}
                       />
                       {isPath && (
                         <button
                           type="button"
                           className="btn btn-sm"
-                          title="Escolher pasta no computador"
+                          title={tx({ en: 'Choose a folder on the computer', pt: 'Escolher pasta no computador' })}
                           onClick={() => pickProjectPath(v)}
                         >
                           <FolderOpen size={13} />
@@ -130,8 +131,8 @@ export function DevRunbookDoc({ file, initialValues = {} }: { file: string; init
 
       {confirming && confirming.check.kind === 'write' && (
         <ConfirmModal
-          title="Executar comando com modificação"
-          confirmLabel="Executar"
+          title={tx({ en: 'Run a command that changes something', pt: 'Executar comando com modificação' })}
+          confirmLabel={tx({ en: 'Execute', pt: 'Executar' })}
           icon={Zap}
           onConfirm={() => {
             const stepToRun = confirming
@@ -140,17 +141,17 @@ export function DevRunbookDoc({ file, initialValues = {} }: { file: string; init
           }}
           onClose={() => setConfirming(null)}
         >
-          <p>Comando que será executado na máquina local:</p>
+          <p>{tx({ en: 'Command that will run on this machine:', pt: 'Comando que será executado na máquina local:' })}</p>
           <pre className="code" style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>
             {confirming.check.bin} {confirming.check.args.join(' ')}
           </pre>
           {values['projeto'] && (
             <p className="muted" style={{ fontSize: 12.5 }}>
-              Diretório de trabalho: <b className="mono">{values['projeto']}</b>
+              {tx({ en: 'Working directory:', pt: 'Diretório de trabalho:' })} <b className="mono">{values['projeto']}</b>
             </p>
           )}
           <p className="muted" style={{ fontSize: 12 }}>
-            A execução fica registrada em ~/.workstuff/dev-runbook-audit.log.
+            {tx({ en: 'The run is logged to ~/.workstuff/dev-runbook-audit.log.', pt: 'A execução fica registrada em ~/.workstuff/dev-runbook-audit.log.' })}
           </p>
         </ConfirmModal>
       )}

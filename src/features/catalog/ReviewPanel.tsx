@@ -4,6 +4,7 @@ import { Link } from 'react-router'
 import { CopyButton, Empty } from '@/ui'
 import { streamPost } from '@/lib/stream'
 import type { CatalogItem } from './api'
+import { tx } from '@/lib/i18n'
 
 type ReviewEvent =
   | { type: 'text'; text: string }
@@ -15,7 +16,7 @@ type ReviewEvent =
 
 type Phase = 'idle' | 'running' | 'done' | 'error'
 
-// Nome curto do que o agente está lendo, para o usuário ver que ele trabalha e em quê.
+// Short name of what the agent is reading, so the user sees it is working and on what.
 function toolLabel(e: { tool: string; input: Record<string, unknown> }) {
   const target = e.input.file_path ?? e.input.path ?? e.input.pattern ?? e.input.command ?? ''
   return `${e.tool} ${String(target).split('/').slice(-2).join('/')}`.trim()
@@ -42,7 +43,7 @@ export function ReviewPanel({ item }: { item: CatalogItem }) {
         if (e.type === 'text') setText(t => t + e.text)
         if (e.type === 'tool') setSteps(s => [...s, toolLabel(e)])
         if (e.type === 'error') ((failed = true), setInfo(e.message))
-        if (e.type === 'done') setInfo(`${e.provider} · ${e.model || 'modelo padrão'} · ${Math.round(e.durationMs / 1000)}s${e.stopped ? ' · parado por você' : ''}`)
+        if (e.type === 'done') setInfo(`${e.provider} · ${e.model || tx({ en: 'default model', pt: 'modelo padrão' })} · ${Math.round(e.durationMs / 1000)}s${e.stopped ? tx({ en: ' · stopped by you', pt: ' · parado por você' }) : ''}`)
       }, abort.current.signal)
     } catch (e) {
       failed = true
@@ -55,11 +56,13 @@ export function ReviewPanel({ item }: { item: CatalogItem }) {
     return (
       <Empty
         icon={Bot}
-        title="Revisão crítica com IA"
-        action={<button className="btn btn-primary" onClick={run}><Sparkles size={14} /> Pedir revisão</button>}
+        title={tx({ en: 'Critical review with AI', pt: 'Revisão crítica com IA' })}
+        action={<button className="btn btn-primary" onClick={run}><Sparkles size={14} /> {tx({ en: 'Ask for a review', pt: 'Pedir revisão' })}</button>}
       >
-        O agente lê o item{item.notes ? ' e as suas notas' : ''} e aponta pontos fortes, o que melhorar e o próximo passo. Roda em modo leitura: não
-        altera nenhum arquivo. Usa o provedor e o modelo de <Link to="/configuracoes/ia">Configurações</Link>.
+        {tx({
+          en: <>The agent reads the item{item.notes ? ' and your notes' : ''} and points out strengths, what to improve and the next step. It runs read-only: it changes no file. It uses the provider and model from <Link to="/configuracoes/ia">Settings</Link>.</>,
+          pt: <>O agente lê o item{item.notes ? ' e as suas notas' : ''} e aponta pontos fortes, o que melhorar e o próximo passo. Roda em modo leitura: não altera nenhum arquivo. Usa o provedor e o modelo de <Link to="/configuracoes/ia">Configurações</Link>.</>,
+        })}
       </Empty>
     )
   }
@@ -69,18 +72,18 @@ export function ReviewPanel({ item }: { item: CatalogItem }) {
       <div className="row">
         {phase === 'running' ? (
           <>
-            <span className="muted"><FileSearch size={13} className="spin" /> {steps.at(-1) ?? 'iniciando o agente…'}</span>
+            <span className="muted"><FileSearch size={13} className="spin" /> {steps.at(-1) ?? tx({ en: 'starting the agent…', pt: 'iniciando o agente…' })}</span>
             <div className="spacer" />
-            <button className="btn btn-sm" onClick={() => abort.current?.abort()} title="Encerra o processo do agente; o que já chegou fica na tela">
-              <Square size={12} /> Parar
+            <button className="btn btn-sm" onClick={() => abort.current?.abort()} title={tx({ en: 'Stops the agent process; what already arrived stays on screen', pt: 'Encerra o processo do agente; o que já chegou fica na tela' })}>
+              <Square size={12} /> {tx({ en: 'Stop', pt: 'Parar' })}
             </button>
           </>
         ) : (
           <>
-            <span className="muted mono" style={{ fontSize: 12 }}>{phase === 'done' ? info : 'falhou'}</span>
+            <span className="muted mono" style={{ fontSize: 12 }}>{phase === 'done' ? info : tx({ en: 'failed', pt: 'falhou' })}</span>
             <div className="spacer" />
-            {text && <CopyButton value={text} label="Copiar revisão" />}
-            <button className="btn btn-sm" onClick={run}><Sparkles size={13} /> Revisar de novo</button>
+            {text && <CopyButton value={text} label={tx({ en: 'Copy review', pt: 'Copiar revisão' })} />}
+            <button className="btn btn-sm" onClick={run}><Sparkles size={13} /> {tx({ en: 'Review again', pt: 'Revisar de novo' })}</button>
           </>
         )}
       </div>
@@ -90,8 +93,8 @@ export function ReviewPanel({ item }: { item: CatalogItem }) {
   )
 }
 
-// Markdown mínimo da revisão: parágrafos, listas, **negrito** e `código`. Montado em JSX, sem innerHTML.
-// ponytail: sem tabelas, títulos nem blocos de código; trocar por react-markdown quando a Análise precisar.
+// Minimal Markdown for the review: paragraphs, lists, **bold** and `code`. Built as JSX, no innerHTML.
+// ponytail: no tables, headings or code blocks; switch to react-markdown when Analysis needs it.
 function inline(text: string): ReactNode[] {
   return text.split(/(\*\*[^*]+\*\*)/g).map((part, i) =>
     part.startsWith('**') && part.endsWith('**') ? <b key={i}>{inline(part.slice(2, -2))}</b>
