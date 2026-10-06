@@ -3,7 +3,7 @@
 import { Router, type Response } from 'express'
 import { openInEditor, pickFolder } from '../lib/desktop.ts'
 import { openSse } from '../lib/sse.ts'
-import { originUrl, repoInfo } from '../lib/review/git.ts'
+import { originUrl, repoInfo, validRef } from '../lib/review/git.ts'
 import { sourceForRemote } from '../lib/repos/remote.ts'
 import { which } from '../lib/run.ts'
 import { detectVerifyCommand } from '../lib/factory/gates.ts'
@@ -133,8 +133,6 @@ async function restoreReviewedWork(task: FactoryTask): Promise<boolean> {
 
 // Provider and model become CLI arguments later: validate them here, at the boundary.
 const MODEL_ID = /^[\w.:/-]{1,200}$/
-// The base branch reaches git as a bare argument: a leading '-' would be read as an option.
-const BRANCH_REF = /^(?!-)(?!.*\.\.)[\w./-]{1,200}$/
 function agentModelsOf(raw: unknown): FactoryTask['agentModels'] {
   if (raw === null || raw === undefined) return undefined
   if (typeof raw !== 'object') throw new Error('modelos por agente inválidos')
@@ -279,7 +277,8 @@ factoryRouter.post('/tasks', async (req, res) => {
     }
     const info = await repoInfo(b.source.repoPath).catch(() => null)
     const baseBranch = b.baseBranch || info?.defaultBase || info?.current || 'main'
-    if (!BRANCH_REF.test(baseBranch)) {
+    // The base branch reaches git as a bare argument: a leading '-' would be read as an option
+    if (!validRef(baseBranch)) {
       res.status(400).json({ error: `branch base inválida: ${baseBranch}` })
       return
     }
