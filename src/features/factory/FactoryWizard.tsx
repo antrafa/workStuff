@@ -79,7 +79,8 @@ export function FactoryWizard({ onClose, onStarted }: { onClose: () => void; onS
   }
 
   const repo = pre?.repo
-  const canWrite = Boolean(pre?.bwrap) || provider === 'codex'
+  // Every provider builds inside bwrap: Codex too, since its own sandbox cannot run nested in it
+  const canWrite = Boolean(pre?.bwrap)
   const ready: boolean[] = [
     true,
     Boolean(pre && pre.providers[provider] && canWrite),
@@ -179,7 +180,7 @@ export function FactoryWizard({ onClose, onStarted }: { onClose: () => void; onS
                       ))}
                     </select>
                   </label>
-                  {!canWrite && <div className="callout callout-warn">{tx({ en: `With ${PROVIDER_LABEL[provider]} and no bwrap the pipeline cannot build. Install bubblewrap or choose Codex.`, pt: `Com ${PROVIDER_LABEL[provider]} e sem bwrap a esteira não consegue construir. Instale o bubblewrap ou escolha Codex.` })}</div>}
+                  {!canWrite && <div className="callout callout-warn">{tx({ en: 'Without bwrap the pipeline cannot build with any provider. Install bubblewrap (the Machine screen shows the command).', pt: 'Sem bwrap a esteira não consegue construir com nenhum provedor. Instale o bubblewrap (a tela Máquina mostra o comando).' })}</div>}
                 </>
               )}
             </div>
