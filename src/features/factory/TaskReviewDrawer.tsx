@@ -16,9 +16,9 @@ import {
   Square,
   Trash2,
 } from 'lucide-react'
-import { Markdown, Modal } from '@/ui'
+import { ConfirmModal, Markdown, Modal } from '@/ui'
 import { api } from '@/lib/api'
-import { AGENT_UI, isTaskRunning, runFactoryAction, taskUsage, type FactoryAction } from './factoryRun'
+import { AGENT_UI, isTaskRunning, retryActionOf, runFactoryAction, taskUsage, type FactoryAction } from './factoryRun'
 import type { FactoryTask, SecurityFinding } from '../../../server/lib/factory/types.ts'
 import { TraceTimeline } from './TraceTimeline'
 import { FactoryStatusChip } from './timeline/FactoryStatusChip'
@@ -57,6 +57,9 @@ export function TaskReviewDrawer({ task, onClose, onUpdate }: Props) {
   const [budgetDraft, setBudgetDraft] = useState(task?.budgetUsd ? String(task.budgetUsd) : '')
   // null: the Architect's plan as is; a string: the developer's edited version
   const [editedPlan, setEditedPlan] = useState<string | null>(null)
+  // A finish that worked but left something to do by hand (MR not opened): not an execution error
+  const [notice, setNotice] = useState<string | null>(null)
+  const [confirming, setConfirming] = useState<'delete' | 'merge' | null>(null)
 
   if (!task) return null
 
@@ -140,9 +143,9 @@ export function TaskReviewDrawer({ task, onClose, onUpdate }: Props) {
     startAction('plan', 'Replanejando com as suas respostas...', 'Especificação e plano gerados com as respostas.', { answers })
   const askFix = (f: SecurityFinding) =>
     setFeedback(`Corrija: ${f.description}${f.file ? ` (${f.file}${f.line !== undefined ? `:${f.line}` : ''})` : ''}`)
-  // Same rule as the board: with a plan, retry the build; without one, plan again.
-  // In review (a failed adjust) the work is intact: the way forward is a new adjust.
-  const retry = task.state === 'review' ? null : task.plan ? handleApprovePlan : handleRetryPlan
+  // Only from 'error', with the board's rule (retryActionOf). In review (a failed adjust) the work
+  // is intact and the way forward is a new adjust; in done there is nothing to retry.
+  const retry = task.state !== 'error' ? null : retryActionOf(task) === 'approve-plan' ? handleApprovePlan : handleRetryPlan
 
   const handleSendFeedback = () => {
     if (!feedback.trim()) return
@@ -157,12 +160,9 @@ export function TaskReviewDrawer({ task, onClose, onUpdate }: Props) {
     }
   }
 
-  const handleFinish = async (mode: 'mr' | 'local_merge') => {
-    if (mode === 'local_merge') {
-      if (!confirm(`Deseja mesclar a branch ${task.branchName} diretamente na branch ${task.baseBranch} do seu repositório local? Certifique-se de que não possui alterações não salvas no workspace.`)) {
-        return
-      }
-    }
+  const handleFinish = (mode: 'mr' | 'local_merge') => (mode === 'local_merge' ? setConfirming('merge') : finish('mr'))
+
+  const finish = async (mode: 'mr' | 'local_merge') => {
     setProcessing(true)
     setError(null)
     try {
@@ -172,7 +172,7 @@ export function TaskReviewDrawer({ task, onClose, onUpdate }: Props) {
         window.open(res.prUrl, '_blank')
       }
       if (res?.warning) {
-        setError(res.warning)
+        setNotice(res.warning)
         return
       }
       onClose()
@@ -183,8 +183,9 @@ export function TaskReviewDrawer({ task, onClose, onUpdate }: Props) {
     }
   }
 
-  const handleDelete = async () => {
-    if (!confirm('Deseja realmente descartar esta tarefa e limpar a worktree?')) return
+  const handleDelete = () => setConfirming('delete')
+
+  const deleteTask = async () => {
     setProcessing(true)
     try {
       await api.delete(`/factory/tasks/${task.id}`)
@@ -199,6 +200,31 @@ export function TaskReviewDrawer({ task, onClose, onUpdate }: Props) {
 
   return (
     <Modal onClose={onClose} title={task.title} width={820}>
+      {confirming === 'delete' && (
+        <ConfirmModal
+          title={`Descartar "${task.title}"?`}
+          action="descartar tarefa"
+          confirmLabel="Descartar"
+          icon={Trash2}
+          effects={['Para a execução em andamento, se houver.', `Remove a worktree e a branch ${task.branchName}.`]}
+          losses={['O código gerado que não virou MR nem merge.', 'O histórico de spans e a sessão dos agentes.']}
+          onConfirm={deleteTask}
+          onClose={() => setConfirming(null)}
+        />
+      )}
+      {confirming === 'merge' && (
+        <ConfirmModal
+          title={`Mesclar ${task.branchName} no seu repositório?`}
+          action="merge local"
+          confirmLabel="Mesclar"
+          icon={Check}
+          command={`git merge --no-ff ${task.branchName}`}
+          effects={[`Faz checkout de ${task.baseBranch.replace(/^origin\//, '')} em ${task.source.repoPath}, mescla e volta para a branch onde você estava.`, 'Não faz push.']}
+          losses={['Nada: o merge pode ser desfeito com git reset na branch base. Exige o repositório sem alterações pendentes.']}
+          onConfirm={() => finish('local_merge')}
+          onClose={() => setConfirming(null)}
+        />
+      )}
       <div className="stack" style={{ minWidth: 640, maxWidth: 840, maxHeight: '80vh', overflowY: 'auto', gap: 14 }}>
         {/* Metadados da Tarefa */}
         <div className="row" style={{ gap: 12, fontSize: 12, color: 'var(--muted)', borderBottom: '1px solid var(--line)', paddingBottom: 10, flexWrap: 'wrap' }}>
@@ -235,6 +261,8 @@ export function TaskReviewDrawer({ task, onClose, onUpdate }: Props) {
             </a>
           )}
         </div>
+
+        {notice && <div className="callout callout-warn">{notice}</div>}
 
         {/* ALERTA DE ERRO OU FALHA DE AUTENTICAÇÃO */}
         {(error || isError) && (
