@@ -44,7 +44,7 @@ Você pede: *"Mover Máquina e Perfil de equipe para o topo da seção Ferrament
 8. O **Documenter** atualiza a documentação afetada e escreve a descrição do MR.
 9. A tarefa chega em **aguardando revisão**. Você vê o diff, o relatório de QA, os achados e os critérios, pede ajuste se precisar, e escolhe **Criar MR/PR** ou **Merge Local**.
 
-Durante tudo isso, a linha do tempo mostra cada fase ao vivo; clicar numa fase abre um modal com o que ela produziu.
+Durante tudo isso, o cartão da tarefa no Quadro mostra qual agente está trabalhando e em quê; clicar nele abre o trace, com a atividade ao vivo dos agentes e as raias por agente. Clicar numa fase abre um modal com o que ela produziu.
 
 ## 2. Princípios
 
@@ -400,16 +400,16 @@ Tudo em `src/features/factory/`.
 
 | Tela ou peça | Arquivo | O que mostra |
 |---|---|---|
-| Página | `FactoryPage.tsx` | Abas Linha do Tempo, Quadro Kanban e Agentes Especializados; contadores; botões Modo guiado e Nova Tarefa. |
-| Linha do tempo (lista) | `timeline/FactoryTimelineGrid.tsx`, `FactoryTimelineCard.tsx` | Um cartão por tarefa, com uma raia por agente. |
-| Trace da tarefa | `timeline/FactoryTraceVisualizer.tsx` | Raias por ator (Engenheiro, Workspace, cada agente, Portões), blocos posicionados no tempo, ações da tarefa. |
+| Página | `FactoryPage.tsx` | Abas Quadro e Agentes Especializados; contadores (em andamento, aguardando você, concluídas); botões Modo guiado e Nova Tarefa. |
+| Quadro Kanban | `FactoryBoard.tsx` | Colunas por fase. Cada cartão mostra o andamento de cada agente, a etapa de agora (quem, qual, há quanto tempo, quantas ferramentas), o custo e as ações do estado. Clicar abre o trace. |
+| Ações por estado | `TaskActions.tsx`, `nextActions` em `factoryRun.ts` | A única regra de "o que fazer agora" em cada estado, usada pelo cartão e pelo trace. Aprovar o plano e responder dúvidas sempre abrem a gaveta, que mostra o que está sendo aprovado. |
+| Trace da tarefa | `timeline/FactoryTraceVisualizer.tsx` | A atividade dos agentes ao vivo (`ActivityFeed.tsx`: o que cada agente escreve e cada ferramenta que chama, com a saída) e, abaixo, as raias por ator posicionadas no tempo. |
 | Detalhe da fase | `timeline/PhaseDetailModal.tsx` | Modal ao clicar num bloco: o resultado daquela fase, a saída do agente ao vivo e cada ferramenta chamada. |
-| Quadro Kanban | `FactoryBoard.tsx`, `FactoryLiveConsole.tsx` | Colunas por fase, ações rápidas e console ao vivo. |
-| Gaveta da tarefa | `TaskReviewDrawer.tsx` | Dúvidas do Analyst, critérios e plano (editável), diff, QA, revisão e segurança, trace, ajuste, MR ou merge. |
-| Nova tarefa | `NewTaskModal.tsx` | Criação direta: manual ou por issue, com todas as opções. |
+| Gaveta da tarefa | `TaskReviewDrawer.tsx` | Dúvidas do Analyst, critérios e plano (editável), diff, QA, revisão e segurança, ajuste, MR ou merge, descarte (com `ConfirmModal`). |
+| Nova tarefa | `NewTaskModal.tsx` | Criação direta: manual ou por issue, com todas as opções; avisa quando falta o `bwrap`. |
 | Modo guiado | `FactoryWizard.tsx` | Seis passos: como funciona, pré-requisitos, repositório, demanda, agentes e custo, revisar. Abre sozinho na primeira visita sem tarefas. |
 | Agentes avulsos | `StandaloneAgentTab.tsx` | Um agente, um prompt, um repositório, em modo leitura, com runbooks relacionados. |
-| Estado compartilhado | `factoryRun.ts` | Rótulos de estado, cores e nomes dos agentes, início de ações, acompanhamento ao vivo (`useLiveTask`), custo. |
+| Estado compartilhado | `factoryRun.ts` | Rótulos de estado, cores e nomes dos agentes, ações por estado (`nextActions`), início de ações, acompanhamento ao vivo (`useLiveTask`), custo. |
 
 ## 16. Mapa do código
 
@@ -464,7 +464,7 @@ O selfcheck de `agents.ts` falha se um agente da ordem ficar sem definição, e 
 - **Teto de custo**: conferido entre execuções, não no meio; sem efeito para provedores que não informam custo.
 - **Revisão de rodada 2 em diante** recebe o diff completo, não só o que mudou desde a rodada anterior.
 - **`tasks.json` é reescrito a cada evento de span**: suficiente para um usuário; com muitas tarefas paralelas, trocar por banco.
-- **MR/PR** depende de uma conexão em Repositórios que corresponda ao projeto.
+- **MR/PR** depende de uma conexão em Repositórios com o mesmo host do `origin` do projeto e cujo grupo base contenha o projeto (`sourceForRemote`).
 - **`bwrap` só existe no Linux**: no macOS e no Windows, agentes com escrita e Antigravity não rodam, e a verificação não executa.
 - **O que o jail ainda não fecha**: a rede fica aberta e a home fica legível (um agente manipulado pode ler um token e enviá-lo); um jar dos caches compartilhados do Maven e do Gradle pode ser trocado; o Antigravity grava no `~/.gemini` real.
 
