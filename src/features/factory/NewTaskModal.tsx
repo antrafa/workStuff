@@ -3,6 +3,7 @@ import { FolderOpen, GitPullRequest, Plus, Search, Cpu } from 'lucide-react'
 import { Modal, Segmented } from '@/ui'
 import { api } from '@/lib/api'
 import { AGENT_ORDER, AGENT_UI, CLAUDE_SPLIT } from './factoryRun'
+import { tx } from '@/lib/i18n'
 import type { SpecializedAgentId } from '../../../server/lib/factory/types.ts'
 
 
@@ -52,7 +53,7 @@ export function NewTaskModal({ open, onClose, onCreated }: Props) {
     onClose()
   }
 
-  // Carrega provedor configurado no workstuff
+  // Loads the provider configured in workStuff
   useEffect(() => {
     if (open) {
       api.get<SettingsResponse>('/factory/settings')
@@ -60,14 +61,14 @@ export function NewTaskModal({ open, onClose, onCreated }: Props) {
           if (res?.provider) setProvider(res.provider)
           if (res?.model) setDefaultModel(res.model)
         })
-        .catch(e => setError(`Não foi possível ler as Configurações: ${(e as Error).message}`))
+        .catch(e => setError(tx({ en: `Could not read Settings: ${(e as Error).message}`, pt: `Não foi possível ler as Configurações: ${(e as Error).message}` })))
       api.get<{ bwrap: boolean }>('/factory/preflight')
         .then(p => setNoSandbox(!p.bwrap))
         .catch(() => setNoSandbox(false))
     }
   }, [open])
 
-  // Issues remotas
+  // Remote issues
   const [issues, setIssues] = useState<Issue[]>([])
   const [loadingIssues, setLoadingIssues] = useState(false)
   const [issuesError, setIssuesError] = useState<string | null>(null)
@@ -97,14 +98,14 @@ export function NewTaskModal({ open, onClose, onCreated }: Props) {
   const handleSelectIssue = (issue: Issue) => {
     setPickedIssue(issue)
     setTitle(`[#${issue.number}] ${issue.title}`)
-    setDescription(issue.body?.trim() || `Demanda importada da issue #${issue.number} de ${issue.repo}.`)
+    setDescription(issue.body?.trim() || tx({ en: `Request imported from issue #${issue.number} of ${issue.repo}.`, pt: `Demanda importada da issue #${issue.number} de ${issue.repo}.` }))
     setTab('manual')
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!title.trim() || !repoPath.trim()) {
-      setError('Informe o título e o caminho do repositório local.')
+      setError(tx({ en: 'Enter the title and the local repository path.', pt: 'Informe o título e o caminho do repositório local.' }))
       return
     }
 
@@ -146,13 +147,13 @@ export function NewTaskModal({ open, onClose, onCreated }: Props) {
   if (!open) return null
 
   return (
-    <Modal onClose={close} title="Nova Tarefa na Fábrica">
+    <Modal onClose={close} title={tx({ en: 'New factory task', pt: 'Nova Tarefa na Fábrica' })}>
       <div className="stack" style={{ minWidth: 480 }}>
-        {/* Abas do Modal */}
+        {/* Modal tabs */}
         <Segmented
           options={[
-            { id: 'manual', label: 'Tarefa manual' },
-            { id: 'issues', label: 'Importar issue remota' },
+            { id: 'manual', label: tx({ en: 'Manual task', pt: 'Tarefa manual' }) },
+            { id: 'issues', label: tx({ en: 'Import remote issue', pt: 'Importar issue remota' }) },
           ]}
           value={tab}
           onChange={setTab}
@@ -160,7 +161,7 @@ export function NewTaskModal({ open, onClose, onCreated }: Props) {
 
         {noSandbox && (
           <div className="callout callout-warn">
-            O bwrap (bubblewrap) não está instalado: o planejamento roda, mas a construção e a verificação não. A tela Máquina mostra o comando para instalar.
+            {tx({ en: 'bwrap (bubblewrap) is not installed: planning runs, but the build and the verification do not. The Machine screen shows the install command.', pt: 'O bwrap (bubblewrap) não está instalado: o planejamento roda, mas a construção e a verificação não. A tela Máquina mostra o comando para instalar.' })}
           </div>
         )}
         {error && <div className="callout callout-crit">{error}</div>}
@@ -168,10 +169,10 @@ export function NewTaskModal({ open, onClose, onCreated }: Props) {
         {pickedIssue && tab === 'manual' && (
           <div className="callout callout-info row" style={{ justifyContent: 'space-between' }}>
             <span>
-              <GitPullRequest size={14} /> Vinculada à issue #{pickedIssue.number} de {pickedIssue.repo}
+              <GitPullRequest size={14} /> {tx({ en: `Linked to issue #${pickedIssue.number} of ${pickedIssue.repo}`, pt: `Vinculada à issue #${pickedIssue.number} de ${pickedIssue.repo}` })}
             </span>
             <button type="button" className="btn btn-sm" onClick={() => setPickedIssue(null)}>
-              Desvincular
+              {tx({ en: 'Unlink', pt: 'Desvincular' })}
             </button>
           </div>
         )}
@@ -179,10 +180,10 @@ export function NewTaskModal({ open, onClose, onCreated }: Props) {
         {tab === 'manual' ? (
           <form onSubmit={handleSubmit} className="stack">
             <label className="stack" style={{ gap: 4 }}>
-              <span className="eyebrow">Título da Demanda</span>
+              <span className="eyebrow">{tx({ en: 'Request title', pt: 'Título da Demanda' })}</span>
               <input
                 className="input"
-                placeholder="Ex.: Corrigir timeout na conexão com banco de dados"
+                placeholder={tx({ en: 'e.g. Fix the database connection timeout', pt: 'Ex.: Corrigir timeout na conexão com banco de dados' })}
                 value={title}
                 onChange={e => setTitle(e.target.value)}
                 required
@@ -190,28 +191,28 @@ export function NewTaskModal({ open, onClose, onCreated }: Props) {
             </label>
 
             <label className="stack" style={{ gap: 4 }}>
-              <span className="eyebrow">Repositório Local (Pasta do clone)</span>
+              <span className="eyebrow">{tx({ en: 'Local repository (clone folder)', pt: 'Repositório Local (Pasta do clone)' })}</span>
               <div className="row" style={{ gap: 8 }}>
                 <input
                   className="input"
                   style={{ flex: 1 }}
-                  placeholder="/caminho/do/projeto/workspace"
+                  placeholder={tx({ en: '/path/to/the/project', pt: '/caminho/do/projeto/workspace' })}
                   value={repoPath}
                   onChange={e => setRepoPath(e.target.value)}
                   required
                 />
-                <button type="button" className="btn" onClick={pickFolder} title="Escolher pasta">
-                  <FolderOpen size={16} /> Escolher
+                <button type="button" className="btn" onClick={pickFolder} title={tx({ en: 'Choose folder', pt: 'Escolher pasta' })}>
+                  <FolderOpen size={16} /> {tx({ en: 'Choose', pt: 'Escolher' })}
                 </button>
               </div>
             </label>
 
             <div className="row" style={{ gap: 12 }}>
               <label className="stack" style={{ gap: 4, flex: 1 }}>
-                <span className="eyebrow">Branch Base</span>
+                <span className="eyebrow">{tx({ en: 'Base branch', pt: 'Branch Base' })}</span>
                 <input
                   className="input"
-                  placeholder="padrão do repositório"
+                  placeholder={tx({ en: 'repository default', pt: 'padrão do repositório' })}
                   value={baseBranch}
                   onChange={e => setBaseBranch(e.target.value)}
                 />
@@ -219,14 +220,14 @@ export function NewTaskModal({ open, onClose, onCreated }: Props) {
 
               <label className="stack" style={{ gap: 4, flex: 1 }}>
                 <span className="eyebrow row" style={{ gap: 4 }}>
-                  <Cpu size={12} /> Provedor de IA
+                  <Cpu size={12} /> {tx({ en: 'AI provider', pt: 'Provedor de IA' })}
                 </span>
                 <select
                   className="input"
                   value={provider ?? ''}
                   onChange={e => setProvider(e.target.value as SettingsResponse['provider'])}
                 >
-                  {provider === null && <option value="">Padrão de Configurações</option>}
+                  {provider === null && <option value="">{tx({ en: 'Settings default', pt: 'Padrão de Configurações' })}</option>}
                   <option value="agy">Antigravity (AGY)</option>
                   <option value="codex">Codex</option>
                   <option value="claude">Claude Code</option>
@@ -235,53 +236,56 @@ export function NewTaskModal({ open, onClose, onCreated }: Props) {
             </div>
 
             <label className="stack" style={{ gap: 4 }}>
-              <span className="eyebrow">Descrição dos Requisitos</span>
+              <span className="eyebrow">{tx({ en: 'Requirements', pt: 'Descrição dos Requisitos' })}</span>
               <textarea
                 className="textarea"
                 rows={4}
-                placeholder="Explique o que precisa ser feito, arquivos afetados ou critérios de aceitação..."
+                placeholder={tx({ en: 'Explain what needs to be done, affected files or acceptance criteria...', pt: 'Explique o que precisa ser feito, arquivos afetados ou critérios de aceitação...' })}
                 value={description}
                 onChange={e => setDescription(e.target.value)}
               />
             </label>
 
             <label className="stack" style={{ gap: 4 }}>
-              <span className="eyebrow">Comando de verificação (opcional)</span>
+              <span className="eyebrow">{tx({ en: 'Verification command (optional)', pt: 'Comando de verificação (opcional)' })}</span>
               <input
                 className="input mono"
-                placeholder="detectado pelo projeto: npm test, mvn -q test, go test ./..."
+                placeholder={tx({ en: 'detected from the project: npm test, mvn -q test, go test ./...', pt: 'detectado pelo projeto: npm test, mvn -q test, go test ./...' })}
                 value={verifyCommand}
                 onChange={e => setVerifyCommand(e.target.value)}
               />
               <span className="muted" style={{ fontSize: 12 }}>
-                Roda depois de cada entrega do Implementer, dentro do sandbox. Ex.: npm run typecheck &amp;&amp; npm test
+                {tx({ en: 'Runs after each Implementer delivery, inside the sandbox. e.g. npm run typecheck && npm test', pt: 'Roda depois de cada entrega do Implementer, dentro do sandbox. Ex.: npm run typecheck && npm test' })}
               </span>
             </label>
 
             <label className="stack" style={{ gap: 4 }}>
-              <span className="eyebrow">Teto de custo em US$ (opcional)</span>
+              <span className="eyebrow">{tx({ en: 'Cost cap in US$ (optional)', pt: 'Teto de custo em US$ (opcional)' })}</span>
               <input
                 className="input mono"
                 type="number"
                 min="0.01"
                 step="0.01"
-                placeholder="sem teto"
+                placeholder={tx({ en: 'no cap', pt: 'sem teto' })}
                 value={budgetUsd}
                 onChange={e => setBudgetUsd(e.target.value)}
               />
               <span className="muted" style={{ fontSize: 12 }}>
-                Conferido antes de cada agente, somando todas as execuções da tarefa. Só vale para provedores que informam custo (Claude); uma execução pode passar um pouco do teto.
+                {tx({
+                  en: 'Checked before each agent, adding up every run of the task. Only works with providers that report cost (Claude); one run may go a little over the cap.',
+                  pt: 'Conferido antes de cada agente, somando todas as execuções da tarefa. Só vale para provedores que informam custo (Claude); uma execução pode passar um pouco do teto.',
+                })}
               </span>
             </label>
 
             <details>
-              <summary className="eyebrow" style={{ cursor: 'pointer' }}>Modelo por agente (opcional)</summary>
+              <summary className="eyebrow" style={{ cursor: 'pointer' }}>{tx({ en: 'Model per agent (optional)', pt: 'Modelo por agente (opcional)' })}</summary>
               <div className="stack" style={{ gap: 8, marginTop: 8 }}>
                 <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
                   <button type="button" className="btn btn-sm" onClick={() => setAgentModels(CLAUDE_SPLIT)}>
-                    Claude: opus para julgar, sonnet para construir
+                    {tx({ en: 'Claude: opus to judge, sonnet to build', pt: 'Claude: opus para julgar, sonnet para construir' })}
                   </button>
-                  <button type="button" className="btn btn-sm" onClick={() => setAgentModels({})}>Limpar</button>
+                  <button type="button" className="btn btn-sm" onClick={() => setAgentModels({})}>{tx({ en: 'Clear', pt: 'Limpar' })}</button>
                 </div>
                 {AGENT_ORDER.map(id => (
                   <label key={id} className="row" style={{ gap: 8 }}>
@@ -289,22 +293,22 @@ export function NewTaskModal({ open, onClose, onCreated }: Props) {
                     <input
                       className="input mono"
                       style={{ flex: 1 }}
-                      placeholder={defaultModel || 'modelo padrão'}
+                      placeholder={defaultModel || tx({ en: 'default model', pt: 'modelo padrão' })}
                       value={agentModels[id] ?? ''}
                       onChange={e => setAgentModels(m => ({ ...m, [id]: e.target.value.trim() }))}
                     />
                   </label>
                 ))}
-                <span className="muted" style={{ fontSize: 12 }}>Vazio usa o modelo da tarefa. O id precisa existir no provedor escolhido.</span>
+                <span className="muted" style={{ fontSize: 12 }}>{tx({ en: 'Empty uses the task model. The id must exist in the chosen provider.', pt: 'Vazio usa o modelo da tarefa. O id precisa existir no provedor escolhido.' })}</span>
               </div>
             </details>
 
             <div className="row" style={{ justifyContent: 'flex-end', marginTop: 12 }}>
               <button type="button" className="btn" onClick={close} disabled={saving}>
-                Cancelar
+                {tx({ en: 'Cancel', pt: 'Cancelar' })}
               </button>
               <button type="submit" className="btn btn-primary" disabled={saving}>
-                <Plus size={16} /> {saving ? 'Criando...' : 'Adicionar à Entrada'}
+                <Plus size={16} /> {saving ? tx({ en: 'Creating...', pt: 'Criando...' }) : tx({ en: 'Add to intake', pt: 'Adicionar à Entrada' })}
               </button>
             </div>
           </form>
@@ -315,21 +319,21 @@ export function NewTaskModal({ open, onClose, onCreated }: Props) {
               <input
                 className="input"
                 style={{ flex: 1 }}
-                placeholder="Filtrar issues por título ou repositório..."
+                placeholder={tx({ en: 'Filter issues by title or repository...', pt: 'Filtrar issues por título ou repositório...' })}
                 value={issueFilter}
                 onChange={e => setIssueFilter(e.target.value)}
               />
             </div>
 
             {issuesError ? (
-              <div className="callout callout-crit">Falha ao buscar issues: {issuesError}</div>
+              <div className="callout callout-crit">{tx({ en: 'Could not fetch issues: ', pt: 'Falha ao buscar issues: ' })}{issuesError}</div>
             ) : loadingIssues ? (
               <div className="card card-pad muted" style={{ textAlign: 'center' }}>
-                Buscando issues nos repositórios conectados...
+                {tx({ en: 'Fetching issues from the connected repositories...', pt: 'Buscando issues nos repositórios conectados...' })}
               </div>
             ) : filteredIssues.length === 0 ? (
               <div className="card card-pad muted" style={{ textAlign: 'center' }}>
-                Nenhuma issue aberta encontrada nos repositórios conectados.
+                {tx({ en: 'No open issue found in the connected repositories.', pt: 'Nenhuma issue aberta encontrada nos repositórios conectados.' })}
               </div>
             ) : (
               <div className="stack" style={{ maxHeight: 300, overflowY: 'auto', gap: 6 }}>
@@ -352,7 +356,7 @@ export function NewTaskModal({ open, onClose, onCreated }: Props) {
                       className="btn btn-sm"
                       onClick={() => handleSelectIssue(issue)}
                     >
-                      Preencher
+                      {tx({ en: 'Fill in', pt: 'Preencher' })}
                     </button>
                   </div>
                 ))}
