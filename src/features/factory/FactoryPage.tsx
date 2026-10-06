@@ -1,8 +1,5 @@
 import { useState, useEffect } from 'react'
 import {
-  Activity,
-  Bot,
-  Boxes,
   Compass,
   Factory,
   Plus,
@@ -10,7 +7,7 @@ import {
   Terminal,
 } from 'lucide-react'
 import { Link } from 'react-router'
-import { Page, Async, Empty } from '@/ui'
+import { Page, Async, Empty, Segmented } from '@/ui'
 import { api } from '@/lib/api'
 import { useAsync } from '@/lib/useAsync'
 import type { FactoryTask } from '../../../server/lib/factory/types.ts'
@@ -18,9 +15,8 @@ import { FactoryBoard } from './FactoryBoard'
 import { NewTaskModal } from './NewTaskModal'
 import { TaskReviewDrawer } from './TaskReviewDrawer'
 import { StandaloneAgentTab } from './StandaloneAgentTab'
-import { FactoryTimelineGrid } from './timeline/FactoryTimelineGrid'
 import { FactoryTraceVisualizer } from './timeline/FactoryTraceVisualizer'
-import { isTaskRunning } from './factoryRun'
+import { isTaskRunning, WAITING_STATES } from './factoryRun'
 import { FactoryWizard, WIZARD_SEEN_KEY } from './FactoryWizard'
 
 function wizardSeen(): boolean {
@@ -32,7 +28,7 @@ function wizardSeen(): boolean {
 }
 
 export default function FactoryPage() {
-  const [activeTab, setActiveTab] = useState<'timeline' | 'board' | 'agents'>('timeline')
+  const [activeTab, setActiveTab] = useState<'board' | 'agents'>('board')
   const [modalOpen, setModalOpen] = useState(false)
   // The drawer reads the task from the polled list by id, so it never shows a stale copy
   const [selectedId, setSelectedId] = useState<string | null>(null)
@@ -56,7 +52,7 @@ export default function FactoryPage() {
   const tasks = tasksLoader.data ?? []
   const selectedTask = tasks.find(t => t.id === selectedId) ?? null
   const activeCount = tasks.filter(isTaskRunning).length
-  const reviewCount = tasks.filter(t => t.state === 'review' || t.state === 'waiting_approval').length
+  const reviewCount = tasks.filter(t => WAITING_STATES.includes(t.state)).length
   const doneCount = tasks.filter(t => t.state === 'done').length
 
   const handleSelectTask = (task: FactoryTask) => {
@@ -65,18 +61,6 @@ export default function FactoryPage() {
 
   const handleOpenTrace = (task: FactoryTask) => {
     setVisualizerTask(task)
-  }
-
-  const handleDeleteTask = async (task: FactoryTask) => {
-    if (!confirm(`Deseja excluir a tarefa "${task.title}" e limpar o ambiente?`)) return
-    try {
-      await api.delete(`/factory/tasks/${task.id}`)
-      handleRefresh()
-      if (visualizerTask?.id === task.id) setVisualizerTask(null)
-      if (selectedId === task.id) setSelectedId(null)
-    } catch (e) {
-      alert((e as Error).message)
-    }
   }
 
   const handleRefresh = () => tasksLoader.reload()
@@ -106,6 +90,8 @@ export default function FactoryPage() {
         {/* Detailed trace visualizer if a task is inspected */}
         {visualizerTask ? (
           <FactoryTraceVisualizer
+            // A new task (from the wizard) remounts it: its live state belongs to one task
+            key={visualizerTask.id}
             task={visualizerTask}
             onBack={() => setVisualizerTask(null)}
             onOpenReview={t => {
@@ -118,29 +104,14 @@ export default function FactoryPage() {
           <>
             {/* Header summary and tabs */}
             <div className="row" style={{ justifyContent: 'space-between', borderBottom: '1px solid var(--line)', paddingBottom: 12 }}>
-              <div className="row" style={{ gap: 8 }}>
-                <button
-                  type="button"
-                  className={`btn btn-sm ${activeTab === 'timeline' ? 'btn-primary' : ''}`}
-                  onClick={() => setActiveTab('timeline')}
-                >
-                  <Activity size={14} /> Linha do Tempo ({tasks.length})
-                </button>
-                <button
-                  type="button"
-                  className={`btn btn-sm ${activeTab === 'board' ? 'btn-primary' : ''}`}
-                  onClick={() => setActiveTab('board')}
-                >
-                  <Boxes size={14} /> Quadro Kanban
-                </button>
-                <button
-                  type="button"
-                  className={`btn btn-sm ${activeTab === 'agents' ? 'btn-primary' : ''}`}
-                  onClick={() => setActiveTab('agents')}
-                >
-                  <Bot size={14} /> Agentes Especializados
-                </button>
-              </div>
+              <Segmented
+                options={[
+                  { id: 'board', label: `Quadro (${tasks.length})` },
+                  { id: 'agents', label: 'Agentes Especializados' },
+                ]}
+                value={activeTab}
+                onChange={setActiveTab}
+              />
 
               <div className="row" style={{ gap: 12, fontSize: 12, color: 'var(--muted)' }}>
                 <span>Em andamento: <b>{activeCount}</b></span>
@@ -150,19 +121,6 @@ export default function FactoryPage() {
                 <span>Concluídas: <b style={{ color: 'var(--ok)' }}>{doneCount}</b></span>
               </div>
             </div>
-
-            {/* Active tab content */}
-            {activeTab === 'timeline' && (
-              <Async state={tasksLoader}>
-                {loadedTasks => (
-                  <FactoryTimelineGrid
-                    tasks={loadedTasks}
-                    onOpenTrace={handleOpenTrace}
-                    onDelete={handleDeleteTask}
-                  />
-                )}
-              </Async>
-            )}
 
             {activeTab === 'board' && (
               <Async state={tasksLoader}>
@@ -182,9 +140,9 @@ export default function FactoryPage() {
                   ) : (
                     <FactoryBoard
                       tasks={loadedTasks}
-                      onSelectTask={handleSelectTask}
-                      onUpdate={handleRefresh}
                       onOpenTrace={handleOpenTrace}
+                      onOpenReview={handleSelectTask}
+                      onUpdate={handleRefresh}
                     />
                   )
                 )}

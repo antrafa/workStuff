@@ -6,33 +6,31 @@ import {
   GitBranch,
   Play,
   RefreshCw,
-  RotateCw,
   Pause,
   Eye,
   ShieldCheck,
-  Square,
   Terminal,
   User,
   Wrench,
-  MessageSquare,
   BookOpen,
   ClipboardList,
   ShieldAlert,
 } from 'lucide-react'
-import { api } from '@/lib/api'
 import type { FactoryTask } from '../../../../server/lib/factory/types.ts'
 import { FactoryStatusChip } from './FactoryStatusChip'
 import { FactoryStatChip } from './FactoryStatChip'
 import { PhaseDetailModal } from './PhaseDetailModal'
-import { AGENT_ORDER, AGENT_UI, fmtDuration, runFactoryAction, useLiveTask } from '../factoryRun'
+import { ActivityFeed } from '../ActivityFeed'
+import { TaskActions } from '../TaskActions'
+import { AGENT_ORDER, AGENT_UI, fmtDuration, useLiveTask } from '../factoryRun'
 import type { SpecializedAgentId } from '../../../../server/lib/factory/types.ts'
 
 type Props = {
   task: FactoryTask
   onBack: () => void
   onUpdate: () => void
-  // Opens the review drawer for this task (diff, QA, security, finish)
-  onOpenReview?: (task: FactoryTask) => void
+  // Opens the drawer for this task: answer questions, read and approve the plan, review, finish
+  onOpenReview: (task: FactoryTask) => void
 }
 
 type LaneDef = {
@@ -56,12 +54,8 @@ const AGENT_ICON: Record<SpecializedAgentId, typeof Cpu> = {
 
 
 export function FactoryTraceVisualizer({ task, onBack, onUpdate, onOpenReview }: Props) {
-  const [processing, setProcessing] = useState(false)
-  const { task: liveTask, events: consolidatedEvents, running: isExecuting, refresh, paused, setPaused } = useLiveTask(task, processing)
+  const { task: liveTask, events: consolidatedEvents, running: isExecuting, refresh, paused, setPaused } = useLiveTask(task)
   const [selectedSpanId, setSelectedSpanId] = useState<string | null>(null)
-  const [statusMessage, setStatusMessage] = useState<string | null>(null)
-  const [error, setError] = useState<string | null>(null)
-  const [stopping, setStopping] = useState(false)
   const [isRefreshing, setIsRefreshing] = useState(false)
   const [currentTime, setCurrentTime] = useState(Date.now())
 
@@ -107,43 +101,10 @@ export function FactoryTraceVisualizer({ task, onBack, onUpdate, onOpenReview }:
     { label: fmtDuration(totalDurationMs), pct: 98 },
   ]
 
-  const handleCancelExecution = async () => {
-    if (stopping) return
-    setStopping(true)
-    setError(null)
-    setStatusMessage('Solicitando cancelamento ao servidor...')
-    try {
-      await api.post(`/factory/tasks/${liveTask.id}/cancel`, {})
-      setStatusMessage('Execução interrompida pelo usuário.')
-      await refresh()
-      onUpdate()
-    } catch (err) {
-      setError((err as Error).message)
-    } finally {
-      setStopping(false)
-    }
+  const onChanged = () => {
+    refresh()
+    onUpdate()
   }
-
-  // Progress shows up through the polled session; here only the outcome matters
-  const startAction = async (action: 'plan' | 'approve-plan', starting: string, finished: string) => {
-    setProcessing(true)
-    setError(null)
-    setStatusMessage(starting)
-    try {
-      const outcome = await runFactoryAction(liveTask.id, action, { onStarted: onUpdate })
-      if (outcome.error) setError(outcome.error)
-      setStatusMessage(outcome.ok ? finished : outcome.cancelled ? 'Execução interrompida pelo usuário.' : null)
-    } catch (err) {
-      setError((err as Error).message)
-      setStatusMessage(null)
-    } finally {
-      setProcessing(false)
-      refresh()
-      onUpdate()
-    }
-  }
-  const handleApprovePlan = () => startAction('approve-plan', 'Iniciando construção na worktree...', 'Construção e testes concluídos com sucesso!')
-  const handleStartPlan = () => startAction('plan', 'Iniciando planejamento arquitetural...', 'Planejamento concluído com sucesso!')
 
   return (
     <div
@@ -218,35 +179,7 @@ export function FactoryTraceVisualizer({ task, onBack, onUpdate, onOpenReview }:
             {paused ? 'Pausado' : 'Ao vivo'}
           </button>
 
-          {liveTask.state === 'error' && (
-            // Same rule as board and drawer: with a plan, rebuild; without one, plan again
-            <button
-              type="button"
-              className="btn btn-sm btn-primary"
-              onClick={liveTask.plan ? handleApprovePlan : handleStartPlan}
-              disabled={processing}
-            >
-              <RotateCw size={14} /> {processing ? 'Tentando...' : 'Tentar Novamente'}
-            </button>
-          )}
-
-          {liveTask.state === 'review' && onOpenReview && (
-            <button type="button" className="btn btn-sm btn-primary" onClick={() => onOpenReview(liveTask)}>
-              <Eye size={14} /> Abrir Revisão
-            </button>
-          )}
-
-          {isExecuting && (
-            <button
-              type="button"
-              className="btn btn-sm btn-danger"
-              onClick={handleCancelExecution}
-              disabled={stopping}
-              title="Interromper execução atual"
-            >
-              <Square size={12} fill="currentColor" /> {stopping ? 'Parando...' : 'Parar Execução'}
-            </button>
-          )}
+          <TaskActions task={liveTask} running={isExecuting} onOpenReview={onOpenReview} onChanged={onChanged} />
 
           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
             <span
@@ -331,18 +264,16 @@ export function FactoryTraceVisualizer({ task, onBack, onUpdate, onOpenReview }:
         </div>
       )}
 
-      {error && (
+      {liveTask.error && (
         <div className="callout callout-crit" style={{ margin: '14px 20px 0', fontSize: 13 }}>
-          {error}
+          {liveTask.error}
         </div>
       )}
 
-      {statusMessage && (
-        <div className="callout callout-info" style={{ margin: '14px 20px 0', fontSize: 13, display: 'flex', alignItems: 'center', gap: 8 }}>
-          <span className="live-dot" />
-          <span>{statusMessage}</span>
-        </div>
-      )}
+      {/* What the agents write and call, first: it is what a running task is watched for */}
+      <div style={{ margin: '14px 20px 0' }}>
+        <ActivityFeed events={consolidatedEvents} running={isExecuting} />
+      </div>
 
       {/* 3. A GRANDE MATRIZ EM CASCATA COM ROLAGEM HORIZONTAL E COLUNA STICKY */}
       <div
@@ -546,7 +477,7 @@ export function FactoryTraceVisualizer({ task, onBack, onUpdate, onOpenReview }:
         </div>
       </div>
 
-      {/* AÇÕES DE CONTINUAÇÃO / HUMAN-IN-THE-LOOP */}
+      {/* Worktree da tarefa */}
       <div style={{ margin: '0 20px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--surface)', padding: '12px 16px', borderRadius: 12, border: '1px solid var(--line)', flexWrap: 'wrap', gap: 10 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <GitBranch size={16} style={{ color: 'var(--fx-implementer)' }} />
@@ -555,54 +486,6 @@ export function FactoryTraceVisualizer({ task, onBack, onUpdate, onOpenReview }:
           </span>
         </div>
 
-        <div style={{ display: 'flex', gap: 10 }}>
-          {liveTask.state === 'intake' && (
-            <button type="button" className="btn btn-sm btn-primary" onClick={handleStartPlan} disabled={processing}>
-              <Play size={14} /> {processing ? 'Analisando...' : 'Iniciar Planejamento com Architect'}
-            </button>
-          )}
-
-          {liveTask.state === 'waiting_clarification' && onOpenReview && (
-            <button type="button" className="btn btn-sm btn-primary" onClick={() => onOpenReview(liveTask)}>
-              <MessageSquare size={14} /> Responder Dúvidas do Analyst
-            </button>
-          )}
-
-          {liveTask.state === 'waiting_approval' && (
-            <button type="button" className="btn btn-sm btn-primary" onClick={handleApprovePlan} disabled={processing}>
-              <Play size={14} /> {processing ? 'Construindo...' : 'Aprovar Plano e Iniciar Construção'}
-            </button>
-          )}
-
-          {liveTask.state === 'error' && (
-            // Same rule as board and drawer: with a plan, rebuild; without one, plan again
-            <button
-              type="button"
-              className="btn btn-sm btn-primary"
-              onClick={liveTask.plan ? handleApprovePlan : handleStartPlan}
-              disabled={processing}
-            >
-              <RotateCw size={14} /> {processing ? 'Tentando...' : 'Tentar Novamente'}
-            </button>
-          )}
-
-          {liveTask.state === 'review' && onOpenReview && (
-            <button type="button" className="btn btn-sm btn-primary" onClick={() => onOpenReview(liveTask)}>
-              <Eye size={14} /> Abrir Revisão
-            </button>
-          )}
-
-          {isExecuting && (
-            <button
-              type="button"
-              className="btn btn-sm btn-danger"
-              onClick={handleCancelExecution}
-              disabled={stopping}
-            >
-              <Square size={13} fill="currentColor" /> {stopping ? 'Parando...' : 'Parar Execução'}
-            </button>
-          )}
-        </div>
       </div>
 
       {selectedSpan && (
