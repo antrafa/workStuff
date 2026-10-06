@@ -26,8 +26,9 @@ import { factoryRouter } from './routes/factory.ts'
 import { startScheduler } from './lib/schedules/scheduler.ts'
 import { settingsRouter } from './routes/settings.ts'
 import { statusRouter } from './routes/status.ts'
-import { say } from './lib/i18n.ts'
+import { followSettingsLanguage, say } from './lib/i18n.ts'
 
+followSettingsLanguage()
 const PORT = Number(process.env.PORT ?? 3101)
 const app = express()
 
