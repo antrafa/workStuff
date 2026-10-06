@@ -1,33 +1,34 @@
-// Cron: responde "esse agendamento roda quando?" listando as próximas execuções, em horário local.
+// Cron: answers "when does this schedule run?" by listing the next runs, in local time.
 // Autoteste: node scripts/check-cron.ts
+import { tx } from '../../lib/i18n.ts'
 
 type Field = { name: string; min: number; max: number }
 
 const FIELDS: Field[] = [
-  { name: 'minuto', min: 0, max: 59 },
-  { name: 'hora', min: 0, max: 23 },
-  { name: 'dia do mês', min: 1, max: 31 },
-  { name: 'mês', min: 1, max: 12 },
-  { name: 'dia da semana', min: 0, max: 7 },
+  { name: tx({ en: 'minute', pt: 'minuto' }), min: 0, max: 59 },
+  { name: tx({ en: 'hour', pt: 'hora' }), min: 0, max: 23 },
+  { name: tx({ en: 'day of month', pt: 'dia do mês' }), min: 1, max: 31 },
+  { name: tx({ en: 'month', pt: 'mês' }), min: 1, max: 12 },
+  { name: tx({ en: 'day of week', pt: 'dia da semana' }), min: 0, max: 7 },
 ]
 
-// Quatro anos cobrem qualquer expressão válida, inclusive 29 de fevereiro.
+// Four years cover any valid expression, February 29 included.
 const LIMIT_MINUTES = 4 * 366 * 24 * 60
 
 function expandPart(part: string, { name, min, max }: Field) {
   const [range, stepText] = part.split('/')
-  if (stepText !== undefined && !/^\d+$/.test(stepText)) throw new Error(`passo inválido em "${name}": ${part}`)
+  if (stepText !== undefined && !/^\d+$/.test(stepText)) throw new Error(tx({ en: `invalid step in "${name}": ${part}`, pt: `passo inválido em "${name}": ${part}` }))
   const step = stepText ? Number(stepText) : 1
-  if (step === 0) throw new Error(`passo não pode ser zero em "${name}"`)
+  if (step === 0) throw new Error(tx({ en: `step cannot be zero in "${name}"`, pt: `passo não pode ser zero em "${name}"` }))
 
   let start = min
   let end = max
   if (range !== '*') {
     const m = range.match(/^(\d+)(?:-(\d+))?$/)
-    if (!m) throw new Error(`valor inválido em "${name}": ${range}`)
+    if (!m) throw new Error(tx({ en: `invalid value in "${name}": ${range}`, pt: `valor inválido em "${name}": ${range}` }))
     start = Number(m[1])
     end = m[2] !== undefined ? Number(m[2]) : stepText ? max : start
-    if (start < min || end > max || start > end) throw new Error(`"${name}" fora do intervalo ${min}-${max}: ${range}`)
+    if (start < min || end > max || start > end) throw new Error(tx({ en: `"${name}" outside the range ${min}-${max}: ${range}`, pt: `"${name}" fora do intervalo ${min}-${max}: ${range}` }))
   }
 
   const values: number[] = []
@@ -43,13 +44,13 @@ function expandField(text: string, field: Field) {
 
 export function parseCron(expression: string) {
   const parts = expression.trim().split(/\s+/).filter(Boolean)
-  if (parts.length !== 5) throw new Error(`esperados 5 campos (minuto hora dia mês dia-da-semana), recebidos ${parts.length}`)
+  if (parts.length !== 5) throw new Error(tx({ en: `expected 5 fields (minute hour day month day-of-week), got ${parts.length}`, pt: `esperados 5 campos (minuto hora dia mês dia-da-semana), recebidos ${parts.length}` }))
 
   const [minute, hour, dayOfMonth, month, dayOfWeek] = parts.map((t, i) => expandField(t, FIELDS[i]))
-  // 7 e 0 são ambos domingo no cron.
+  // 7 and 0 are both Sunday in cron.
   if (dayOfWeek.has(7)) dayOfWeek.add(0)
 
-  // Com os dois campos de dia restritos, o cron usa OU: "0 0 1 * 0" roda todo dia 1º E todo domingo.
+  // With both day fields restricted, cron uses OR: "0 0 1 * 0" runs every 1st AND every Sunday.
   return { minute, hour, dayOfMonth, month, dayOfWeek, dayByOr: parts[2] !== '*' && parts[4] !== '*' }
 }
 

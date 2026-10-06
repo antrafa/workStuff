@@ -9,6 +9,7 @@ import { existsSync } from 'node:fs'
 import { expandHome, tildify } from '../paths.ts'
 import { parseDoctorConfig, type DoctorConfig } from '../doctor/config.ts'
 import { validateInput, type Source } from '../repos/sources.ts'
+import { say } from '../i18n.ts'
 
 export const PROFILE_VERSION = 1
 
@@ -40,7 +41,7 @@ const sameRepo = (a: { provider: string; url: string; basePath: string }, b: typ
 
 export function planImport(raw: unknown, current: Current, exists: (p: string) => boolean = existsSync): Plan {
   const p = raw as Partial<Profile>
-  if (!p || typeof p !== 'object' || p.workstuffProfile !== PROFILE_VERSION) throw new Error('arquivo não é um perfil do workStuff (ou é de uma versão que este painel não conhece)')
+  if (!p || typeof p !== 'object' || p.workstuffProfile !== PROFILE_VERSION) throw new Error(say({ en: 'the file is not a workStuff profile (or it is from a version this panel does not know)', pt: 'arquivo não é um perfil do workStuff (ou é de uma versão que este painel não conhece)' }))
 
   const next = parseDoctorConfig(p.doctor)
   const changed = (Object.keys(next) as (keyof DoctorConfig)[]).filter(k => JSON.stringify(next[k]) !== JSON.stringify(current.doctor[k]))
@@ -104,7 +105,7 @@ if (import.meta.main && process.argv.includes('--selfcheck')) {
   assert.deepEqual(plan.roots.missing, ['/nao/existe'])
   assert.deepEqual(plan.activations.map(a => a.foundLocally), [true, false])
 
-  assert.throws(() => planImport({ workstuffProfile: 9 }, current), /não é um perfil/)
-  assert.throws(() => planImport({ ...profile, doctor: { ...doctor, javaVersions: ['17; rm -rf ~'] } }, current), /inválid/, 'versão com caractere de shell é recusada')
+  assert.throws(() => planImport({ workstuffProfile: 9 }, current), /not a workStuff profile/)
+  assert.throws(() => planImport({ ...profile, doctor: { ...doctor, javaVersions: ['17; rm -rf ~'] } }, current), /invalid/, 'versão com caractere de shell é recusada')
   console.log('profile selfcheck: ok')
 }

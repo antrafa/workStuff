@@ -3,6 +3,7 @@ import { useState } from 'react'
 import { Link } from 'react-router'
 import { Empty, Page, useToast } from '@/ui'
 import { api } from '@/lib/api'
+import { tx } from '@/lib/i18n'
 
 type Plan = {
   doctor: { changed: string[] }
@@ -11,10 +12,16 @@ type Plan = {
   activations: { kind: string; slug: string; agents: string[]; foundLocally: boolean }[]
 }
 
-const FIELD_LABEL: Record<string, string> = {
-  mavenRegistries: 'registries Maven', npmScopes: 'escopos npm', urls: 'endereços de rede',
-  javaVersions: 'versões de Java', mavenVersions: 'versões de Maven', nodeVersions: 'versões de Node',
-}
+const FIELD_LABEL: Record<string, string> = tx({
+  en: {
+    mavenRegistries: 'Maven registries', npmScopes: 'npm scopes', urls: 'network addresses',
+    javaVersions: 'Java versions', mavenVersions: 'Maven versions', nodeVersions: 'Node versions',
+  },
+  pt: {
+    mavenRegistries: 'registries Maven', npmScopes: 'escopos npm', urls: 'endereços de rede',
+    javaVersions: 'versões de Java', mavenVersions: 'versões de Maven', nodeVersions: 'versões de Node',
+  },
+})
 
 export default function ProfilePage() {
   const [profile, setProfile] = useState<unknown>(null)
@@ -34,7 +41,7 @@ export default function ProfilePage() {
       setProfile(parsed)
       setPlan(await api.post<Plan>('/profile/preview', { profile: parsed }))
     } catch (e) {
-      setError(e instanceof SyntaxError ? 'o arquivo não é um JSON válido' : (e as Error).message)
+      setError(e instanceof SyntaxError ? tx({ en: 'the file is not valid JSON', pt: 'o arquivo não é um JSON válido' }) : (e as Error).message)
     }
   }
 
@@ -42,7 +49,7 @@ export default function ProfilePage() {
     setApplying(true)
     try {
       await api.post('/profile/apply', { profile, parts })
-      toast('Perfil importado')
+      toast(tx({ en: 'Profile imported', pt: 'Perfil importado' }))
       setPlan(await api.post<Plan>('/profile/preview', { profile }))
     } catch (e) {
       setError((e as Error).message)
@@ -55,29 +62,32 @@ export default function ProfilePage() {
 
   return (
     <Page
-      title="Perfil de equipe"
-      hint="Leve a sua configuração para outra pessoa (ou outra máquina): versões e registries do Máquina, conexões de repositório e o que está ativo no Catálogo. Token nunca vai no arquivo."
+      title={tx({ en: 'Team profile', pt: 'Perfil de equipe' })}
+      hint={tx({ en: "Take your setup to someone else (or another machine): Machine versions and registries, repository connections and what is active in the Catalog. Tokens never go in the file.", pt: 'Leve a sua configuração para outra pessoa (ou outra máquina): versões e registries do Máquina, conexões de repositório e o que está ativo no Catálogo. Token nunca vai no arquivo.' })}
     >
       <section className="card card-pad stack">
         <div className="row">
           <div className="spacer">
-            <b>Exportar</b>
+            <b>{tx({ en: 'Export', pt: 'Exportar' })}</b>
             <p className="muted" style={{ fontSize: 12.5, margin: '2px 0 0' }}>
-              Conexões com token digitado saem como "sem token"; o workspace sai com <span className="mono">~</span> para valer em outra home.
+              {tx({
+                en: <>Connections with a typed token go out as "no token"; the workspace goes out with <span className="mono">~</span> so it works in another home.</>,
+                pt: <>Conexões com token digitado saem como "sem token"; o workspace sai com <span className="mono">~</span> para valer em outra home.</>,
+              })}
             </p>
           </div>
-          <a className="btn btn-primary" href="/api/profile/export" download><Download size={14} /> Baixar perfil</a>
+          <a className="btn btn-primary" href="/api/profile/export" download><Download size={14} /> {tx({ en: 'Download profile', pt: 'Baixar perfil' })}</a>
         </div>
       </section>
 
       <section className="card card-pad stack">
         <div className="row">
           <div className="spacer">
-            <b>Importar</b>
-            <p className="muted" style={{ fontSize: 12.5, margin: '2px 0 0' }}>O painel mostra o que vai mudar antes de aplicar. Nada é instalado nem ativado sozinho.</p>
+            <b>{tx({ en: 'Import', pt: 'Importar' })}</b>
+            <p className="muted" style={{ fontSize: 12.5, margin: '2px 0 0' }}>{tx({ en: 'The panel shows what will change before applying. Nothing is installed or activated on its own.', pt: 'O painel mostra o que vai mudar antes de aplicar. Nada é instalado nem ativado sozinho.' })}</p>
           </div>
           <label className="btn">
-            <FileUp size={14} /> Escolher arquivo
+            <FileUp size={14} /> {tx({ en: 'Choose file', pt: 'Escolher arquivo' })}
             <input type="file" accept=".json,application/json" hidden onChange={e => e.target.files?.[0] && load(e.target.files[0])} />
           </label>
         </div>
@@ -85,47 +95,56 @@ export default function ProfilePage() {
       </section>
 
       {!plan && !error && (
-        <div className="card"><Empty icon={Users} title="Nenhum perfil carregado">Peça o arquivo a quem já trabalha com a configuração certa.</Empty></div>
+        <div className="card"><Empty icon={Users} title={tx({ en: 'No profile loaded', pt: 'Nenhum perfil carregado' })}>{tx({ en: 'Ask for the file from someone who already works with the right setup.', pt: 'Peça o arquivo a quem já trabalha com a configuração certa.' })}</Empty></div>
       )}
 
       {plan && (
         <section className="card">
-          <div className="card-head"><div className="card-title spacer">O que muda com <span className="mono">{fileName}</span></div></div>
+          <div className="card-head"><div className="card-title spacer">{tx({ en: 'What changes with ', pt: 'O que muda com ' })}<span className="mono">{fileName}</span></div></div>
           <div className="card-pad stack">
             <Part
               checked={parts.doctor} onChange={v => setParts({ ...parts, doctor: v })} disabled={!plan.doctor.changed.length}
-              title="Verificações do Máquina"
-              detail={plan.doctor.changed.length ? `substitui: ${plan.doctor.changed.map(f => FIELD_LABEL[f] ?? f).join(', ')}` : 'igual ao que você já tem'}
+              title={tx({ en: 'Machine checks', pt: 'Verificações do Máquina' })}
+              detail={plan.doctor.changed.length
+                ? tx({ en: 'replaces: ', pt: 'substitui: ' }) + plan.doctor.changed.map(f => FIELD_LABEL[f] ?? f).join(', ')
+                : tx({ en: 'same as what you already have', pt: 'igual ao que você já tem' })}
             />
             <Part
               checked={parts.repos} onChange={v => setParts({ ...parts, repos: v })} disabled={!plan.repos.add.length}
-              title="Conexões de repositório"
-              detail={plan.repos.add.length ? `adiciona: ${plan.repos.add.map(r => r.label).join(', ')}` : 'nenhuma conexão nova'}
+              title={tx({ en: 'Repository connections', pt: 'Conexões de repositório' })}
+              detail={plan.repos.add.length
+                ? tx({ en: 'adds: ', pt: 'adiciona: ' }) + plan.repos.add.map(r => r.label).join(', ')
+                : tx({ en: 'no new connection', pt: 'nenhuma conexão nova' })}
               extra={[
-                ...(plan.repos.existing.length ? [`já existem: ${plan.repos.existing.join(', ')}`] : []),
-                ...plan.repos.invalid.map(i => `ignorada: ${i}`),
-                ...(plan.repos.add.some(r => r.tokenSource === 'none') ? ['conexões sem token: configure o token depois na tela Repositórios'] : []),
+                ...(plan.repos.existing.length ? [tx({ en: 'already exist: ', pt: 'já existem: ' }) + plan.repos.existing.join(', ')] : []),
+                ...plan.repos.invalid.map(i => tx({ en: 'ignored: ', pt: 'ignorada: ' }) + i),
+                ...(plan.repos.add.some(r => r.tokenSource === 'none') ? [tx({ en: 'connections without a token: set the token later on the Repositories screen', pt: 'conexões sem token: configure o token depois na tela Repositórios' })] : []),
               ]}
             />
             <Part
               checked={parts.roots} onChange={v => setParts({ ...parts, roots: v })} disabled={!plan.roots.add.length}
-              title="Pastas do Catálogo"
-              detail={plan.roots.add.length ? `adiciona: ${plan.roots.add.join(', ')}` : 'nenhuma pasta nova'}
-              extra={plan.roots.missing.length ? [`não existem nesta máquina (clone antes): ${plan.roots.missing.join(', ')}`] : []}
+              title={tx({ en: 'Catalog folders', pt: 'Pastas do Catálogo' })}
+              detail={plan.roots.add.length
+                ? tx({ en: 'adds: ', pt: 'adiciona: ' }) + plan.roots.add.join(', ')
+                : tx({ en: 'no new folder', pt: 'nenhuma pasta nova' })}
+              extra={plan.roots.missing.length ? [tx({ en: 'do not exist on this machine (clone them first): ', pt: 'não existem nesta máquina (clone antes): ' }) + plan.roots.missing.join(', ')] : []}
             />
             {plan.activations.length > 0 && (
               <div className="callout callout-info" style={{ fontSize: 12.5, display: 'block' }}>
-                <b>Itens ativos no perfil</b> (ative na tela <Link to="/catalogo">Catálogo</Link>; o painel não escreve nas configurações dos agentes sozinho):
+                {tx({
+                  en: <><b>Items active in the profile</b> (activate them on the <Link to="/catalogo">Catalog</Link> screen; the panel does not write the agents' settings on its own):</>,
+                  pt: <><b>Itens ativos no perfil</b> (ative na tela <Link to="/catalogo">Catálogo</Link>; o painel não escreve nas configurações dos agentes sozinho):</>,
+                })}
                 <ul style={{ margin: '6px 0 0', paddingLeft: 18 }}>
                   {plan.activations.map(a => (
-                    <li key={`${a.kind}/${a.slug}`}><span className="mono">{a.kind}/{a.slug}</span> em {a.agents.join(', ')}{!a.foundLocally && <span className="muted"> · não encontrado nas suas pastas</span>}</li>
+                    <li key={`${a.kind}/${a.slug}`}><span className="mono">{a.kind}/{a.slug}</span> {tx({ en: 'in', pt: 'em' })} {a.agents.join(', ')}{!a.foundLocally && <span className="muted">{tx({ en: ' · not found in your folders', pt: ' · não encontrado nas suas pastas' })}</span>}</li>
                   ))}
                 </ul>
               </div>
             )}
             <div className="row">
               <div className="spacer" />
-              <button className="btn btn-primary" disabled={Boolean(nothing) || applying} onClick={apply}>{applying ? 'Importando…' : nothing ? 'Nada a importar' : 'Importar o selecionado'}</button>
+              <button className="btn btn-primary" disabled={Boolean(nothing) || applying} onClick={apply}>{applying ? tx({ en: 'Importing…', pt: 'Importando…' }) : nothing ? tx({ en: 'Nothing to import', pt: 'Nada a importar' }) : tx({ en: 'Import selected', pt: 'Importar o selecionado' })}</button>
             </div>
           </div>
         </section>

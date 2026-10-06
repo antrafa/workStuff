@@ -4,6 +4,7 @@ import {
   checkAction, composeAction, containerAction, dockerAvailable, isPanelProcess, killCommand, killPortOwner, listCompose, listContainers, listImages, listPorts, listVolumes,
   removeContainer, removeImage, removeVolume,
 } from '../lib/local/services.ts'
+import { say } from '../lib/i18n.ts'
 
 export const localRouter = Router()
 
@@ -47,11 +48,11 @@ localRouter.post('/compose/:name/:action', async (req, res) => {
   }
 })
 
-// Recusas do Docker em português; o resto segue com a mensagem original, encurtada.
+// Docker refusals in the interface language; the rest keeps the original message, shortened.
 function explainDocker(msg: string) {
-  if (/volume is in use/i.test(msg)) return 'o Docker recusou: o volume está montado em algum container; apague o container antes'
-  if (/image is being used|image has dependent child|unable to remove repository reference|conflict: unable to (delete|remove)/i.test(msg)) return 'o Docker recusou: a imagem é usada por algum container (ou por outra imagem); apague o que depende dela antes'
-  if (/cannot remove a running container|container is running/i.test(msg)) return 'o container está rodando; pare antes de apagar'
+  if (/volume is in use/i.test(msg)) return say({ en: 'Docker refused: the volume is mounted in a container; delete the container first', pt: 'o Docker recusou: o volume está montado em algum container; apague o container antes' })
+  if (/image is being used|image has dependent child|unable to remove repository reference|conflict: unable to (delete|remove)/i.test(msg)) return say({ en: 'Docker refused: the image is used by a container (or another image); delete what depends on it first', pt: 'o Docker recusou: a imagem é usada por algum container (ou por outra imagem); apague o que depende dela antes' })
+  if (/cannot remove a running container|container is running/i.test(msg)) return say({ en: 'the container is running; stop it before deleting', pt: 'o container está rodando; pare antes de apagar' })
   return msg.split('\n').filter(Boolean).slice(-2).join(' ').slice(0, 400)
 }
 

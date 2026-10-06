@@ -9,6 +9,7 @@ import { dataFile } from '../paths.ts'
 import { readJson, writeJson } from '../jsonFile.ts'
 import { which } from '../run.ts'
 import { KINDS, runKind, validateParams, type Kind } from './kinds.ts'
+import { say } from '../i18n.ts'
 
 export type LastState = 'ok' | 'problema' | 'erro' | null
 
@@ -38,11 +39,11 @@ const saveAll = (all: Schedule[]) => writeJson(FILE, all)
 
 export async function createSchedule(body: Record<string, unknown>): Promise<Schedule> {
   const kind = body.kind as Kind
-  if (!KINDS.includes(kind)) throw new Error(`tipo inválido: use ${KINDS.join(', ')}`)
+  if (!KINDS.includes(kind)) throw new Error(say({ en: `invalid type: use ${KINDS.join(', ')}`, pt: `tipo inválido: use ${KINDS.join(', ')}` }))
   const intervalMin = Math.round(Number(body.intervalMin))
-  if (!(intervalMin >= MIN_INTERVAL && intervalMin <= 1440)) throw new Error(`intervalo entre ${MIN_INTERVAL} e 1440 minutos`)
+  if (!(intervalMin >= MIN_INTERVAL && intervalMin <= 1440)) throw new Error(say({ en: `interval between ${MIN_INTERVAL} and 1440 minutes`, pt: `intervalo entre ${MIN_INTERVAL} e 1440 minutos` }))
   const all = listSchedules()
-  if (all.length >= MAX_SCHEDULES) throw new Error(`no máximo ${MAX_SCHEDULES} verificações`)
+  if (all.length >= MAX_SCHEDULES) throw new Error(say({ en: `at most ${MAX_SCHEDULES} checks`, pt: `no máximo ${MAX_SCHEDULES} verificações` }))
   const { params, label } = await validateParams(kind, (body.params ?? {}) as Record<string, unknown>)
   const s: Schedule = { id: randomUUID(), kind, label, params, intervalMin, enabled: true, lastRun: null, lastState: null, lastSummary: '' }
   saveAll([...all, s])
@@ -52,7 +53,7 @@ export async function createSchedule(body: Record<string, unknown>): Promise<Sch
 export function updateSchedule(id: string, patch: { enabled?: unknown }) {
   const all = listSchedules()
   const s = all.find(x => x.id === id)
-  if (!s) throw new Error('verificação não encontrada')
+  if (!s) throw new Error(say({ en: 'check not found', pt: 'verificação não encontrada' }))
   if (typeof patch.enabled === 'boolean') s.enabled = patch.enabled
   saveAll(all)
   return s
@@ -60,7 +61,7 @@ export function updateSchedule(id: string, patch: { enabled?: unknown }) {
 
 export function deleteSchedule(id: string) {
   const all = listSchedules()
-  if (!all.some(s => s.id === id)) throw new Error('verificação não encontrada')
+  if (!all.some(s => s.id === id)) throw new Error(say({ en: 'check not found', pt: 'verificação não encontrada' }))
   saveAll(all.filter(s => s.id !== id))
 }
 
@@ -93,7 +94,7 @@ export async function notify(title: string, body: string): Promise<boolean> {
 
 export async function runSchedule(id: string): Promise<Schedule> {
   const s = listSchedules().find(x => x.id === id)
-  if (!s) throw new Error('verificação não encontrada')
+  if (!s) throw new Error(say({ en: 'check not found', pt: 'verificação não encontrada' }))
   let next: 'ok' | 'problema' | 'erro', summary: string
   try {
     const out = await runKind(s.kind, s.params)
@@ -111,7 +112,7 @@ export async function runSchedule(id: string): Promise<Schedule> {
   Object.assign(current, { lastRun: new Date().toISOString(), lastSummary: summary, ...(next !== 'erro' && { lastState: next }), ...(next === 'erro' && current.lastState === null && { lastState: 'erro' as const }) })
   saveAll(all)
   if (change) {
-    const notified = await notify(change === 'problema' ? `workStuff: ${s.label}` : `workStuff: ${s.label} voltou ao normal`, summary)
+    const notified = await notify(change === 'problema' ? `workStuff: ${s.label}` : say({ en: `workStuff: ${s.label} is back to normal`, pt: `workStuff: ${s.label} voltou ao normal` }), summary)
     writeJson(ALERTS, [{ at: new Date().toISOString(), scheduleId: s.id, label: s.label, state: change, summary, notified }, ...listAlerts()].slice(0, MAX_ALERTS))
   }
   return current

@@ -23,7 +23,7 @@ export const killPort = (pid: number, force: boolean) => api.post<{ ok: true; st
 export const runAction = (kind: 'containers' | 'compose', target: string, action: Action) => api.post(`/local/${kind}/${encodeURIComponent(target)}/${action}`)
 export const remove = (kind: 'containers' | 'images' | 'volumes', target: string) => api.delete(`/local/${kind}/${encodeURIComponent(target)}`)
 
-// O mesmo comando que o servidor roda, para a confirmação mostrar exatamente o que acontece.
+// The same command the server runs, so the confirmation shows exactly what happens.
 export const killCommand = (os: Os, pid: number, force: boolean) =>
   os === 'win32' ? `taskkill /PID ${pid}${force ? ' /F' : ''}` : `kill ${force ? '-KILL' : '-TERM'} ${pid}`
 

@@ -1,5 +1,6 @@
 import { spawn } from 'node:child_process'
 import { run, which } from './run.ts'
+import { say } from './i18n.ts'
 
 // Abre arquivo ou pasta no editor. spawn de binário inexistente não lança: emite 'error' depois,
 // e sem listener esse evento derruba o servidor.
@@ -48,5 +49,5 @@ export async function pickFolder(title: string): Promise<string | null> {
       throw e
     }
   }
-  throw new Error('nenhum seletor de pasta disponível; instale zenity ou digite o caminho')
+  throw new Error(say({ en: 'no folder picker available; install zenity or type the path', pt: 'nenhum seletor de pasta disponível; instale zenity ou digite o caminho' }))
 }

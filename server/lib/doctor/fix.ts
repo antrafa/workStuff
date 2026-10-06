@@ -1,16 +1,17 @@
 import { spawn } from 'node:child_process'
 import { diagnose, type CheckResult } from './checks.ts'
+import { say } from '../i18n.ts'
 
 export class FixRefused extends Error {}
 
 // O navegador manda só o identificador (grupo|item); o comando sai da tabela do diagnóstico, nunca do
 // pedido. Aceitar comando vindo da tela seria execução arbitrária pela porta do painel.
 export async function resolveFix(grupo: unknown, item: unknown): Promise<CheckResult> {
-  if (typeof grupo !== 'string' || typeof item !== 'string') throw new FixRefused('informe grupo e item')
+  if (typeof grupo !== 'string' || typeof item !== 'string') throw new FixRefused(say({ en: 'send group and item', pt: 'informe grupo e item' }))
   const target = (await diagnose()).find(r => r.grupo === grupo && r.item === item)
-  if (!target) throw new FixRefused(`item não encontrado no diagnóstico: ${grupo} / ${item}`)
-  if (target.status === 'ok') throw new FixRefused(`${item} já está ok; nada a fazer`)
-  if (target.execucao !== 'auto') throw new FixRefused(`${item} não é resolvível pelo painel (precisa de sudo, terminal ou ação sua): ${target.correcao}`)
+  if (!target) throw new FixRefused(say({ en: `item not found in the diagnosis: ${grupo} / ${item}`, pt: `item não encontrado no diagnóstico: ${grupo} / ${item}` }))
+  if (target.status === 'ok') throw new FixRefused(say({ en: `${item} is already ok; nothing to do`, pt: `${item} já está ok; nada a fazer` }))
+  if (target.execucao !== 'auto') throw new FixRefused(say({ en: `${item} cannot be fixed by the panel (it needs sudo, a terminal or an action of yours): ${target.correcao}`, pt: `${item} não é resolvível pelo painel (precisa de sudo, terminal ou ação sua): ${target.correcao}` }))
   return target
 }
 

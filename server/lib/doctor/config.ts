@@ -5,6 +5,7 @@
 import assert from 'node:assert/strict'
 import { dataFile } from '../paths.ts'
 import { readJson, writeJson } from '../jsonFile.ts'
+import { say } from '../i18n.ts'
 
 export type DoctorConfig = {
   // Texto que o ~/.m2/settings.xml precisa conter (ex.: o host do repositório Maven da empresa).
@@ -41,21 +42,22 @@ const URL_RE = /^https?:\/\/[A-Za-z0-9.-]+(:\d+)?(\/[^\s'"`]*)?$/
 export function parseDoctorConfig(body: unknown): DoctorConfig {
   const b = (body ?? {}) as Record<string, unknown>
   const arr = (v: unknown, name: string) => {
-    if (!Array.isArray(v)) throw new Error(`${name}: esperado uma lista`)
-    if (v.length > 30) throw new Error(`${name}: no máximo 30 itens`)
+    if (!Array.isArray(v)) throw new Error(say({ en: `${name}: expected a list`, pt: `${name}: esperado uma lista` }))
+    if (v.length > 30) throw new Error(say({ en: `${name}: at most 30 items`, pt: `${name}: no máximo 30 itens` }))
     return v
   }
   const str = (v: unknown, re: RegExp, what: string) => {
-    if (typeof v !== 'string' || !re.test(v.trim())) throw new Error(`${what} inválido: ${String(v).slice(0, 60)}`)
+    if (typeof v !== 'string' || !re.test(v.trim())) throw new Error(say({ en: `invalid ${what}: ${String(v).slice(0, 60)}`, pt: `${what} inválido: ${String(v).slice(0, 60)}` }))
     return v.trim()
   }
+  const label = say({ en: 'label', pt: 'rótulo' })
   return {
-    mavenRegistries: arr(b.mavenRegistries ?? [], 'registries Maven').map(r => ({ label: str((r as { label?: unknown }).label, TEXT, 'rótulo'), match: str((r as { match?: unknown }).match, TEXT, 'texto do settings.xml') })),
-    npmScopes: arr(b.npmScopes ?? [], 'escopos npm').map(s => str(s, SCOPE, 'escopo npm (use @nome)')),
-    urls: arr(b.urls ?? [], 'endereços').map(u => ({ label: str((u as { label?: unknown }).label, TEXT, 'rótulo'), url: str((u as { url?: unknown }).url, URL_RE, 'endereço') })),
-    javaVersions: arr(b.javaVersions ?? DEFAULTS.javaVersions, 'versões Java').map(v => str(v, SDK_ID, 'versão Java')),
-    mavenVersions: arr(b.mavenVersions ?? DEFAULTS.mavenVersions, 'versões Maven').map(v => str(v, SDK_ID, 'versão Maven')),
-    nodeVersions: arr(b.nodeVersions ?? DEFAULTS.nodeVersions, 'versões Node').map(v => str(v, /^\d{1,2}$/, 'versão Node (só o número principal)')),
+    mavenRegistries: arr(b.mavenRegistries ?? [], say({ en: 'Maven registries', pt: 'registries Maven' })).map(r => ({ label: str((r as { label?: unknown }).label, TEXT, label), match: str((r as { match?: unknown }).match, TEXT, say({ en: 'settings.xml text', pt: 'texto do settings.xml' })) })),
+    npmScopes: arr(b.npmScopes ?? [], say({ en: 'npm scopes', pt: 'escopos npm' })).map(s => str(s, SCOPE, say({ en: 'npm scope (use @name)', pt: 'escopo npm (use @nome)' }))),
+    urls: arr(b.urls ?? [], say({ en: 'addresses', pt: 'endereços' })).map(u => ({ label: str((u as { label?: unknown }).label, TEXT, label), url: str((u as { url?: unknown }).url, URL_RE, say({ en: 'address', pt: 'endereço' })) })),
+    javaVersions: arr(b.javaVersions ?? DEFAULTS.javaVersions, say({ en: 'Java versions', pt: 'versões Java' })).map(v => str(v, SDK_ID, say({ en: 'Java version', pt: 'versão Java' }))),
+    mavenVersions: arr(b.mavenVersions ?? DEFAULTS.mavenVersions, say({ en: 'Maven versions', pt: 'versões Maven' })).map(v => str(v, SDK_ID, say({ en: 'Maven version', pt: 'versão Maven' }))),
+    nodeVersions: arr(b.nodeVersions ?? DEFAULTS.nodeVersions, say({ en: 'Node versions', pt: 'versões Node' })).map(v => str(v, /^\d{1,2}$/, say({ en: 'Node version (major number only)', pt: 'versão Node (só o número principal)' }))),
   }
 }
 
@@ -65,9 +67,9 @@ if (import.meta.main && process.argv.includes('--selfcheck')) {
   const c = parseDoctorConfig({ mavenRegistries: [{ label: 'Nexus', match: 'nexus.exemplo.com' }], npmScopes: ['@minha-empresa'], urls: [{ label: 'VPN', url: 'https://intranet.exemplo.com/' }], javaVersions: ['21.0.8-zulu'], nodeVersions: ['22'] })
   assert.equal(c.mavenRegistries[0].match, 'nexus.exemplo.com')
   assert.deepEqual(c.mavenVersions, DEFAULTS.mavenVersions, 'campo ausente usa o padrão')
-  assert.throws(() => parseDoctorConfig({ javaVersions: ['21; rm -rf /'] }), /inválido/)
-  assert.throws(() => parseDoctorConfig({ npmScopes: ['minha-empresa'] }), /use @nome/)
-  assert.throws(() => parseDoctorConfig({ urls: [{ label: 'x', url: 'file:///etc/passwd' }] }), /inválido/)
-  assert.throws(() => parseDoctorConfig({ nodeVersions: ['v22.1'] }), /só o número/)
+  assert.throws(() => parseDoctorConfig({ javaVersions: ['21; rm -rf /'] }), /invalid/)
+  assert.throws(() => parseDoctorConfig({ npmScopes: ['minha-empresa'] }), /use @name/)
+  assert.throws(() => parseDoctorConfig({ urls: [{ label: 'x', url: 'file:///etc/passwd' }] }), /invalid/)
+  assert.throws(() => parseDoctorConfig({ nodeVersions: ['v22.1'] }), /major number only/)
   console.log('doctor config selfcheck: ok')
 }
