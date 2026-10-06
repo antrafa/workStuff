@@ -1,5 +1,6 @@
 import { api } from '@/lib/api'
 import { streamPost } from '@/lib/stream'
+import { tx } from '@/lib/i18n'
 
 export type ProviderKind = 'gitlab' | 'github'
 export type Protocol = 'ssh' | 'https'
@@ -64,7 +65,7 @@ export const openProject = (id: string, fullPath: string) => api.post<{ ok: true
 export const cloneRepos = (id: string, body: { fullPath: string; kind: 'project' | 'group'; includeArchived: boolean }, onEvent: (e: CloneEvent) => void, signal: AbortSignal) =>
   streamPost<CloneEvent>(`/repos/sources/${id}/clone`, onEvent, signal, body)
 
-// Aceita caminho ou URL completa: "https://gitlab.com/a/b/-/tree/x" → "a/b".
+// Takes a path or a full URL: "https://gitlab.com/a/b/-/tree/x" → "a/b".
 export function pathFromInput(raw: string) {
   const v = raw.trim()
   const noHost = /^https?:\/\//.test(v) ? v.replace(/^https?:\/\/[^/]+/, '') : v
@@ -73,10 +74,10 @@ export function pathFromInput(raw: string) {
 
 export const tilde = (p: string | null) => (p ? p.replace(/^\/home\/[^/]+/, '~') : '—')
 
-// Caminho mostrado a partir do workspace da conexão ("~/workspace/produto/…"), mais curto que o absoluto.
-// Só o trecho abaixo do workspace ("produto/backend/api"): nas linhas da lista é o que muda.
+// Path shown from the connection's workspace ("~/workspace/produto/…"), shorter than the absolute one.
+// Only the part below the workspace ("produto/backend/api"): in the list rows that is what changes.
 export const belowWorkspace = (s: Pick<Source, 'workspace'>, p: string | null) =>
-  p && p.startsWith(s.workspace) ? p.slice(s.workspace.length).replace(/^\//, '') || '(raiz do workspace)' : tilde(p)
+  p && p.startsWith(s.workspace) ? p.slice(s.workspace.length).replace(/^\//, '') || tx({ en: '(workspace root)', pt: '(raiz do workspace)' }) : tilde(p)
 
 export const inWorkspace = (s: Pick<Source, 'workspace' | 'workspaceLabel'>, p: string | null) =>
   p && p.startsWith(s.workspace) ? `${s.workspaceLabel}${p.slice(s.workspace.length)}` : tilde(p)

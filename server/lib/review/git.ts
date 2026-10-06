@@ -8,6 +8,7 @@ import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { run } from '../run.ts'
+import { say } from '../i18n.ts'
 
 // Diff acima disso não cabe com folga no contexto da IA junto com a leitura dos arquivos.
 export const MAX_DIFF = 150_000
@@ -22,7 +23,7 @@ export const originUrl = (repo: string) => git(repo, ['remote', 'get-url', 'orig
 
 export async function repoInfo(repo: string) {
   const inside = (await git(repo, ['rev-parse', '--is-inside-work-tree']).catch(() => '')).trim()
-  if (inside !== 'true') throw new Error('a pasta não é um repositório git')
+  if (inside !== 'true') throw new Error(say({ en: 'the folder is not a git repository', pt: 'a pasta não é um repositório git' }))
   const current = (await git(repo, ['rev-parse', '--abbrev-ref', 'HEAD'])).trim()
   // origin/HEAD aponta para a branch padrão do remoto (main, master, develop…), sem supor nome.
   const originHead = (await git(repo, ['symbolic-ref', '--quiet', '--short', 'refs/remotes/origin/HEAD']).catch(() => '')).trim()
@@ -38,9 +39,9 @@ export type Diff = { base: string; mergeBase: string; stat: string; diff: string
 // base...HEAD: só o que a branch trouxe desde que saiu da base. Com includeWorking, o que ainda não
 // foi commitado entra junto (diff do merge-base contra a árvore de trabalho).
 export async function branchDiff(repo: string, base: string, includeWorking: boolean): Promise<Diff> {
-  if (!validRef(base)) throw new Error('branch base inválida')
+  if (!validRef(base)) throw new Error(say({ en: 'invalid base branch', pt: 'branch base inválida' }))
   await git(repo, ['rev-parse', '--verify', '--quiet', `${base}^{commit}`]).catch(() => {
-    throw new Error(`a branch base ${base} não existe neste repositório (faça git fetch se ela for remota)`)
+    throw new Error(say({ en: `the base branch ${base} does not exist in this repository (run git fetch if it is remote)`, pt: `a branch base ${base} não existe neste repositório (faça git fetch se ela for remota)` }))
   })
   const mergeBase = (await git(repo, ['merge-base', base, 'HEAD'])).trim()
   const range = includeWorking ? [mergeBase] : [`${mergeBase}`, 'HEAD']
@@ -80,8 +81,8 @@ if (import.meta.main && process.argv.includes('--selfcheck')) {
     assert.match(committed.diff, /\+dois/)
     const withWorking = await branchDiff(repo, 'main', true)
     assert.equal(withWorking.files, 2, 'inclui o que está no índice')
-    await assert.rejects(branchDiff(repo, 'nao-existe', false), /não existe/)
-    await assert.rejects(repoInfo(tmpdir()), /não é um repositório/)
+    await assert.rejects(branchDiff(repo, 'nao-existe', false), /does not exist|não existe/)
+    await assert.rejects(repoInfo(tmpdir()), /not a git repository|não é um repositório/)
   } finally {
     rmSync(repo, { recursive: true, force: true })
   }

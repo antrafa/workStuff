@@ -1,4 +1,5 @@
 import { api } from '@/lib/api'
+import { tx } from '@/lib/i18n'
 
 export type Severity = 'crítica' | 'alta' | 'média' | 'baixa' | 'desconhecida'
 
@@ -39,6 +40,12 @@ export const trivyImage = (image: string) => api.post<{ target: string; findings
 
 export const SEVERITIES: Severity[] = ['crítica', 'alta', 'média', 'baixa', 'desconhecida']
 
+// Severity ids come from the server in Portuguese; this is what the screen shows
+export const SEVERITY_LABEL: Record<Severity, string> = tx({
+  en: { crítica: 'critical', alta: 'high', média: 'medium', baixa: 'low', desconhecida: 'unknown' },
+  pt: { crítica: 'crítica', alta: 'alta', média: 'média', baixa: 'baixa', desconhecida: 'desconhecida' },
+})
+
 export const SEVERITY_BADGE: Record<Severity, string> = {
   crítica: 'badge-crit', alta: 'badge-crit', média: 'badge-warn', baixa: 'badge-info', desconhecida: '',
 }
@@ -46,5 +53,5 @@ export const SEVERITY_BADGE: Record<Severity, string> = {
 const RANK: Record<Severity, number> = { crítica: 0, alta: 1, média: 2, baixa: 3, desconhecida: 4 }
 export const bySeverity = (a: { severity: Severity }, b: { severity: Severity }) => RANK[a.severity] - RANK[b.severity]
 
-// Pior severidade da dependência: ordena a tabela pelo que precisa de atenção primeiro.
+// Worst severity of the dependency: sorts the table by what needs attention first.
 export const worst = (d: Dependency) => d.advisories.reduce((min, a) => Math.min(min, RANK[a.severity]), 9)

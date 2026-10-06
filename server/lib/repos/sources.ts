@@ -5,6 +5,7 @@ import { dataFile, expandHome, tildify } from '../paths.ts'
 import { readJson, writeJson } from '../jsonFile.ts'
 import { run, which } from '../run.ts'
 import { normalizePath } from './layout.ts'
+import { say } from '../i18n.ts'
 
 export type ProviderKind = 'gitlab' | 'github'
 export type Protocol = 'ssh' | 'https'
@@ -39,7 +40,7 @@ export const listSources = () => readJson<Source[]>(SOURCES, [])
 
 export function getSource(id: string) {
   const s = listSources().find(x => x.id === id)
-  if (!s) throw new RepoError('conexão não encontrada', 404)
+  if (!s) throw new RepoError(say({ en: 'connection not found', pt: 'conexão não encontrada' }), 404)
   return s
 }
 
@@ -68,21 +69,21 @@ const URL_RE = /^https:\/\/[a-z0-9.-]+(:\d+)?(\/[A-Za-z0-9._~/-]*)?$/i
 
 export function validateInput(b: Record<string, unknown>): Omit<Source, 'id'> & { token?: string } {
   const provider = b.provider
-  if (provider !== 'gitlab' && provider !== 'github') throw new RepoError('escolha GitLab ou GitHub')
+  if (provider !== 'gitlab' && provider !== 'github') throw new RepoError(say({ en: 'choose GitLab or GitHub', pt: 'escolha GitLab ou GitHub' }))
   const url = typeof b.url === 'string' ? b.url.trim().replace(/\/+$/, '') : ''
-  if (!URL_RE.test(url)) throw new RepoError('URL inválida: use https://gitlab.com, https://github.com ou o endereço da sua instalação')
+  if (!URL_RE.test(url)) throw new RepoError(say({ en: 'invalid URL: use https://gitlab.com, https://github.com or your install address', pt: 'URL inválida: use https://gitlab.com, https://github.com ou o endereço da sua instalação' }))
   const protocol = b.protocol
-  if (protocol !== 'ssh' && protocol !== 'https') throw new RepoError('escolha SSH ou HTTPS')
+  if (protocol !== 'ssh' && protocol !== 'https') throw new RepoError(say({ en: 'choose SSH or HTTPS', pt: 'escolha SSH ou HTTPS' }))
   const tokenSource = b.tokenSource as TokenSource
-  if (!['stored', 'env', 'gh', 'none'].includes(tokenSource)) throw new RepoError('origem do token inválida')
-  if (tokenSource === 'gh' && provider !== 'github') throw new RepoError('o login do gh só vale para GitHub')
+  if (!['stored', 'env', 'gh', 'none'].includes(tokenSource)) throw new RepoError(say({ en: 'invalid token source', pt: 'origem do token inválida' }))
+  if (tokenSource === 'gh' && provider !== 'github') throw new RepoError(say({ en: 'the gh login only works for GitHub', pt: 'o login do gh só vale para GitHub' }))
   const workspace = typeof b.workspace === 'string' ? expandHome(b.workspace.trim()) : ''
-  if (!isAbsolute(workspace)) throw new RepoError('informe a pasta do workspace (caminho absoluto ou começando com ~)')
+  if (!isAbsolute(workspace)) throw new RepoError(say({ en: 'enter the workspace folder (absolute path or starting with ~)', pt: 'informe a pasta do workspace (caminho absoluto ou começando com ~)' }))
   const basePath = normalizePath(typeof b.basePath === 'string' ? b.basePath : '')
-  if (basePath && !/^[A-Za-z0-9._/-]+$/.test(basePath)) throw new RepoError('grupo base inválido')
+  if (basePath && !/^[A-Za-z0-9._/-]+$/.test(basePath)) throw new RepoError(say({ en: 'invalid base group', pt: 'grupo base inválido' }))
   const label = typeof b.label === 'string' && b.label.trim() ? b.label.trim().slice(0, 60) : `${provider === 'gitlab' ? 'GitLab' : 'GitHub'}${basePath ? ` · ${basePath.split('/').pop()}` : ''}`
   const token = typeof b.token === 'string' && b.token.trim() ? b.token.trim() : undefined
-  if (tokenSource === 'stored' && !token && !b.id) throw new RepoError('cole o token ou escolha outra origem')
+  if (tokenSource === 'stored' && !token && !b.id) throw new RepoError(say({ en: 'paste the token or choose another source', pt: 'cole o token ou escolha outra origem' }))
   return { provider, url, label, protocol, tokenSource, basePath, workspace, token }
 }
 

@@ -5,8 +5,9 @@ import { relTime } from '@/lib/format'
 import { useAsync } from '@/lib/useAsync'
 import { ExplainModal, LogModal } from './JobModals'
 import { STATUS, duration, fetchJobs, fetchPipelines, type Job, type Pipeline, type Watch } from './api'
+import { tx } from '@/lib/i18n'
 
-// Pipelines recentes de um projeto e os jobs da escolhida (por padrão, a mais recente).
+// A project's recent pipelines and the jobs of the chosen one (the latest by default).
 export function PipelineDetail({ watch }: { watch: Watch }) {
   const pipelines = useAsync(() => fetchPipelines(watch.id), [watch.id])
   const [pipelineId, setPipelineId] = useState<string | null>(null)
@@ -22,7 +23,7 @@ export function PipelineDetail({ watch }: { watch: Watch }) {
           state={pipelines}
           isEmpty={d => d.length === 0}
           skeleton={<SkeletonRows rows={2} height={32} />}
-          empty={<Empty icon={Workflow} title="Nenhuma pipeline neste projeto" />}
+          empty={<Empty icon={Workflow} title={tx({ en: 'No pipeline in this project', pt: 'Nenhuma pipeline neste projeto' })} />}
         >
           {data => (
             <>
@@ -57,18 +58,18 @@ function Jobs({ watch, pipeline }: { watch: Watch; pipeline: Pipeline }) {
         <span className={`badge ${STATUS[pipeline.status].badge}`}>{STATUS[pipeline.status].label}</span>
         <span className="muted" style={{ fontSize: 12.5 }}>{pipeline.title} · <span className="mono">{pipeline.sha}</span> · {duration(pipeline.durationSec)}</span>
         <div className="spacer" />
-        <a className="btn btn-sm" href={pipeline.webUrl} target="_blank" rel="noreferrer"><ExternalLink size={13} /> Abrir</a>
+        <a className="btn btn-sm" href={pipeline.webUrl} target="_blank" rel="noreferrer"><ExternalLink size={13} /> {tx({ en: 'Open', pt: 'Abrir' })}</a>
       </div>
-      <Async state={jobs} isEmpty={d => d.length === 0} skeleton={<SkeletonRows rows={4} height={36} />} empty={<p className="muted">Pipeline sem jobs.</p>}>
+      <Async state={jobs} isEmpty={d => d.length === 0} skeleton={<SkeletonRows rows={4} height={36} />} empty={<p className="muted">{tx({ en: 'Pipeline with no jobs.', pt: 'Pipeline sem jobs.' })}</p>}>
         {data => (
           <div className="table-wrap">
             <table className="table">
               <thead>
                 <tr>
                   <th>Job</th>
-                  <th>Estágio</th>
+                  <th>{tx({ en: 'Stage', pt: 'Estágio' })}</th>
                   <th>Status</th>
-                  <th className="num">Duração</th>
+                  <th className="num">{tx({ en: 'Duration', pt: 'Duração' })}</th>
                   <th />
                 </tr>
               </thead>
@@ -77,19 +78,19 @@ function Jobs({ watch, pipeline }: { watch: Watch; pipeline: Pipeline }) {
                   <tr key={j.id}>
                     <td>
                       <div className="mono">{j.name}</div>
-                      {j.failedStep && <div className="muted" style={{ fontSize: 12 }}>passo: {j.failedStep}</div>}
+                      {j.failedStep && <div className="muted" style={{ fontSize: 12 }}>{tx({ en: 'step:', pt: 'passo:' })} {j.failedStep}</div>}
                     </td>
                     <td className="muted">{j.stage || '—'}</td>
                     <td>
                       <span className={`badge ${STATUS[j.status].badge}`}>{STATUS[j.status].label}</span>
-                      {j.allowFailure && j.status === 'failed' && <span className="muted" style={{ fontSize: 12 }}> (permitido)</span>}
+                      {j.allowFailure && j.status === 'failed' && <span className="muted" style={{ fontSize: 12 }}> {tx({ en: '(allowed)', pt: '(permitido)' })}</span>}
                     </td>
                     <td className="num mono">{duration(j.durationSec)}</td>
                     <td className="num">
                       <div className="row" style={{ ['--gap' as string]: '4px', justifyContent: 'flex-end' }}>
-                        {j.status === 'failed' && <button className="btn btn-sm btn-primary" onClick={() => setExplaining(j)}><Sparkles size={13} /> Explicar falha</button>}
-                        <button className="btn btn-ghost btn-sm btn-icon" onClick={() => setReading(j)} title="Ver o log"><FileText size={14} /></button>
-                        <a className="btn btn-ghost btn-sm btn-icon" href={j.webUrl} target="_blank" rel="noreferrer" title="Abrir o job no navegador"><ExternalLink size={14} /></a>
+                        {j.status === 'failed' && <button className="btn btn-sm btn-primary" onClick={() => setExplaining(j)}><Sparkles size={13} /> {tx({ en: 'Explain failure', pt: 'Explicar falha' })}</button>}
+                        <button className="btn btn-ghost btn-sm btn-icon" onClick={() => setReading(j)} title={tx({ en: 'See the log', pt: 'Ver o log' })}><FileText size={14} /></button>
+                        <a className="btn btn-ghost btn-sm btn-icon" href={j.webUrl} target="_blank" rel="noreferrer" title={tx({ en: 'Open the job in the browser', pt: 'Abrir o job no navegador' })}><ExternalLink size={14} /></a>
                       </div>
                     </td>
                   </tr>

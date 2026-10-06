@@ -1,6 +1,7 @@
 import { api } from '@/lib/api'
 import { streamPost } from '@/lib/stream'
 import type { AiStreamEvent } from '@/ui'
+import { tx } from '@/lib/i18n'
 
 export type Status = 'success' | 'failed' | 'running' | 'pending' | 'canceled' | 'skipped' | 'manual' | 'unknown'
 
@@ -51,14 +52,14 @@ export const explainJob = (watchId: string, job: Job, ref: string, onEvent: (e: 
   })
 
 export const STATUS: Record<Status, { label: string; badge: string }> = {
-  success: { label: 'passou', badge: 'badge-ok' },
-  failed: { label: 'falhou', badge: 'badge-crit' },
-  running: { label: 'rodando', badge: 'badge-info' },
-  pending: { label: 'na fila', badge: 'badge-info' },
+  success: { label: tx({ en: 'passed', pt: 'passou' }), badge: 'badge-ok' },
+  failed: { label: tx({ en: 'failed', pt: 'falhou' }), badge: 'badge-crit' },
+  running: { label: tx({ en: 'running', pt: 'rodando' }), badge: 'badge-info' },
+  pending: { label: tx({ en: 'queued', pt: 'na fila' }), badge: 'badge-info' },
   manual: { label: 'manual', badge: 'badge-warn' },
-  canceled: { label: 'cancelada', badge: 'badge-warn' },
-  skipped: { label: 'pulada', badge: '' },
-  unknown: { label: 'desconhecido', badge: '' },
+  canceled: { label: tx({ en: 'canceled', pt: 'cancelada' }), badge: 'badge-warn' },
+  skipped: { label: tx({ en: 'skipped', pt: 'pulada' }), badge: '' },
+  unknown: { label: tx({ en: 'unknown', pt: 'desconhecido' }), badge: '' },
 }
 
 export function duration(sec: number | null) {
