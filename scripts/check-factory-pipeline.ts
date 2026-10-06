@@ -109,7 +109,7 @@ try {
   const wt = done.worktreePath!
   assert.equal(done.state, 'review')
   assert.equal(readFileSync(join(wt, 'feature.txt'), 'utf-8'), 'ok\nX tratado\n', 'correção do portão e do achado aplicadas')
-  assert.ok(done.spans!.some(s => s.name.startsWith('Correção 1')), 'laço de correção registrado')
+  assert.ok(done.spans!.some(s => s.name.startsWith('Fix 1')), 'laço de correção registrado')
   assert.equal(done.securityReport?.passed, true, 'achado bloqueante corrigido na rodada automática')
   assert.equal(done.securityReport?.fixRounds, 1)
   assert.equal(done.qaReport?.passed, true)
@@ -126,7 +126,7 @@ try {
   const log = execFileSync('git', ['-C', wt, 'log', '--format=%s', 'main..HEAD'], { encoding: 'utf-8' })
   assert.match(log, /^docs: /m)
   assert.match(log, /^test: /m)
-  assert.match(log, /^fix: corrige achados/m)
+  assert.match(log, /^fix: address automatic review findings/m)
   assert.match(log, /^feat: feature/m)
   await removeWorktree(repo, wt, done.branchName)
 
@@ -144,7 +144,7 @@ try {
   }
   const prose = await runCase('fac-prose', 'Feature PROSA')
   assert.equal(prose.built.securityReport?.passed, false, 'Reviewer sem envelope não aprova')
-  assert.match(prose.built.securityReport!.findings[0].description, /Reviewer não concluiu/)
+  assert.match(prose.built.securityReport!.findings[0].description, /Reviewer did not finish/)
   await removeWorktree(repo, prose.built.worktreePath!, prose.built.branchName)
 
   const stubborn = await runCase('fac-stubborn', 'Feature TEIMOSO')
@@ -156,7 +156,7 @@ try {
   const { adjustTask } = await import('../server/lib/factory/pipeline.ts')
   const wtS = stubborn.built.worktreePath!
   const reviewedHead = execFileSync('git', ['-C', wtS, 'rev-parse', 'HEAD'], { encoding: 'utf-8' })
-  await assert.rejects(adjustTask(stubborn.c, stubborn.built, 'AJUSTE_IMPOSSIVEL'), /bloqueio/)
+  await assert.rejects(adjustTask(stubborn.c, stubborn.built, 'AJUSTE_IMPOSSIVEL'), /blocker/)
   assert.equal(execFileSync('git', ['-C', wtS, 'rev-parse', 'HEAD'], { encoding: 'utf-8' }), reviewedHead)
   assert.ok(!existsSync(join(wtS, 'meio-feito.txt')), 'alteração do ajuste que falhou descartada')
   await removeWorktree(repo, wtS, stubborn.built.branchName)
@@ -167,7 +167,7 @@ try {
   await store.saveTask(capped)
   const cappedCtx = { ...ctx, taskId: capped.id }
   const planned2 = await planTask(cappedCtx, capped)
-  await assert.rejects(buildTask(cappedCtx, planned2), /Teto de custo atingido: US\$ 0\.02 gastos de US\$ 0\.01/)
+  await assert.rejects(buildTask(cappedCtx, planned2), /Cost cap reached: US\$ 0\.02 spent of US\$ 0\.01/)
   const after = await store.getTask(capped.id)
   assert.equal(after?.spans?.filter(s => s.kind === 'agent').length, 2, 'nenhum agente começou depois do teto')
   if (after?.worktreePath) await removeWorktree(repo, after.worktreePath, after.branchName)

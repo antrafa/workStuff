@@ -9,6 +9,7 @@ import { basename, join } from 'node:path'
 import { DATA_DIR } from '../paths.ts'
 import { run } from '../run.ts'
 import type { DiffStat } from './types.ts'
+import { say } from '../i18n.ts'
 
 // Hooks off for every git call the pipeline makes outside the jail: a repo hook (husky, lint-staged)
 // resolves its scripts and configs from the worktree, which the agent wrote.
@@ -65,7 +66,7 @@ export async function createWorktree(
   baseBranch: string,
   worktreesRoot: string = join(DATA_DIR, 'worktrees'),
 ): Promise<{ worktreePath: string; branchName: string }> {
-  if (!existsSync(repoPath)) throw new Error(`repositorio nao encontrado no caminho: ${repoPath}`)
+  if (!existsSync(repoPath)) throw new Error(say({ en: `repository not found at: ${repoPath}`, pt: `repositório não encontrado no caminho: ${repoPath}` }))
 
   const repoName = basename(repoPath)
   const targetDir = join(worktreesRoot, repoName, taskId)
@@ -236,7 +237,7 @@ export async function mergeWorktreeLocal(
   // 1. Verifica se o repositório principal tem alterações não salvas
   const dirty = (await git(repoPath, ['status', '--porcelain'])).trim()
   if (dirty) {
-    throw new Error('O repositório principal possui alterações pendentes não commitadas. Faça commit ou stash antes de mesclar.')
+    throw new Error(say({ en: 'Your repository has uncommitted changes. Commit or stash them before merging.', pt: 'O repositório principal possui alterações pendentes não commitadas. Faça commit ou stash antes de mesclar.' }))
   }
 
   // 2. Guarda a branch original do usuário
@@ -246,7 +247,7 @@ export async function mergeWorktreeLocal(
     if (currentBranch !== targetBranch) {
       await git(repoPath, ['checkout', targetBranch])
     }
-    await git(repoPath, ['merge', '--no-ff', branchName, '-m', `Merge branch '${branchName}' via workstuff fabrica`])
+    await git(repoPath, ['merge', '--no-ff', branchName, '-m', `Merge branch '${branchName}' via workstuff factory`])
   } catch (err) {
     await git(repoPath, ['merge', '--abort']).catch(() => {})
     throw err
@@ -350,7 +351,7 @@ if (import.meta.main && process.argv.includes('--selfcheck')) {
     writeFileSync(join(repoDir, 'dirty.txt'), 'modificacao nao commitada\n')
     await assert.rejects(
       async () => mergeWorktreeLocal(repoDir, 'some-branch', 'main'),
-      /alterações pendentes/
+      /uncommitted changes/
     )
     rmSync(join(repoDir, 'dirty.txt'))
     assert.equal(targetBranchOf('origin/main'), 'main')
