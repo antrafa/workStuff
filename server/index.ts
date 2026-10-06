@@ -26,6 +26,7 @@ import { factoryRouter } from './routes/factory.ts'
 import { startScheduler } from './lib/schedules/scheduler.ts'
 import { settingsRouter } from './routes/settings.ts'
 import { statusRouter } from './routes/status.ts'
+import { say } from './lib/i18n.ts'
 
 const PORT = Number(process.env.PORT ?? 3101)
 const app = express()
@@ -58,17 +59,17 @@ app.use('/api/factory', factoryRouter)
 app.use('/api/status', statusRouter)
 
 app.use('/api', (req, res) => {
-  res.status(404).json({ error: `rota inexistente: ${req.method} ${req.originalUrl}` })
+  res.status(404).json({ error: say({ en: `no such route: ${req.method} ${req.originalUrl}`, pt: `rota inexistente: ${req.method} ${req.originalUrl}` }) })
 })
 
-// Erro não tratado vira JSON com mensagem; o detalhe fica no log do servidor, não na tela.
+// An unhandled error becomes JSON with a message; the detail stays in the server log, not on screen.
 const onError: ErrorRequestHandler = (err, req, res, _next) => {
   console.error(`[api] ${req.method} ${req.originalUrl} falhou:`, err)
-  res.status(500).json({ error: 'erro interno no servidor; veja o terminal do npm run dev' })
+  res.status(500).json({ error: say({ en: 'internal server error; see the npm run dev terminal', pt: 'erro interno no servidor; veja o terminal do npm run dev' }) })
 }
 app.use(onError)
 
-// Só localhost: o painel roda comandos na máquina e não deve ficar exposto na rede.
+// Localhost only: the panel runs commands on the machine and must not be exposed to the network.
 app.listen(PORT, '127.0.0.1', () => {
   console.log(`[api] http://127.0.0.1:${PORT} · dados em ${DATA_DIR}`)
   startScheduler()
