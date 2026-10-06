@@ -43,6 +43,8 @@ export function NewTaskModal({ open, onClose, onCreated }: Props) {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [pickedIssue, setPickedIssue] = useState<Issue | null>(null)
+  // Same check as the guided mode: without bwrap the build fails only after planning was paid for
+  const [noSandbox, setNoSandbox] = useState(false)
 
   const close = () => {
     setError(null)
@@ -58,7 +60,10 @@ export function NewTaskModal({ open, onClose, onCreated }: Props) {
           if (res?.provider) setProvider(res.provider)
           if (res?.model) setDefaultModel(res.model)
         })
-        .catch(() => {})
+        .catch(e => setError(`Não foi possível ler as Configurações: ${(e as Error).message}`))
+      api.get<{ bwrap: boolean }>('/factory/preflight')
+        .then(p => setNoSandbox(!p.bwrap))
+        .catch(() => setNoSandbox(false))
     }
   }, [open])
 
@@ -153,6 +158,11 @@ export function NewTaskModal({ open, onClose, onCreated }: Props) {
           onChange={setTab}
         />
 
+        {noSandbox && (
+          <div className="callout callout-warn">
+            O bwrap (bubblewrap) não está instalado: o planejamento roda, mas a construção e a verificação não. A tela Máquina mostra o comando para instalar.
+          </div>
+        )}
         {error && <div className="callout callout-crit">{error}</div>}
 
         {pickedIssue && tab === 'manual' && (
