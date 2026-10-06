@@ -38,7 +38,7 @@ export function CommandStep({ command, kind, reason, result, disabled, onRun }: 
       {kind === 'blocked' && reason && <div className="cmd-note">{reason}</div>}
       {result === 'running' && <div className="cmd-note">executando…</div>}
       {result && result !== 'running' && (
-        <pre className={`cmd-out ${result.ok ? 'is-ok' : 'is-fail'}`}>{result.output || '(executado, sem saída)'}</pre>
+        <pre className={`cmd-out ${result.ok ? 'is-ok' : 'is-fail'}`}>{result.output || tx({ en: '(ran, no output)', pt: '(executado, sem saída)' })}</pre>
       )}
     </div>
   )
