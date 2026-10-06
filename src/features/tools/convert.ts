@@ -1,3 +1,4 @@
+import { tx } from '../../lib/i18n.ts'
 export type JwtInfo = { header: string; payload: string; exp: Date | null; iat: Date | null }
 
 export function base64Encode(text: string) {
@@ -13,7 +14,7 @@ export function base64Decode(b64: string) {
 
 export function decodeJwt(token: string): JwtInfo {
   const parts = token.trim().split('.')
-  if (parts.length < 2) throw new Error('Um JWT tem três partes separadas por ponto (header.payload.assinatura).')
+  if (parts.length < 2) throw new Error(tx({ en: 'A JWT has three parts separated by dots (header.payload.signature).', pt: 'Um JWT tem três partes separadas por ponto (header.payload.assinatura).' }))
   const header = JSON.parse(base64Decode(parts[0]))
   const payload = JSON.parse(base64Decode(parts[1]))
   const date = (v: unknown) => (typeof v === 'number' ? new Date(v * 1000) : null)
@@ -22,10 +23,10 @@ export function decodeJwt(token: string): JwtInfo {
 
 export function parseEpoch(input: string) {
   const n = Number(input.trim())
-  if (!input.trim() || !Number.isFinite(n)) throw new Error('Informe um número de segundos ou milissegundos desde 1970.')
-  // 11+ dígitos só faz sentido como milissegundos (segundos passariam do ano 5000).
+  if (!input.trim() || !Number.isFinite(n)) throw new Error(tx({ en: 'Enter a number of seconds or milliseconds since 1970.', pt: 'Informe um número de segundos ou milissegundos desde 1970.' }))
+  // 11+ digits only make sense as milliseconds (seconds would go past the year 5000).
   const ms = Math.abs(n) >= 1e11 ? n : n * 1000
   const date = new Date(ms)
-  if (isNaN(date.getTime())) throw new Error('Timestamp fora do intervalo de datas válido.')
-  return { date, unit: ms === n ? 'milissegundos' : 'segundos' }
+  if (isNaN(date.getTime())) throw new Error(tx({ en: 'Timestamp outside the valid date range.', pt: 'Timestamp fora do intervalo de datas válido.' }))
+  return { date, unit: ms === n ? tx({ en: 'milliseconds', pt: 'milissegundos' }) : tx({ en: 'seconds', pt: 'segundos' }) }
 }

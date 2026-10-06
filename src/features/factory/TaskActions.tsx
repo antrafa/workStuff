@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Eye, Play, RotateCw, Square } from 'lucide-react'
 import { api } from '@/lib/api'
+import { tx } from '@/lib/i18n'
 import type { FactoryTask } from '../../../server/lib/factory/types.ts'
 import { nextActions, runFactoryAction, type TaskAction } from './factoryRun'
 
@@ -60,7 +61,7 @@ export function TaskActions({ task, running, onOpenReview, onChanged, block }: P
             return (
               <button key={a.id} type="button" className="btn btn-sm btn-danger" style={style} disabled={stopping}
                 onClick={e => (e.stopPropagation(), stop())}>
-                <Square size={11} fill="currentColor" /> {stopping ? 'Parando...' : a.label}
+                <Square size={11} fill="currentColor" /> {stopping ? tx({ en: 'Stopping...', pt: 'Parando...' }) : a.label}
               </button>
             )
           }

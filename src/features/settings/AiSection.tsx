@@ -1,15 +1,17 @@
 import { AlertTriangle, ShieldCheck } from 'lucide-react'
 import { useState } from 'react'
 import { Segmented } from '@/ui'
+import { tx } from '@/lib/i18n'
 import { ModelPicker } from './ModelPicker'
 import type { Model, Provider, ProviderId, Settings } from './api'
 
-const EFFORT_LABEL: Record<string, string> = {
-  low: 'Baixo', medium: 'Médio', high: 'Alto', xhigh: 'Muito alto', max: 'Máximo', ultra: 'Ultra',
-}
+const EFFORT_LABEL: Record<string, string> = tx({
+  en: { low: 'Low', medium: 'Medium', high: 'High', xhigh: 'Very high', max: 'Maximum', ultra: 'Ultra' },
+  pt: { low: 'Baixo', medium: 'Médio', high: 'Alto', xhigh: 'Muito alto', max: 'Máximo', ultra: 'Ultra' },
+})
 const DEFAULT_EFFORTS = ['low', 'medium', 'high']
 
-// Níveis de esforço vêm do modelo quando o CLI informa (Codex); senão, os três genéricos.
+// Effort levels come from the model when the CLI reports them (Codex); otherwise the three generic ones.
 const effortsOf = (model?: Model) => model?.efforts ?? DEFAULT_EFFORTS
 const defaultModel = (p: Provider) => (p.models.find(m => m.recommended) ?? p.models[0])?.id ?? ''
 
@@ -31,11 +33,11 @@ export function AiSection({ providers: loaded, settings, onChange }: Props) {
   return (
     <section className="card card-pad stack" style={{ ['--gap' as string]: '18px' }}>
       <div>
-        <div className="card-title">Provedor de IA</div>
-        <small className="muted">O painel roda o CLI escolhido direto na máquina, para o Cluster Doctor, a Análise e a revisão de itens do Catálogo.</small>
+        <div className="card-title">{tx({ en: 'AI provider', pt: 'Provedor de IA' })}</div>
+        <small className="muted">{tx({ en: 'The panel runs the chosen CLI right on this machine, for Cluster Doctor, Analysis and the Catalog item review.', pt: 'O painel roda o CLI escolhido direto na máquina, para o Cluster Doctor, a Análise e a revisão de itens do Catálogo.' })}</small>
       </div>
       {providers.length === 0 && (
-        <div className="callout callout-warn"><AlertTriangle size={16} />Nenhum CLI de IA detectado no PATH. Instale claude, agy ou codex para usar as telas de IA.</div>
+        <div className="callout callout-warn"><AlertTriangle size={16} />{tx({ en: 'No AI CLI found on PATH. Install claude, agy or codex to use the AI screens.', pt: 'Nenhum CLI de IA detectado no PATH. Instale claude, agy ou codex para usar as telas de IA.' })}</div>
       )}
       <div className="grid" style={{ ['--min' as string]: '200px' }}>
         {providers.map(p => (
@@ -45,22 +47,22 @@ export function AiSection({ providers: loaded, settings, onChange }: Props) {
             aria-pressed={p.id === settings.provider}
             disabled={!p.installed}
             onClick={() => onChange({ provider: p.id, model: defaultModel(p), effort: p.models.find(m => m.recommended)?.defaultEffort ?? 'medium' })}
-            title={p.installed ? p.path ?? '' : `${p.bin} não encontrado no PATH`}
+            title={p.installed ? p.path ?? '' : tx({ en: `${p.bin} not found on PATH`, pt: `${p.bin} não encontrado no PATH` })}
           >
             <b>{p.name}</b>
             <code className="inline">{p.bin}</code>
             <span className="row" style={{ fontSize: 12, ['--gap' as string]: '6px' }}>
-              <span className={`dot ${p.installed ? 'dot-ok' : ''}`} /> {p.installed ? 'disponível' : 'não detectado'}
+              <span className={`dot ${p.installed ? 'dot-ok' : ''}`} /> {p.installed ? tx({ en: 'available', pt: 'disponível' }) : tx({ en: 'not found', pt: 'não detectado' })}
             </span>
-            <span className="muted" style={{ fontSize: 11.5 }}>{p.nativeGuard ? 'guarda nativa de comandos' : 'sem guarda nativa: proteção reduzida'}</span>
+            <span className="muted" style={{ fontSize: 11.5 }}>{p.nativeGuard ? tx({ en: 'native command guard', pt: 'guarda nativa de comandos' }) : tx({ en: 'no native guard: reduced protection', pt: 'sem guarda nativa: proteção reduzida' })}</span>
           </button>
         ))}
       </div>
       {selected && !selected.nativeGuard && (
-        <div className="callout callout-warn"><AlertTriangle size={16} />{selected.name} não bloqueia comandos por conta própria: o Cluster Doctor depende só da guarda do painel.</div>
+        <div className="callout callout-warn"><AlertTriangle size={16} />{tx({ en: `${selected.name} does not block commands on its own: Cluster Doctor relies only on the panel's guard.`, pt: `${selected.name} não bloqueia comandos por conta própria: o Cluster Doctor depende só da guarda do painel.` })}</div>
       )}
       {selected?.nativeGuard && (
-        <div className="callout callout-info"><ShieldCheck size={16} />{selected.name} tem guarda nativa: comandos de escrita são negados pelo próprio CLI.</div>
+        <div className="callout callout-info"><ShieldCheck size={16} />{tx({ en: `${selected.name} has a native guard: write commands are denied by the CLI itself.`, pt: `${selected.name} tem guarda nativa: comandos de escrita são negados pelo próprio CLI.` })}</div>
       )}
       {selected && (
         <ModelPicker
@@ -71,13 +73,13 @@ export function AiSection({ providers: loaded, settings, onChange }: Props) {
         />
       )}
       <div className="field">
-        <span>Esforço</span>
+        <span>{tx({ en: 'Effort', pt: 'Esforço' })}</span>
         <Segmented<string>
           value={settings.effort}
           onChange={effort => onChange({ effort })}
           options={efforts.map(id => ({ id, label: EFFORT_LABEL[id] ?? id }))}
         />
-        <small>Mais esforço, respostas mais cuidadosas e mais lentas.</small>
+        <small>{tx({ en: 'More effort: more careful, slower answers.', pt: 'Mais esforço, respostas mais cuidadosas e mais lentas.' })}</small>
       </div>
     </section>
   )

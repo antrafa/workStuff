@@ -3,6 +3,7 @@
 
 import assert from 'node:assert/strict'
 import type { ProviderId } from '../aiProviders.ts'
+import { say } from '../i18n.ts'
 
 export type AiEvent =
   | { type: 'text'; text: string }
@@ -63,7 +64,7 @@ export function createParser(provider: ProviderId) {
         .filter((b: Json) => b.type === 'tool_result')
         .map((b: Json) => ({ type: 'tool-result', id: b.tool_use_id, tool: toolNames.get(b.tool_use_id), isError: Boolean(b.is_error), content: toolContent(b.content) }))
     }
-    if (e.type === 'system' && e.subtype === 'api_retry') return [{ type: 'status', message: `API instável, nova tentativa ${e.attempt ?? ''}` }]
+    if (e.type === 'system' && e.subtype === 'api_retry') return [{ type: 'status', message: say({ en: `API unstable, retry ${e.attempt ?? ''}`, pt: `API instável, nova tentativa ${e.attempt ?? ''}` }) }]
     if (e.type === 'result') {
       usage = { ...tokens(e.usage), costUsd: typeof e.total_cost_usd === 'number' ? e.total_cost_usd : undefined }
       return [{ type: 'result', ok: !e.is_error, text: typeof e.result === 'string' ? e.result : text }]

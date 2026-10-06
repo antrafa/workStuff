@@ -13,6 +13,7 @@ import { spawnCli, type RunResult } from '../ai/runner.ts'
 import { SPECIALIZED_AGENTS } from './agents.ts'
 import type { SpecializedAgentId } from './types.ts'
 import { agentHomeOf } from './worktree.ts'
+import { say } from '../i18n.ts'
 
 const READ_TOOLS = ['Read', 'Grep', 'Glob']
 const WRITE_TOOLS = ['Read', 'Edit', 'Write', 'Glob', 'Grep', 'Bash']
@@ -94,7 +95,7 @@ export function buildFactoryArgs(
     args.push('--tools', ...tools, '--allowedTools', ...tools, '--strict-mcp-config')
     args.push('--append-system-prompt', options.systemPrompt, '-p', options.prompt)
     if (mode === 'read') return { bin: 'claude', args }
-    if (!sandbox) throw new Error('o agente com escrita só roda dentro do bwrap (bubblewrap), que não está disponível nesta máquina')
+    if (!sandbox) throw new Error(say({ en: 'a write-mode agent only runs inside bwrap (bubblewrap), which is not available on this machine', pt: 'o agente com escrita só roda dentro do bwrap (bubblewrap), que não está disponível nesta máquina' }))
     return jail(sandbox, cwd, 'claude', ['--dangerously-skip-permissions', ...args])
   }
 
@@ -107,12 +108,12 @@ export function buildFactoryArgs(
     if (options.effort) args.push('-c', `model_reasoning_effort="${options.effort}"`)
     args.push('-C', cwd, fullPrompt)
     if (mode === 'read') return { bin: 'codex', args }
-    if (!sandbox) throw new Error('o Codex com escrita só roda dentro do bwrap (bubblewrap), que não está disponível nesta máquina')
+    if (!sandbox) throw new Error(say({ en: 'Codex in write mode only runs inside bwrap (bubblewrap), which is not available on this machine', pt: 'o Codex com escrita só roda dentro do bwrap (bubblewrap), que não está disponível nesta máquina' }))
     return jail(sandbox, cwd, 'codex', args)
   }
 
   // agy writes to disk even in --mode plan (see server/lib/ai/args.ts): it only ever runs jailed.
-  if (!sandbox) throw new Error('o Antigravity só roda dentro do bwrap (bubblewrap), que não está disponível nesta máquina; escolha Claude ou Codex em Configurações')
+  if (!sandbox) throw new Error(say({ en: 'Antigravity only runs inside bwrap (bubblewrap), which is not available on this machine; pick Claude or Codex in Settings', pt: 'o Antigravity só roda dentro do bwrap (bubblewrap), que não está disponível nesta máquina; escolha Claude ou Codex em Configurações' }))
   const args = ['--output-format', 'stream-json']
   if (mode === 'read') args.push('--mode', 'plan')
   else args.push('--mode', 'accept-edits', '--dangerously-skip-permissions')
@@ -149,7 +150,7 @@ function copyClaudeLogin(src: string, dest: string): void {
     const { refreshToken: _dropped, ...oauth } = JSON.parse(readFileSync(src, 'utf-8')).claudeAiOauth ?? {}
     writeFileSync(dest, JSON.stringify({ claudeAiOauth: oauth }), { mode: 0o600 })
   } catch (e) {
-    throw new Error(`não foi possível copiar o login do Claude para o sandbox: ${(e as Error).message}`)
+    throw new Error(say({ en: `could not copy the Claude login into the sandbox: ${(e as Error).message}`, pt: `não foi possível copiar o login do Claude para o sandbox: ${(e as Error).message}` }))
   }
 }
 

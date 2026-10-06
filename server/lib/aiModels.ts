@@ -2,6 +2,7 @@
 // Autoteste: node server/lib/aiModels.ts --selfcheck
 
 import assert from 'node:assert/strict'
+import { say } from './i18n.ts'
 
 export type Model = {
   id: string
@@ -27,7 +28,7 @@ export function parseEfforts(help: string): string[] | undefined {
 export function parseClaudeHelp(help: string): Model[] {
   const efforts = parseEfforts(help)
   const sentence = help.replace(/\s+/g, ' ').match(/alias for the latest model \(e\.g\. ([^)]*)\)/i)
-  if (!sentence) throw new Error('o --help do claude não cita mais os apelidos de modelo; o formato mudou')
+  if (!sentence) throw new Error(say({ en: "claude's --help no longer lists the model aliases; the format changed", pt: 'o --help do claude não cita mais os apelidos de modelo; o formato mudou' }))
   const aliases = [...sentence[1].matchAll(/'([\w.-]+)'/g)].map(m => m[1])
   if (aliases.length === 0) throw new Error('nenhum apelido de modelo encontrado no --help do claude')
   return aliases.map(id => ({
@@ -54,7 +55,7 @@ type CodexCatalog = {
 // Só os modelos com visibility "list" aparecem no seletor do próprio Codex; os "hide" são internos.
 export function parseCodexCatalog(json: string): Model[] {
   const catalog = JSON.parse(json) as CodexCatalog
-  if (!Array.isArray(catalog.models)) throw new Error('codex debug models não devolveu a lista "models"')
+  if (!Array.isArray(catalog.models)) throw new Error(say({ en: 'codex debug models did not return the "models" list', pt: 'codex debug models não devolveu a lista "models"' }))
   return catalog.models
     .filter(m => m.visibility === 'list')
     .sort((a, b) => a.priority - b.priority)
@@ -87,7 +88,7 @@ if (import.meta.main && process.argv.includes('--selfcheck')) {
                      'fable', 'opus', or 'sonnet') or a model's full name`
   assert.deepEqual(parseClaudeHelp(help).map(m => m.id), ['fable', 'opus', 'sonnet'])
   assert.equal(parseClaudeHelp(help).find(m => m.recommended)?.id, 'opus')
-  assert.throws(() => parseClaudeHelp('--model <model>  Model name'), /formato mudou/)
+  assert.throws(() => parseClaudeHelp('--model <model>  Model name'), /format changed/)
 
   const codex = JSON.stringify({
     models: [

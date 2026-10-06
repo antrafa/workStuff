@@ -3,6 +3,7 @@
 import { readDependencies, type Dependency } from './manifests.ts'
 import { mapLimit } from '../concurrency.ts'
 import { PARALLEL, fetchVuln, latestVersion, majorsBehind, queryVulnIds, toAdvisory, type Advisory, type Severity } from './osv.ts'
+import { say } from '../i18n.ts'
 
 export type ScannedDependency = Dependency & { advisories: Advisory[]; latest: string | null; majorsBehind: number | null }
 
@@ -28,7 +29,7 @@ export async function scanProject(path: string): Promise<ScanResult> {
   const idsByDep = new Map(unique.map((d, i) => [`${keyOf(d)}|${d.version}`, ids[i]]))
 
   const allIds = [...new Set(ids.flat())].slice(0, MAX_ADVISORIES)
-  if (ids.flat().length > allIds.length) errors.push(`mais de ${MAX_ADVISORIES} falhas: só as primeiras foram detalhadas`)
+  if (ids.flat().length > allIds.length) errors.push(say({ en: `more than ${MAX_ADVISORIES} flaws: only the first ones were detailed`, pt: `mais de ${MAX_ADVISORIES} falhas: só as primeiras foram detalhadas` }))
   const details = new Map((await mapLimit(allIds, PARALLEL, async id => [id, await fetchVuln(id).catch(() => null)] as const)))
 
   const names = [...new Map(dependencies.map(d => [keyOf(d), d])).values()]

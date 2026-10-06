@@ -5,6 +5,7 @@
 import assert from 'node:assert/strict'
 import { mapLimit } from '../concurrency.ts'
 import type { Dependency, Ecosystem } from './manifests.ts'
+import { say } from '../i18n.ts'
 
 export type Severity = 'crítica' | 'alta' | 'média' | 'baixa' | 'desconhecida'
 
@@ -25,7 +26,7 @@ export const PARALLEL = 8
 async function getJson(url: string, init?: RequestInit): Promise<unknown> {
   const res = await fetch(url, { ...init, signal: AbortSignal.timeout(TIMEOUT) })
   if (res.status === 404) return null
-  if (!res.ok) throw new Error(`${new URL(url).host} respondeu ${res.status}`)
+  if (!res.ok) throw new Error(say({ en: `${new URL(url).host} answered ${res.status}`, pt: `${new URL(url).host} respondeu ${res.status}` }))
   return res.json()
 }
 

@@ -3,6 +3,7 @@ import type { FactoryTask, FactoryTaskState } from '../../../server/lib/factory/
 import { AGENT_ORDER, AGENT_UI, currentSpan, fmtDuration, isTaskRunning, taskUsage } from './factoryRun'
 import { FactoryStatusChip } from './timeline/FactoryStatusChip'
 import { TaskActions } from './TaskActions'
+import { tx } from '@/lib/i18n'
 
 type Props = {
   tasks: FactoryTask[]
@@ -30,11 +31,11 @@ const COLUMN_OF: Record<FactoryTaskState, ColumnId> = {
 }
 
 const COLUMNS: Array<{ id: ColumnId; title: string; color: string }> = [
-  { id: 'intake', title: 'Entrada', color: 'var(--muted)' },
-  { id: 'planning', title: 'Planejamento', color: 'var(--fx-architect)' },
-  { id: 'building', title: 'Construção e QA', color: 'var(--fx-implementer)' },
-  { id: 'review', title: 'Revisão', color: 'var(--fx-reviewer)' },
-  { id: 'done', title: 'Concluído', color: 'var(--ok)' },
+  { id: 'intake', title: tx({ en: 'Intake', pt: 'Entrada' }), color: 'var(--muted)' },
+  { id: 'planning', title: tx({ en: 'Planning', pt: 'Planejamento' }), color: 'var(--fx-architect)' },
+  { id: 'building', title: tx({ en: 'Build and QA', pt: 'Construção e QA' }), color: 'var(--fx-implementer)' },
+  { id: 'review', title: tx({ en: 'Review', pt: 'Revisão' }), color: 'var(--fx-reviewer)' },
+  { id: 'done', title: tx({ en: 'Done', pt: 'Concluído' }), color: 'var(--ok)' },
 ]
 
 export function FactoryBoard({ tasks, onOpenTrace, onOpenReview, onUpdate }: Props) {
@@ -48,7 +49,7 @@ export function FactoryBoard({ tasks, onOpenTrace, onOpenReview, onUpdate }: Pro
 
   return (
     <div style={{ width: '100%', minWidth: 0 }}>
-      {/* Container com rolagem horizontal explícita para evitar que as colunas sejam cortadas */}
+      {/* Explicit horizontal scroll so the columns are never cut off */}
       <div
         style={{
           width: '100%',
@@ -77,7 +78,7 @@ export function FactoryBoard({ tasks, onOpenTrace, onOpenReview, onUpdate }: Pro
                 border: '1px solid var(--line)',
               }}
             >
-              {/* Cabeçalho da Coluna */}
+              {/* Column header */}
               <div
                 className="row"
                 style={{
@@ -106,11 +107,11 @@ export function FactoryBoard({ tasks, onOpenTrace, onOpenReview, onUpdate }: Pro
                 </span>
               </div>
 
-              {/* Cards da Coluna */}
+              {/* Column cards */}
               <div className="stack" style={{ gap: 12, marginTop: 8 }}>
                 {col.items.length === 0 ? (
                   <div style={{ textAlign: 'center', padding: '40px 8px', color: 'var(--muted)', fontSize: 12 }}>
-                    Nenhuma tarefa
+                    {tx({ en: 'No task', pt: 'Nenhuma tarefa' })}
                   </div>
                 ) : (
                   col.items.map(task => (
@@ -131,7 +132,7 @@ export function FactoryBoard({ tasks, onOpenTrace, onOpenReview, onUpdate }: Pro
 function AgentProgress({ task }: { task: FactoryTask }) {
   const spans = task.spans ?? []
   return (
-    <div className="row" style={{ gap: 4 }} aria-label="Progresso por agente">
+    <div className="row" style={{ gap: 4 }} aria-label={tx({ en: 'Progress by agent', pt: 'Progresso por agente' })}>
       {AGENT_ORDER.map(id => {
         const last = [...spans].reverse().find(s => s.agentId === id)
         const color = AGENT_UI[id].color
@@ -139,7 +140,7 @@ function AgentProgress({ task }: { task: FactoryTask }) {
         return (
           <span
             key={id}
-            title={`${AGENT_UI[id].name}: ${status === 'running' ? 'trabalhando' : status === 'success' ? 'concluído' : status === 'failed' ? 'falhou' : 'ainda não rodou'}`}
+            title={`${AGENT_UI[id].name}: ${status === 'running' ? tx({ en: 'working', pt: 'trabalhando' }) : status === 'success' ? tx({ en: 'done', pt: 'concluído' }) : status === 'failed' ? tx({ en: 'failed', pt: 'falhou' }) : tx({ en: 'not run yet', pt: 'ainda não rodou' })}`}
             className={status === 'running' ? 'live-dot' : undefined}
             style={{
               width: 9, height: 9, borderRadius: '50%', display: 'inline-block',
@@ -158,7 +159,7 @@ function AgentProgress({ task }: { task: FactoryTask }) {
 function NowLine({ task, running }: { task: FactoryTask; running: boolean }) {
   const span = currentSpan(task)
   if (!span) return null
-  const who = span.agentId ? AGENT_UI[span.agentId].name : span.kind === 'gate' ? 'Portão' : 'Esteira'
+  const who = span.agentId ? AGENT_UI[span.agentId].name : span.kind === 'gate' ? tx({ en: 'Gate', pt: 'Portão' }) : tx({ en: 'Pipeline', pt: 'Esteira' })
   const elapsed = span.durationMs ?? (span.finishedAt ? new Date(span.finishedAt).getTime() : Date.now()) - new Date(span.startedAt).getTime()
   const tools = span.toolCalls?.length ?? 0
   return (
@@ -166,7 +167,7 @@ function NowLine({ task, running }: { task: FactoryTask; running: boolean }) {
       {running && span.status === 'running' && <span className="live-dot" />}
       <b style={{ color: span.agentId ? AGENT_UI[span.agentId].color : 'var(--ink-2)', flexShrink: 0 }}>{who}</b>
       <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={span.name}>{span.name}</span>
-      <span className="mono" style={{ flexShrink: 0 }}>· {fmtDuration(elapsed)}{tools ? ` · ${tools} ferr.` : ''}</span>
+      <span className="mono" style={{ flexShrink: 0 }}>· {fmtDuration(elapsed)}{tools ? tx({ en: ` · ${tools} tools`, pt: ` · ${tools} ferr.` }) : ''}</span>
     </div>
   )
 }
@@ -180,7 +181,7 @@ function TaskCard({ task, onOpenTrace, onOpenReview, onUpdate }: { task: Factory
     <div
       role="button"
       tabIndex={0}
-      aria-label={`Abrir a linha do tempo de ${task.title}`}
+      aria-label={tx({ en: `Open the timeline of ${task.title}`, pt: `Abrir a linha do tempo de ${task.title}` })}
       className="card card-pad stack factory-card"
       style={{
         cursor: 'pointer', padding: 14, gap: 10,
@@ -198,7 +199,7 @@ function TaskCard({ task, onOpenTrace, onOpenReview, onUpdate }: { task: Factory
         <FactoryStatusChip state={task.state} executing={task.executing} />
         <div className="row mono" style={{ gap: 8, fontSize: 11 }}>
           {task.diffStat && <span style={{ color: 'var(--ok)' }}>+{task.diffStat.insertions}/-{task.diffStat.deletions}</span>}
-          {usage.costUsd !== null && <span style={{ color: 'var(--muted)' }} title="Custo somado dos agentes">US$ {usage.costUsd.toFixed(2)}</span>}
+          {usage.costUsd !== null && <span style={{ color: 'var(--muted)' }} title={tx({ en: 'Cost summed over the agents', pt: 'Custo somado dos agentes' })}>US$ {usage.costUsd.toFixed(2)}</span>}
         </div>
       </div>
 
@@ -215,12 +216,12 @@ function TaskCard({ task, onOpenTrace, onOpenReview, onUpdate }: { task: Factory
       {task.state === 'review' && (
         <div className="row" style={{ gap: 6, fontSize: 11 }}>
           {task.qaReport?.passed
-            ? <span className="row" style={{ color: 'var(--ok)', gap: 3 }}><CheckCircle2 size={12} /> QA ok</span>
-            : <span className="row" style={{ color: 'var(--warn)', gap: 3 }}><AlertCircle size={12} /> QA pendente</span>}
+            ? <span className="row" style={{ color: 'var(--ok)', gap: 3 }}><CheckCircle2 size={12} /> {tx({ en: 'QA ok', pt: 'QA ok' })}</span>
+            : <span className="row" style={{ color: 'var(--warn)', gap: 3 }}><AlertCircle size={12} /> {tx({ en: 'QA pending', pt: 'QA pendente' })}</span>}
           <span>·</span>
           {task.securityReport?.passed
-            ? <span className="row" style={{ color: 'var(--ok)', gap: 3 }}><CheckCircle2 size={12} /> Revisão ok</span>
-            : <span className="row" style={{ color: 'var(--warn)', gap: 3 }}><ShieldAlert size={12} /> Achados</span>}
+            ? <span className="row" style={{ color: 'var(--ok)', gap: 3 }}><CheckCircle2 size={12} /> {tx({ en: 'Review ok', pt: 'Revisão ok' })}</span>
+            : <span className="row" style={{ color: 'var(--warn)', gap: 3 }}><ShieldAlert size={12} /> {tx({ en: 'Findings', pt: 'Achados' })}</span>}
         </div>
       )}
 

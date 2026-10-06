@@ -14,6 +14,7 @@ import { FOREIGN, PLATFORM, SIMULATED, foreignKey, installFix, type Fix, type Pl
 import { which } from '../run.ts'
 import { listSources, resolveToken } from '../repos/sources.ts'
 import { readDoctorConfig, type DoctorConfig } from './config.ts'
+import { say } from '../i18n.ts'
 
 const exec = promisify(execFile)
 
@@ -67,8 +68,8 @@ export function fixesFor(p: Platform) {
   const install = (r: Recipe): Fix => installFix(r, p)
   return {
     install,
-    gitIdentity: instrucao('git config --global user.name "Seu Nome"; git config --global user.email "voce@exemplo.com"'),
-    sshKey: (email: string) => manual(`ssh-keygen -t ed25519 -C "${email || 'voce@exemplo.com'}"`),
+    gitIdentity: instrucao(say({ en: 'git config --global user.name "Your Name"; git config --global user.email "you@example.com"', pt: 'git config --global user.name "Seu Nome"; git config --global user.email "voce@exemplo.com"' })),
+    sshKey: (email: string) => manual(`ssh-keygen -t ed25519 -C "${email || say({ en: 'you@example.com', pt: 'voce@exemplo.com' })}"`),
     sdkman: win ? null : auto('curl -s "https://get.sdkman.io" | bash'),
     javaVersion: (id: string) => (win ? manual(`winget install -e --id Azul.Zulu.${id.split('.')[0]}.JDK`) : auto(`sdk install java ${id}`)),
     mavenVersion: (v: string) => (win ? instrucao('https://maven.apache.org/download.cgi') : auto(`sdk install maven ${v}`)),
@@ -76,12 +77,12 @@ export function fixesFor(p: Platform) {
     nodeVersion: (v: string) => (win ? manual(`nvm install ${v}`) : auto(`nvm install ${v}`)),
     nodeOnPath: win ? manual('nvm install 24; nvm use 24') : manual('nvm install 24 && nvm alias default 24'),
     dockerEngine: p.os === 'linux' ? instrucao('https://docs.docker.com/engine/install/') : install(RECIPES.dockerDesktop),
-    compose: p.os === 'linux' ? install(RECIPES.compose) : instrucao('atualize o Docker Desktop: o compose vem junto com ele'),
-    dockerDaemon: p.os === 'linux' ? manual('sudo systemctl start docker') : instrucao('abra o Docker Desktop e espere ele terminar de iniciar'),
+    compose: p.os === 'linux' ? install(RECIPES.compose) : instrucao(say({ en: 'update Docker Desktop: compose comes with it', pt: 'atualize o Docker Desktop: o compose vem junto com ele' })),
+    dockerDaemon: p.os === 'linux' ? manual('sudo systemctl start docker') : instrucao(say({ en: 'open Docker Desktop and wait for it to finish starting', pt: 'abra o Docker Desktop e espere ele terminar de iniciar' })),
     // Grupo docker só existe no Linux; no macOS e no Windows quem dá o acesso é o Docker Desktop.
     dockerGroup: p.os === 'linux' ? manual('sudo usermod -aG docker $USER && newgrp docker') : null,
     npmInstall: auto('npm install'),
-    noBwrap: instrucao('escolha Claude ou Codex em Configurações'),
+    noBwrap: instrucao(say({ en: 'choose Claude or Codex in Settings', pt: 'escolha Claude ou Codex em Configurações' })),
   }
 }
 
@@ -108,14 +109,14 @@ const read = (file: string) => (existsSync(file) ? readFileSync(file, 'utf-8') :
 // No Windows o binário pode ser um .cmd, que o execFile não roda sem shell: a versão fica em branco,
 // mas a presença (pelo where) continua valendo.
 async function binary(grupo: string, item: string, bin: string, fix: AnyFix, status: 'falta' | 'aviso', versionArgs = ['--version']) {
-  if (!(await has(bin))) return pending(grupo, item, status, 'não encontrado no PATH', fix)
+  if (!(await has(bin))) return pending(grupo, item, status, say({ en: 'not found on PATH', pt: 'não encontrado no PATH' }), fix)
   return ok(grupo, item, firstLine(await output(bin, versionArgs)) || (await which(bin))!)
 }
 
 // Versão instalada por SDKMAN/NVM (pasta por versão), localizada pelo major.
 function major(grupo: string, item: string, dir: string, prefix: string, fix: AnyFix, status: 'falta' | 'aviso' = 'falta'): CheckResult {
   const found = list(dir).find(v => v.startsWith(prefix))
-  return found ? ok(grupo, item, found) : pending(grupo, item, status, `nenhuma versão ${prefix}x instalada`, fix)
+  return found ? ok(grupo, item, found) : pending(grupo, item, status, say({ en: `no version ${prefix}x installed`, pt: `nenhuma versão ${prefix}x instalada` }), fix)
 }
 
 // IDE pode vir de gerenciador, Toolbox, instalador ou tarball: procurar por gestor daria pendência falsa. Sempre aviso.
@@ -123,7 +124,7 @@ async function ide(item: string, fix: AnyFix, candidates: string[]): Promise<Che
   for (const c of candidates) {
     if (isAbsolute(c) ? existsSync(c) : await has(c)) return ok('IDEs', item, c.replace(HOME, '~'))
   }
-  return pending('IDEs', item, 'aviso', 'não encontrado', fix)
+  return pending('IDEs', item, 'aviso', say({ en: 'not found', pt: 'não encontrado' }), fix)
 }
 
 // Falso negativo aqui ensina a ignorar o diagnóstico: timeout folgado e uma retentativa.
@@ -141,8 +142,8 @@ async function reachable(url: string) {
 
 async function url(item: string, target: string) {
   return (await reachable(target))
-    ? ok('Rede', item, 'alcançável')
-    : pending('Rede', item, 'falta', 'sem resposta após 2 tentativas: verifique VPN, DNS ou proxy', instrucao('conecte-se à rede corporativa'))
+    ? ok(say({ en: 'Network', pt: 'Rede' }), item, say({ en: 'reachable', pt: 'alcançável' }))
+    : pending(say({ en: 'Network', pt: 'Rede' }), item, 'falta', say({ en: 'no answer after 2 attempts: check VPN, DNS or proxy', pt: 'sem resposta após 2 tentativas: verifique VPN, DNS ou proxy' }), instrucao(say({ en: 'connect to the corporate network', pt: 'conecte-se à rede corporativa' })))
 }
 
 function base(p: Platform, fix: ReturnType<typeof fixesFor>): Promise<CheckResult[]> {
@@ -160,23 +161,23 @@ async function credentials(cfg: DoctorConfig, fix: ReturnType<typeof fixesFor>):
   const npmrc = read(join(HOME, '.npmrc'))
   return [
     name && email
-      ? ok('Credenciais', 'Identidade git', `${name} <${email}>`)
-      : pending('Credenciais', 'Identidade git', 'falta', 'user.name ou user.email não configurado', fix.gitIdentity),
+      ? ok(say({ en: 'Credentials', pt: 'Credenciais' }), say({ en: 'Git identity', pt: 'Identidade git' }), `${name} <${email}>`)
+      : pending(say({ en: 'Credentials', pt: 'Credenciais' }), say({ en: 'Git identity', pt: 'Identidade git' }), 'falta', say({ en: 'user.name or user.email not set', pt: 'user.name ou user.email não configurado' }), fix.gitIdentity),
     keys > 0
-      ? ok('Credenciais', 'Chave SSH', `${keys} chave(s) pública(s) em ~/.ssh`)
-      : pending('Credenciais', 'Chave SSH', 'falta', 'nenhuma chave em ~/.ssh: sem clonar nem dar push por SSH', fix.sshKey(email ?? '')),
+      ? ok(say({ en: 'Credentials', pt: 'Credenciais' }), say({ en: 'SSH key', pt: 'Chave SSH' }), say({ en: `${keys} public key(s) in ~/.ssh`, pt: `${keys} chave(s) pública(s) em ~/.ssh` }))
+      : pending(say({ en: 'Credentials', pt: 'Credenciais' }), say({ en: 'SSH key', pt: 'Chave SSH' }), 'falta', say({ en: 'no key in ~/.ssh: no cloning or pushing over SSH', pt: 'nenhuma chave em ~/.ssh: sem clonar nem dar push por SSH' }), fix.sshKey(email ?? '')),
     // Registries e escopos privados só existem se cadastrados: o painel não presume empresa nenhuma.
     ...cfg.mavenRegistries.map(r =>
       !m2
-        ? pending('Credenciais', `Maven: ${r.label}`, 'falta', '~/.m2/settings.xml ausente', instrucao(`configure o ~/.m2/settings.xml com o repositório ${r.label}`))
+        ? pending(say({ en: 'Credentials', pt: 'Credenciais' }), `Maven: ${r.label}`, 'falta', say({ en: '~/.m2/settings.xml missing', pt: '~/.m2/settings.xml ausente' }), instrucao(say({ en: `set up ~/.m2/settings.xml with the ${r.label} repository`, pt: `configure o ~/.m2/settings.xml com o repositório ${r.label}` })))
         : m2.includes(r.match)
-          ? ok('Credenciais', `Maven: ${r.label}`, `settings.xml cita ${r.match}`)
-          : pending('Credenciais', `Maven: ${r.label}`, 'falta', `settings.xml não cita ${r.match}`, instrucao(`inclua o repositório ${r.label} no ~/.m2/settings.xml`)),
+          ? ok(say({ en: 'Credentials', pt: 'Credenciais' }), `Maven: ${r.label}`, say({ en: `settings.xml mentions ${r.match}`, pt: `settings.xml cita ${r.match}` }))
+          : pending(say({ en: 'Credentials', pt: 'Credenciais' }), `Maven: ${r.label}`, 'falta', say({ en: `settings.xml does not mention ${r.match}`, pt: `settings.xml não cita ${r.match}` }), instrucao(say({ en: `add the ${r.label} repository to ~/.m2/settings.xml`, pt: `inclua o repositório ${r.label} no ~/.m2/settings.xml` }))),
     ),
     ...cfg.npmScopes.map(scope =>
       npmrc.includes(`${scope}:registry`)
-        ? ok('Credenciais', `npm ${scope}`, 'escopo configurado no ~/.npmrc')
-        : pending('Credenciais', `npm ${scope}`, 'falta', `sem ${scope}:registry no ~/.npmrc: npm install de pacote ${scope} quebra`, instrucao(`configure ${scope}:registry no ~/.npmrc`)),
+        ? ok(say({ en: 'Credentials', pt: 'Credenciais' }), `npm ${scope}`, say({ en: 'scope set in ~/.npmrc', pt: 'escopo configurado no ~/.npmrc' }))
+        : pending(say({ en: 'Credentials', pt: 'Credenciais' }), `npm ${scope}`, 'falta', say({ en: `no ${scope}:registry in ~/.npmrc: npm install of a ${scope} package breaks`, pt: `sem ${scope}:registry no ~/.npmrc: npm install de pacote ${scope} quebra` }), instrucao(say({ en: `set ${scope}:registry in ~/.npmrc`, pt: `configure ${scope}:registry no ~/.npmrc` }))),
     ),
   ]
 }
@@ -184,13 +185,13 @@ async function credentials(cfg: DoctorConfig, fix: ReturnType<typeof fixesFor>):
 async function java(cfg: DoctorConfig, p: Platform, fix: ReturnType<typeof fixesFor>): Promise<CheckResult[]> {
   const majorOf = (id: string) => id.split('.')[0]
   if (p.os === 'win32') return javaWindows(cfg, fix, majorOf)
-  if (!existsSync(SDKMAN_JAVA)) return [pending('Java', 'SDKMAN', 'falta', 'não instalado em ~/.sdkman', fix.sdkman!)]
+  if (!existsSync(SDKMAN_JAVA)) return [pending('Java', 'SDKMAN', 'falta', say({ en: 'not installed in ~/.sdkman', pt: 'não instalado em ~/.sdkman' }), fix.sdkman!)]
   const out = [
-    ok('Java', 'SDKMAN', `${list(SDKMAN_JAVA).filter(v => v !== 'current').length} versões instaladas`),
+    ok('Java', 'SDKMAN', say({ en: `${list(SDKMAN_JAVA).filter(v => v !== 'current').length} versions installed`, pt: `${list(SDKMAN_JAVA).filter(v => v !== 'current').length} versões instaladas` })),
     ...cfg.javaVersions.map(id => major('Java', `Java ${majorOf(id)}`, SDKMAN_JAVA, `${majorOf(id)}.`, fix.javaVersion(id))),
   ]
   if (!cfg.mavenVersions.length) return out
-  if (!existsSync(SDKMAN_MAVEN)) return [...out, pending('Maven', 'Maven', 'falta', 'nenhuma versão via SDKMAN', fix.mavenVersion(cfg.mavenVersions[0]))]
+  if (!existsSync(SDKMAN_MAVEN)) return [...out, pending('Maven', 'Maven', 'falta', say({ en: 'no version through SDKMAN', pt: 'nenhuma versão via SDKMAN' }), fix.mavenVersion(cfg.mavenVersions[0]))]
   return [...out, ...cfg.mavenVersions.map(v => major('Maven', `Maven ${v.split('.').slice(0, 2).join('.')}`, SDKMAN_MAVEN, v.split('.').slice(0, 2).join('.'), fix.mavenVersion(v)))]
 }
 
@@ -200,7 +201,7 @@ async function javaWindows(cfg: DoctorConfig, fix: ReturnType<typeof fixesFor>, 
   const out = cfg.javaVersions.map(id => {
     const m = majorOf(id)
     const found = installed.find(d => new RegExp(`(jdk|zulu|java)[-_ ]?${m}(\\b|[._-])`, 'i').test(d))
-    return found ? ok('Java', `Java ${m}`, found) : pending('Java', `Java ${m}`, 'falta', `nenhum JDK ${m} em ${PROGRAMFILES}`, fix.javaVersion(id))
+    return found ? ok('Java', `Java ${m}`, found) : pending('Java', `Java ${m}`, 'falta', say({ en: `no JDK ${m} in ${PROGRAMFILES}`, pt: `nenhum JDK ${m} em ${PROGRAMFILES}` }), fix.javaVersion(id))
   })
   if (!cfg.mavenVersions.length) return out
   return [...out, await binary('Maven', 'Maven', 'mvn', fix.mavenVersion(cfg.mavenVersions[0]), 'falta', ['-v'])]
@@ -211,71 +212,71 @@ async function node(cfg: DoctorConfig, p: Platform, fix: ReturnType<typeof fixes
   const where = p.os === 'win32' ? dir : '~/.nvm'
   const out: CheckResult[] = existsSync(dir)
     ? [
-        ok('Node', 'NVM', `${list(dir).filter(v => /^v\d/.test(v)).length} versões instaladas`),
+        ok('Node', 'NVM', say({ en: `${list(dir).filter(v => /^v\d/.test(v)).length} versions installed`, pt: `${list(dir).filter(v => /^v\d/.test(v)).length} versões instaladas` })),
         ...cfg.nodeVersions.map(v => major('Node', `Node ${v}`, dir, `v${v}.`, fix.nodeVersion(v))),
       ]
-    : [pending('Node', 'NVM', 'falta', `não instalado em ${where}`, fix.nvm)]
+    : [pending('Node', 'NVM', 'falta', say({ en: `not installed in ${where}`, pt: `não instalado em ${where}` }), fix.nvm)]
   // O workStuff roda no node do PATH e usa type stripping nativo: exige 22.18+ (testado no 24).
   const version = await output('node', ['-v'])
   const [maj, min] = (version ?? '').replace('v', '').split('.').map(Number)
   out.push(
     maj > 22 || (maj === 22 && min >= 18)
-      ? ok('Node', 'Node no PATH', `${version}: o painel exige 22.18+`)
-      : pending('Node', 'Node no PATH', 'falta', `${version ?? 'nenhum node ativo'}: o painel exige 22.18+ para rodar TypeScript direto`, fix.nodeOnPath),
+      ? ok('Node', say({ en: 'Node on PATH', pt: 'Node no PATH' }), say({ en: `${version}: the panel requires 22.18+`, pt: `${version}: o painel exige 22.18+` }))
+      : pending('Node', say({ en: 'Node on PATH', pt: 'Node no PATH' }), 'falta', say({ en: `${version ?? 'no active node'}: the panel requires 22.18+ to run TypeScript directly`, pt: `${version ?? 'nenhum node ativo'}: o painel exige 22.18+ para rodar TypeScript direto` }), fix.nodeOnPath),
   )
   return out
 }
 
 async function docker(p: Platform, fix: ReturnType<typeof fixesFor>): Promise<CheckResult[]> {
   const engine = p.os === 'linux' ? 'Docker Engine' : 'Docker Desktop'
-  if (!(await has('docker'))) return [pending('Docker', engine, 'falta', 'não encontrado no PATH', fix.dockerEngine)]
+  if (!(await has('docker'))) return [pending('Docker', engine, 'falta', say({ en: 'not found on PATH', pt: 'não encontrado no PATH' }), fix.dockerEngine)]
   const compose = await output('docker', ['compose', 'version'])
   const daemon = await output('docker', ['info', '--format', '{{.ServerVersion}}'])
   const daemonUp = Boolean(daemon) && !/error|denied|cannot/i.test(daemon!)
   const out = [
     ok('Docker', engine, firstLine(await output('docker', ['--version']))),
-    compose?.includes('version') ? ok('Docker', 'Compose plugin', firstLine(compose)) : pending('Docker', 'Compose plugin', 'falta', 'docker compose indisponível', fix.compose),
+    compose?.includes('version') ? ok('Docker', 'Compose plugin', firstLine(compose)) : pending('Docker', 'Compose plugin', 'falta', say({ en: 'docker compose unavailable', pt: 'docker compose indisponível' }), fix.compose),
   ]
   // Grupo docker é coisa do Linux; no macOS e no Windows o Docker Desktop cuida do acesso.
-  if (p.os !== 'linux') return [...out, daemonUp ? ok('Docker', 'Daemon ativo', 'o Docker Desktop responde') : pending('Docker', 'Daemon ativo', 'falta', 'o daemon não responde', fix.dockerDaemon)]
+  if (p.os !== 'linux') return [...out, daemonUp ? ok('Docker', say({ en: 'Daemon running', pt: 'Daemon ativo' }), say({ en: 'Docker Desktop responds', pt: 'o Docker Desktop responde' })) : pending('Docker', say({ en: 'Daemon running', pt: 'Daemon ativo' }), 'falta', say({ en: 'the daemon does not respond', pt: 'o daemon não responde' }), fix.dockerDaemon)]
   const groups = (await output('id', ['-nG'])) ?? ''
   return [
     ...out,
     daemonUp
-      ? ok('Docker', 'Acesso sem sudo', 'daemon responde ao usuário atual')
+      ? ok('Docker', say({ en: 'Access without sudo', pt: 'Acesso sem sudo' }), say({ en: 'the daemon responds to the current user', pt: 'daemon responde ao usuário atual' }))
       : groups.split(/\s+/).includes('docker')
-        ? pending('Docker', 'Daemon ativo', 'falta', 'usuário está no grupo docker, mas o daemon não responde', fix.dockerDaemon)
-        : pending('Docker', 'Acesso sem sudo', 'falta', 'usuário fora do grupo docker', fix.dockerGroup!),
+        ? pending('Docker', say({ en: 'Daemon running', pt: 'Daemon ativo' }), 'falta', say({ en: 'the user is in the docker group, but the daemon does not respond', pt: 'usuário está no grupo docker, mas o daemon não responde' }), fix.dockerDaemon)
+        : pending('Docker', say({ en: 'Access without sudo', pt: 'Acesso sem sudo' }), 'falta', say({ en: 'the user is not in the docker group', pt: 'usuário fora do grupo docker' }), fix.dockerGroup!),
   ]
 }
 
 async function picker(p: Platform, fix: ReturnType<typeof fixesFor>): Promise<CheckResult> {
-  if (p.os === 'darwin') return ok('workStuff', 'Seletor de pasta', 'osascript (nativo do macOS)')
-  if (p.os === 'win32') return ok('workStuff', 'Seletor de pasta', 'PowerShell (nativo do Windows)')
+  if (p.os === 'darwin') return ok('workStuff', say({ en: 'Folder picker', pt: 'Seletor de pasta' }), say({ en: 'osascript (built into macOS)', pt: 'osascript (nativo do macOS)' }))
+  if (p.os === 'win32') return ok('workStuff', say({ en: 'Folder picker', pt: 'Seletor de pasta' }), say({ en: 'PowerShell (built into Windows)', pt: 'PowerShell (nativo do Windows)' }))
   const found = (await has('zenity')) ? 'zenity' : (await has('kdialog')) ? 'kdialog' : null
-  return found ? ok('workStuff', 'Seletor de pasta', found) : pending('workStuff', 'Seletor de pasta', 'aviso', 'sem zenity/kdialog: escolher pasta cai no caminho digitado', fix.install(RECIPES.zenity))
+  return found ? ok('workStuff', say({ en: 'Folder picker', pt: 'Seletor de pasta' }), found) : pending('workStuff', say({ en: 'Folder picker', pt: 'Seletor de pasta' }), 'aviso', say({ en: 'no zenity/kdialog: picking a folder falls back to typing the path', pt: 'sem zenity/kdialog: escolher pasta cai no caminho digitado' }), fix.install(RECIPES.zenity))
 }
 
 // O Antigravity escreve em disco mesmo em --mode plan; o bwrap é a trava de modo leitura dele, e só existe no Linux.
 async function bubblewrap(p: Platform, fix: ReturnType<typeof fixesFor>): Promise<CheckResult> {
-  const item = 'bubblewrap (trava do Antigravity)'
-  if (p.os !== 'linux') return pending('workStuff', item, 'aviso', `bubblewrap só existe no Linux: no ${p.label} o Antigravity não roda nas telas de IA`, fix.noBwrap)
+  const item = say({ en: 'bubblewrap (Antigravity lock)', pt: 'bubblewrap (trava do Antigravity)' })
+  if (p.os !== 'linux') return pending('workStuff', item, 'aviso', say({ en: `bubblewrap only exists on Linux: on ${p.label} Antigravity does not run on the AI screens`, pt: `bubblewrap só existe no Linux: no ${p.label} o Antigravity não roda nas telas de IA` }), fix.noBwrap)
   return (await has('bwrap'))
     ? ok('workStuff', item, firstLine(await output('bwrap', ['--version'])))
-    : pending('workStuff', item, 'aviso', 'sem bwrap o Antigravity não roda nas telas de IA', fix.install(RECIPES.bwrap))
+    : pending('workStuff', item, 'aviso', say({ en: 'without bwrap Antigravity does not run on the AI screens', pt: 'sem bwrap o Antigravity não roda nas telas de IA' }), fix.install(RECIPES.bwrap))
 }
 
 async function workstuff(p: Platform, fix: ReturnType<typeof fixesFor>): Promise<CheckResult[]> {
   const catalogCount = (read(join(HOME, '.claude', 'CLAUDE.md')).match(/<!-- workstuff:item:/g) ?? []).length
   return [
     existsSync(join(PROJECT_ROOT, 'node_modules'))
-      ? ok('workStuff', 'Dependências do painel', 'node_modules presente')
-      : pending('workStuff', 'Dependências do painel', 'falta', 'node_modules ausente', fix.npmInstall),
+      ? ok('workStuff', say({ en: 'Panel dependencies', pt: 'Dependências do painel' }), say({ en: 'node_modules present', pt: 'node_modules presente' }))
+      : pending('workStuff', say({ en: 'Panel dependencies', pt: 'Dependências do painel' }), 'falta', say({ en: 'node_modules missing', pt: 'node_modules ausente' }), fix.npmInstall),
     await picker(p, fix),
     await bubblewrap(p, fix),
     catalogCount > 0
-      ? ok('workStuff', 'Catálogo de IA', `${catalogCount} item(ns) ativo(s) no Claude`)
-      : pending('workStuff', 'Catálogo de IA', 'aviso', 'nenhuma rule/persona ativada no Claude pelo workStuff', instrucao('ative itens pela tela Catálogo')),
+      ? ok('workStuff', say({ en: 'AI catalog', pt: 'Catálogo de IA' }), say({ en: `${catalogCount} item(s) active in Claude`, pt: `${catalogCount} item(ns) ativo(s) no Claude` }))
+      : pending('workStuff', say({ en: 'AI catalog', pt: 'Catálogo de IA' }), 'aviso', say({ en: 'no rule/persona activated in Claude by workStuff', pt: 'nenhuma rule/persona ativada no Claude pelo workStuff' }), instrucao(say({ en: 'activate items on the Catalog screen', pt: 'ative itens pela tela Catálogo' }))),
   ]
 }
 
@@ -284,32 +285,32 @@ async function kubernetes(fix: ReturnType<typeof fixesFor>): Promise<CheckResult
   return [
     await binary('Kubernetes', 'kubectl', 'kubectl', fix.install(RECIPES.kubectl), 'falta', ['version', '--client']),
     kubeconfigs > 0
-      ? ok('Kubernetes', 'Kubeconfigs', `${kubeconfigs} arquivo(s) em ~/.kube`)
-      : pending('Kubernetes', 'Kubeconfigs', 'aviso', '~/.kube vazio: telas de Kubernetes ficam sem ambiente', instrucao('adicione um kubeconfig pela tela Cluster')),
+      ? ok('Kubernetes', 'Kubeconfigs', say({ en: `${kubeconfigs} file(s) in ~/.kube`, pt: `${kubeconfigs} arquivo(s) em ~/.kube` }))
+      : pending('Kubernetes', 'Kubeconfigs', 'aviso', say({ en: '~/.kube is empty: the Kubernetes screens have no environment', pt: '~/.kube vazio: telas de Kubernetes ficam sem ambiente' }), instrucao(say({ en: 'add a kubeconfig on the Cluster screen', pt: 'adicione um kubeconfig pela tela Cluster' }))),
   ]
 }
 
 // Opcional: sem ele a tela Vulnerabilidades consulta só as dependências diretas, pela OSV.
 const security = (fix: ReturnType<typeof fixesFor>) =>
-  binary('Segurança', 'trivy', 'trivy', fix.install(RECIPES.trivy), 'aviso', ['--version'])
+  binary(say({ en: 'Security', pt: 'Segurança' }), 'trivy', 'trivy', fix.install(RECIPES.trivy), 'aviso', ['--version'])
 
 async function ai(): Promise<CheckResult[]> {
   const clis = (await Promise.all(['claude', 'codex', 'agy'].map(async c => ((await has(c)) ? c : null)))).filter(Boolean)
   return [
     clis.length
-      ? ok('IA', 'CLI de IA', `disponível: ${clis.join(', ')}`)
-      : pending('IA', 'CLI de IA', 'falta', 'nenhum de claude/codex/agy no PATH: as telas de IA ficam inertes', instrucao('https://claude.com/claude-code')),
+      ? ok(say({ en: 'AI', pt: 'IA' }), say({ en: 'AI CLI', pt: 'CLI de IA' }), say({ en: `available: ${clis.join(', ')}`, pt: `disponível: ${clis.join(', ')}` }))
+      : pending(say({ en: 'AI', pt: 'IA' }), say({ en: 'AI CLI', pt: 'CLI de IA' }), 'falta', say({ en: 'none of claude/codex/agy on PATH: the AI screens do nothing', pt: 'nenhum de claude/codex/agy no PATH: as telas de IA ficam inertes' }), instrucao('https://claude.com/claude-code')),
     await repoConnections(),
   ]
 }
 
 async function repoConnections(): Promise<CheckResult> {
   const sources = listSources()
-  if (!sources.length) return pending('IA', 'Conexões de repositório', 'aviso', 'nenhuma conexão GitLab/GitHub: Repositórios e Requests & Limits ficam sem origem', instrucao('crie uma conexão na tela Repositórios'))
+  if (!sources.length) return pending(say({ en: 'AI', pt: 'IA' }), say({ en: 'Repository connections', pt: 'Conexões de repositório' }), 'aviso', say({ en: 'no GitLab/GitHub connection: Repositories and Requests & Limits have no source', pt: 'nenhuma conexão GitLab/GitHub: Repositórios e Requests & Limits ficam sem origem' }), instrucao(say({ en: 'create a connection on the Repositories screen', pt: 'crie uma conexão na tela Repositórios' })))
   const missing = (await Promise.all(sources.map(async s => ((await resolveToken(s.provider, s.tokenSource, s.id)) || s.tokenSource === 'none' ? null : s.label)))).filter(Boolean)
   return missing.length
-    ? pending('IA', 'Conexões de repositório', 'aviso', `sem token encontrado em: ${missing.join(', ')}`, instrucao('edite a conexão na tela Repositórios'))
-    : ok('IA', 'Conexões de repositório', `${sources.length} conexão(ões) com token`)
+    ? pending(say({ en: 'AI', pt: 'IA' }), say({ en: 'Repository connections', pt: 'Conexões de repositório' }), 'aviso', say({ en: `no token found for: ${missing.join(', ')}`, pt: `sem token encontrado em: ${missing.join(', ')}` }), instrucao(say({ en: 'edit the connection on the Repositories screen', pt: 'edite a conexão na tela Repositórios' })))
+    : ok(say({ en: 'AI', pt: 'IA' }), say({ en: 'Repository connections', pt: 'Conexões de repositório' }), say({ en: `${sources.length} connection(s) with a token`, pt: `${sources.length} conexão(ões) com token` }))
 }
 
 function ides(p: Platform, fix: ReturnType<typeof fixesFor>): Promise<CheckResult[]> {
@@ -332,10 +333,10 @@ function disk(): CheckResult {
     const s = statfsSync(HOME)
     const freeGb = Math.floor((s.bavail * s.bsize) / 1024 ** 3)
     return freeGb >= 20
-      ? ok('Sistema', 'Espaço em disco', `${freeGb} GB livres em ~`)
-      : pending('Sistema', 'Espaço em disco', 'aviso', `${freeGb} GB livres: JDKs, Node, IDEs e imagens Docker não cabem`, instrucao('libere espaço antes de instalar o resto'))
+      ? ok(say({ en: 'System', pt: 'Sistema' }), say({ en: 'Disk space', pt: 'Espaço em disco' }), say({ en: `${freeGb} GB free in ~`, pt: `${freeGb} GB livres em ~` }))
+      : pending(say({ en: 'System', pt: 'Sistema' }), say({ en: 'Disk space', pt: 'Espaço em disco' }), 'aviso', say({ en: `${freeGb} GB free: JDKs, Node, IDEs and Docker images do not fit`, pt: `${freeGb} GB livres: JDKs, Node, IDEs e imagens Docker não cabem` }), instrucao(say({ en: 'free up space before installing the rest', pt: 'libere espaço antes de instalar o resto' })))
   } catch (e) {
-    return pending('Sistema', 'Espaço em disco', 'aviso', `não consegui medir: ${(e as Error).message}`, instrucao('confira o espaço livre pelo sistema'))
+    return pending(say({ en: 'System', pt: 'Sistema' }), say({ en: 'Disk space', pt: 'Espaço em disco' }), 'aviso', say({ en: `could not measure: ${(e as Error).message}`, pt: `não consegui medir: ${(e as Error).message}` }), instrucao(say({ en: 'check the free space through the system', pt: 'confira o espaço livre pelo sistema' })))
   }
 }
 
@@ -344,8 +345,8 @@ async function sshAccepted(host: string, p: Platform): Promise<CheckResult> {
   const devNull = p.os === 'win32' ? 'NUL' : '/dev/null'
   const reply = await output('ssh', ['-T', '-o', 'BatchMode=yes', '-o', 'StrictHostKeyChecking=no', '-o', `UserKnownHostsFile=${devNull}`, '-o', 'ConnectTimeout=5', `git@${host}`], 12000)
   return /welcome to gitlab|successfully authenticated/i.test(reply ?? '')
-    ? ok('Rede', `${host} (SSH)`, 'chave aceita')
-    : pending('Rede', `${host} (SSH)`, 'falta', `chave não aceita por ${host}`, instrucao(`cadastre sua chave pública (~/.ssh/*.pub) nas configurações de SSH de ${host}`))
+    ? ok(say({ en: 'Network', pt: 'Rede' }), `${host} (SSH)`, say({ en: 'key accepted', pt: 'chave aceita' }))
+    : pending(say({ en: 'Network', pt: 'Rede' }), `${host} (SSH)`, 'falta', say({ en: `key not accepted by ${host}`, pt: `chave não aceita por ${host}` }), instrucao(say({ en: `register your public key (~/.ssh/*.pub) in ${host}'s SSH settings`, pt: `cadastre sua chave pública (~/.ssh/*.pub) nas configurações de SSH de ${host}` })))
 }
 
 // Rede: o que foi cadastrado + o servidor de cada conexão da tela Repositórios. Nada fixo no código.

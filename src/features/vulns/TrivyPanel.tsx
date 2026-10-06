@@ -2,9 +2,10 @@ import { Container, ExternalLink, ScanSearch } from 'lucide-react'
 import { useState } from 'react'
 import { Link } from 'react-router'
 import { SkeletonRows } from '@/ui'
-import { SEVERITY_BADGE, bySeverity, trivyFolder, trivyImage, type TrivyFinding } from './api'
+import { SEVERITY_BADGE, SEVERITY_LABEL, bySeverity, trivyFolder, trivyImage, type TrivyFinding } from './api'
+import { tx } from '@/lib/i18n'
 
-// Varredura completa (dependências transitivas e imagens), só quando o trivy está instalado.
+// Full scan (transitive dependencies and images), only when trivy is installed.
 export function TrivyPanel({ available, path }: { available: boolean | null; path: string | null }) {
   const [image, setImage] = useState('')
   const [running, setRunning] = useState(false)
@@ -17,8 +18,12 @@ export function TrivyPanel({ available, path }: { available: boolean | null; pat
       <div className="callout callout-info" style={{ fontSize: 12.5 }}>
         <ScanSearch size={16} />
         <div className="spacer">
-          Com o <a href="https://trivy.dev" target="_blank" rel="noreferrer">trivy</a> instalado, esta tela também varre as dependências transitivas
-          (o que o lockfile puxa) e imagens de container. A tela <Link to="/maquina">Máquina</Link> mostra como instalar.
+          {tx({
+            en: <>With <a href="https://trivy.dev" target="_blank" rel="noreferrer">trivy</a> installed, this screen also scans the transitive dependencies
+              (what the lockfile pulls in) and container images. The <Link to="/maquina">Machine</Link> screen shows how to install it.</>,
+            pt: <>Com o <a href="https://trivy.dev" target="_blank" rel="noreferrer">trivy</a> instalado, esta tela também varre as dependências transitivas
+              (o que o lockfile puxa) e imagens de container. A tela <Link to="/maquina">Máquina</Link> mostra como instalar.</>,
+          })}
         </div>
       </div>
     )
@@ -40,19 +45,19 @@ export function TrivyPanel({ available, path }: { available: boolean | null; pat
   return (
     <section className="card">
       <div className="card-head">
-        <div className="card-title spacer">Varredura completa (trivy)</div>
+        <div className="card-title spacer">{tx({ en: 'Full scan (trivy)', pt: 'Varredura completa (trivy)' })}</div>
       </div>
       <div className="card-pad stack">
         <div className="row" style={{ flexWrap: 'wrap' }}>
-          <button className="btn" disabled={!path || running} onClick={() => run(() => trivyFolder(path!))} title={path ? `trivy fs ${path}` : 'Verifique um projeto primeiro'}>
-            <ScanSearch size={14} /> Varrer o projeto inteiro
+          <button className="btn" disabled={!path || running} onClick={() => run(() => trivyFolder(path!))} title={path ? `trivy fs ${path}` : tx({ en: 'Check a project first', pt: 'Verifique um projeto primeiro' })}>
+            <ScanSearch size={14} /> {tx({ en: 'Scan the whole project', pt: 'Varrer o projeto inteiro' })}
           </button>
           <form className="row spacer" onSubmit={e => (e.preventDefault(), image.trim() && run(() => trivyImage(image.trim())))}>
-            <input className="input mono spacer" value={image} onChange={e => setImage(e.target.value)} placeholder="imagem, ex.: nginx:1.27" disabled={running} />
-            <button className="btn" disabled={!image.trim() || running}><Container size={14} /> Varrer imagem</button>
+            <input className="input mono spacer" value={image} onChange={e => setImage(e.target.value)} placeholder={tx({ en: 'image, e.g. nginx:1.27', pt: 'imagem, ex.: nginx:1.27' })} disabled={running} />
+            <button className="btn" disabled={!image.trim() || running}><Container size={14} /> {tx({ en: 'Scan image', pt: 'Varrer imagem' })}</button>
           </form>
         </div>
-        <p className="muted" style={{ fontSize: 12 }}>A primeira execução baixa a base do trivy e pode levar alguns minutos.</p>
+        <p className="muted" style={{ fontSize: 12 }}>{tx({ en: "The first run downloads trivy's database and can take a few minutes.", pt: 'A primeira execução baixa a base do trivy e pode levar alguns minutos.' })}</p>
         {running && <SkeletonRows rows={4} height={32} />}
         {error && <div className="callout callout-crit" style={{ fontSize: 12.5 }}>{error}</div>}
         {result && <Findings result={result} />}
@@ -62,23 +67,23 @@ export function TrivyPanel({ available, path }: { available: boolean | null; pat
 }
 
 function Findings({ result }: { result: { target: string; findings: TrivyFinding[] } }) {
-  if (!result.findings.length) return <div className="callout callout-info">Nenhuma falha encontrada em <span className="mono">{result.target}</span>.</div>
+  if (!result.findings.length) return <div className="callout callout-info">{tx({ en: <>No flaw found in <span className="mono">{result.target}</span>.</>, pt: <>Nenhuma falha encontrada em <span className="mono">{result.target}</span>.</> })}</div>
   return (
     <div className="table-wrap">
       <table className="table">
         <thead>
           <tr>
-            <th>Severidade</th>
-            <th>Pacote</th>
-            <th>Instalada</th>
-            <th>Corrigida em</th>
-            <th>Falha</th>
+            <th>{tx({ en: 'Severity', pt: 'Severidade' })}</th>
+            <th>{tx({ en: 'Package', pt: 'Pacote' })}</th>
+            <th>{tx({ en: 'Installed', pt: 'Instalada' })}</th>
+            <th>{tx({ en: 'Fixed in', pt: 'Corrigida em' })}</th>
+            <th>{tx({ en: 'Flaw', pt: 'Falha' })}</th>
           </tr>
         </thead>
         <tbody>
           {[...result.findings].sort(bySeverity).map(f => (
             <tr key={`${f.target}|${f.pkg}|${f.id}`}>
-              <td><span className={`badge ${SEVERITY_BADGE[f.severity]}`}>{f.severity}</span></td>
+              <td><span className={`badge ${SEVERITY_BADGE[f.severity]}`}>{SEVERITY_LABEL[f.severity]}</span></td>
               <td>
                 <div className="mono">{f.pkg}</div>
                 <div className="muted" style={{ fontSize: 11.5 }}>{f.target}</div>

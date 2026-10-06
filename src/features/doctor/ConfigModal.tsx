@@ -2,9 +2,10 @@ import { Plus, Trash2 } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router'
 import { Modal, SkeletonRows, useToast } from '@/ui'
+import { tx } from '@/lib/i18n'
 import { fetchConfig, saveConfig, type DoctorConfig } from './api'
 
-// Cadastro do que é específico do seu contexto. Fica em ~/.workstuff; o código não presume empresa nenhuma.
+// What is specific to your context. Lives in ~/.workstuff; the code assumes no company.
 export function ConfigModal({ onClose, onSaved }: { onClose: () => void; onSaved: () => void }) {
   const [cfg, setCfg] = useState<DoctorConfig | null>(null)
   const [defaults, setDefaults] = useState<DoctorConfig | null>(null)
@@ -20,11 +21,11 @@ export function ConfigModal({ onClose, onSaved }: { onClose: () => void; onSaved
     setSaving(true)
     try {
       await saveConfig(cfg)
-      toast('Verificações salvas; rodando o diagnóstico de novo')
+      toast(tx({ en: 'Checks saved; running the diagnosis again', pt: 'Verificações salvas; rodando o diagnóstico de novo' }))
       onSaved()
       onClose()
     } catch (e) {
-      toast(`Não salvou: ${(e as Error).message}`)
+      toast(tx({ en: `Not saved: ${(e as Error).message}`, pt: `Não salvou: ${(e as Error).message}` }))
     } finally {
       setSaving(false)
     }
@@ -34,34 +35,39 @@ export function ConfigModal({ onClose, onSaved }: { onClose: () => void; onSaved
 
   return (
     <Modal
-      title="Personalizar verificações"
+      title={tx({ en: 'Customize checks', pt: 'Personalizar verificações' })}
       onClose={onClose}
       width={720}
-      footer={<><button className="btn" onClick={onClose}>Cancelar</button><button className="btn btn-primary" disabled={!cfg || saving} onClick={save}>{saving ? 'Salvando…' : 'Salvar'}</button></>}
+      footer={<><button className="btn" onClick={onClose}>{tx({ en: 'Cancel', pt: 'Cancelar' })}</button><button className="btn btn-primary" disabled={!cfg || saving} onClick={save}>{saving ? tx({ en: 'Saving…', pt: 'Salvando…' }) : tx({ en: 'Save', pt: 'Salvar' })}</button></>}
     >
       {!cfg ? <SkeletonRows rows={4} /> : (
         <div className="stack" style={{ ['--gap' as string]: '18px' }}>
           <p className="muted" style={{ margin: 0, fontSize: 13 }}>
-            O que é do seu contexto (repositórios privados, endereços internos, versões dos seus projetos) fica salvo em
-            <code className="inline">~/.workstuff/doctor-config.json</code>. Os servidores Git de cada conexão da tela{' '}
-            <Link to="/repositorios" onClick={onClose}>Repositórios</Link> já entram no teste de rede e de SSH sozinhos.
+            {tx({
+              en: <>What belongs to your context (private repositories, internal addresses, your projects' versions) is saved in{' '}
+                <code className="inline">~/.workstuff/doctor-config.json</code>. The Git servers of every connection on the{' '}
+                <Link to="/repositorios" onClick={onClose}>Repositories</Link> screen are added to the network and SSH checks on their own.</>,
+              pt: <>O que é do seu contexto (repositórios privados, endereços internos, versões dos seus projetos) fica salvo em
+                <code className="inline">~/.workstuff/doctor-config.json</code>. Os servidores Git de cada conexão da tela{' '}
+                <Link to="/repositorios" onClick={onClose}>Repositórios</Link> já entram no teste de rede e de SSH sozinhos.</>,
+            })}
           </p>
 
-          <Section title="Repositórios Maven privados" hint="Cada um vira uma verificação: o ~/.m2/settings.xml precisa conter o texto informado (normalmente o host do repositório).">
-            <Pairs rows={cfg.mavenRegistries.map(r => [r.label, r.match])} labels={['Nome', 'Texto no settings.xml']} placeholders={['Nexus da empresa', 'nexus.exemplo.com']}
+          <Section title={tx({ en: 'Private Maven repositories', pt: 'Repositórios Maven privados' })} hint={tx({ en: 'Each becomes a check: ~/.m2/settings.xml must contain the given text (usually the repository host).', pt: 'Cada um vira uma verificação: o ~/.m2/settings.xml precisa conter o texto informado (normalmente o host do repositório).' })}>
+            <Pairs rows={cfg.mavenRegistries.map(r => [r.label, r.match])} labels={[tx({ en: 'Name', pt: 'Nome' }), tx({ en: 'Text in settings.xml', pt: 'Texto no settings.xml' })]} placeholders={[tx({ en: 'Company Nexus', pt: 'Nexus da empresa' }), 'nexus.exemplo.com']}
               onChange={rows => set('mavenRegistries', rows.map(([label, match]) => ({ label, match })))} />
           </Section>
 
-          <Section title="Escopos npm privados" hint="O ~/.npmrc precisa ter <escopo>:registry configurado.">
-            <List values={cfg.npmScopes} placeholder="@minha-empresa" onChange={v => set('npmScopes', v)} />
+          <Section title={tx({ en: 'Private npm scopes', pt: 'Escopos npm privados' })} hint={tx({ en: '~/.npmrc must have <scope>:registry set.', pt: 'O ~/.npmrc precisa ter <escopo>:registry configurado.' })}>
+            <List values={cfg.npmScopes} placeholder={tx({ en: '@my-company', pt: '@minha-empresa' })} onChange={v => set('npmScopes', v)} />
           </Section>
 
-          <Section title="Endereços que precisam responder" hint="VPN, proxy, serviços internos: o painel testa se cada um responde.">
-            <Pairs rows={cfg.urls.map(u => [u.label, u.url])} labels={['Nome', 'URL']} placeholders={['Intranet', 'https://intranet.exemplo.com']}
+          <Section title={tx({ en: 'Addresses that must respond', pt: 'Endereços que precisam responder' })} hint={tx({ en: 'VPN, proxy, internal services: the panel tests whether each one responds.', pt: 'VPN, proxy, serviços internos: o painel testa se cada um responde.' })}>
+            <Pairs rows={cfg.urls.map(u => [u.label, u.url])} labels={[tx({ en: 'Name', pt: 'Nome' }), 'URL']} placeholders={['Intranet', 'https://intranet.exemplo.com']}
               onChange={rows => set('urls', rows.map(([label, url]) => ({ label, url })))} />
           </Section>
 
-          <Section title="Versões exigidas" hint="Java e Maven pelo identificador do SDKMAN (sdk list java); Node pelo número principal. A correção sugerida instala exatamente essa versão.">
+          <Section title={tx({ en: 'Required versions', pt: 'Versões exigidas' })} hint={tx({ en: 'Java and Maven by their SDKMAN identifier (sdk list java); Node by its major number. The suggested fix installs exactly that version.', pt: 'Java e Maven pelo identificador do SDKMAN (sdk list java); Node pelo número principal. A correção sugerida instala exatamente essa versão.' })}>
             <div className="grid" style={{ ['--min' as string]: '200px' }}>
               <label className="field"><span>Java</span><List values={cfg.javaVersions} placeholder="21.0.8-zulu" onChange={v => set('javaVersions', v)} /></label>
               <label className="field"><span>Maven</span><List values={cfg.mavenVersions} placeholder="3.9.6" onChange={v => set('mavenVersions', v)} /></label>
@@ -69,7 +75,7 @@ export function ConfigModal({ onClose, onSaved }: { onClose: () => void; onSaved
             </div>
             {defaults && (
               <button className="btn btn-ghost btn-sm" style={{ alignSelf: 'flex-start' }} onClick={() => setCfg(c => c && { ...c, javaVersions: defaults.javaVersions, mavenVersions: defaults.mavenVersions, nodeVersions: defaults.nodeVersions })}>
-                Voltar às versões padrão
+                {tx({ en: 'Back to the default versions', pt: 'Voltar às versões padrão' })}
               </button>
             )}
           </Section>
@@ -95,10 +101,10 @@ function List({ values, placeholder, onChange }: { values: string[]; placeholder
       {values.map((v, i) => (
         <div key={i} className="row" style={{ flexWrap: 'nowrap' }}>
           <input className="input mono" style={{ flex: 1 }} value={v} placeholder={placeholder} onChange={e => onChange(values.map((x, j) => (j === i ? e.target.value : x)))} />
-          <button className="btn btn-ghost btn-sm btn-icon" onClick={() => onChange(values.filter((_, j) => j !== i))} title="Remover"><Trash2 size={13} /></button>
+          <button className="btn btn-ghost btn-sm btn-icon" onClick={() => onChange(values.filter((_, j) => j !== i))} title={tx({ en: 'Remove', pt: 'Remover' })}><Trash2 size={13} /></button>
         </div>
       ))}
-      <button className="btn btn-sm" style={{ alignSelf: 'flex-start' }} onClick={() => onChange([...values, ''])}><Plus size={13} /> Adicionar</button>
+      <button className="btn btn-sm" style={{ alignSelf: 'flex-start' }} onClick={() => onChange([...values, ''])}><Plus size={13} /> {tx({ en: 'Add', pt: 'Adicionar' })}</button>
     </div>
   )
 }
@@ -111,10 +117,10 @@ function Pairs({ rows, labels, placeholders, onChange }: { rows: [string, string
         <div key={i} className="row" style={{ flexWrap: 'nowrap' }}>
           <input className="input" style={{ flex: 1 }} value={r[0]} placeholder={placeholders[0]} aria-label={labels[0]} onChange={e => edit(i, 0, e.target.value)} />
           <input className="input mono" style={{ flex: 2 }} value={r[1]} placeholder={placeholders[1]} aria-label={labels[1]} onChange={e => edit(i, 1, e.target.value)} />
-          <button className="btn btn-ghost btn-sm btn-icon" onClick={() => onChange(rows.filter((_, j) => j !== i))} title="Remover"><Trash2 size={13} /></button>
+          <button className="btn btn-ghost btn-sm btn-icon" onClick={() => onChange(rows.filter((_, j) => j !== i))} title={tx({ en: 'Remove', pt: 'Remover' })}><Trash2 size={13} /></button>
         </div>
       ))}
-      <button className="btn btn-sm" style={{ alignSelf: 'flex-start' }} onClick={() => onChange([...rows, ['', '']])}><Plus size={13} /> Adicionar</button>
+      <button className="btn btn-sm" style={{ alignSelf: 'flex-start' }} onClick={() => onChange([...rows, ['', '']])}><Plus size={13} /> {tx({ en: 'Add', pt: 'Adicionar' })}</button>
     </div>
   )
 }

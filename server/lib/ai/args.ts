@@ -4,6 +4,7 @@
 
 import assert from 'node:assert/strict'
 import type { ProviderId } from '../aiProviders.ts'
+import { say } from '../i18n.ts'
 
 export type RunOptions = {
   prompt: string
@@ -48,7 +49,7 @@ export function buildArgs(provider: ProviderId, o: RunOptions): { bin: string; a
   // O agy não tem modo leitura que segure: testado em 30/09/2026, ele escreveu arquivo mesmo com
   // --mode plan e --sandbox. A trava é do sistema: bwrap monta o disco inteiro como só leitura,
   // menos a pasta de estado dele e uma temporária. A rede continua (ele precisa da API).
-  if (!o.agySandbox) throw new Error('o Antigravity só roda em modo leitura dentro do bwrap (bubblewrap), que não está disponível nesta máquina; escolha Claude ou Codex em Configurações')
+  if (!o.agySandbox) throw new Error(say({ en: 'Antigravity only runs read-only inside bwrap (bubblewrap), which is not available on this machine; choose Claude or Codex in Settings', pt: 'o Antigravity só roda em modo leitura dentro do bwrap (bubblewrap), que não está disponível nesta máquina; escolha Claude ou Codex em Configurações' }))
   const { stateDir, tmpDir } = o.agySandbox
   const args = [
     '--ro-bind', '/', '/', '--dev', '/dev', '--proc', '/proc',

@@ -11,6 +11,7 @@ import {
   deleteObservation, getObservation, listObservations, readSamples, resolveTarget, resumeObservation, resumeRunning, startObservation, stopObservation, subscribe,
 } from '../lib/performance/poller.ts'
 import { deleteReport, getReport, listReports, saveReport } from '../lib/performance/reports.ts'
+import { say } from '../lib/i18n.ts'
 
 export const performanceRouter = Router()
 
@@ -20,7 +21,7 @@ class BadRequest extends Error {}
 
 
 
-// Erro de validação ou do cluster vira resposta com mensagem; o resto sobe ao handler geral.
+// A validation or cluster error becomes a response with its message; the rest goes to the general handler.
 const handle = (fn: (req: Request) => unknown) => async (req: Request, res: Response) => {
   try {
     res.json((await fn(req)) ?? { ok: true })
@@ -28,7 +29,7 @@ const handle = (fn: (req: Request) => unknown) => async (req: Request, res: Resp
     if (e instanceof BadRequest) res.status(400).json({ error: e.message })
     else if (e instanceof KubeError) {
       const msg = cleanKubeMessage(e.message)
-      res.status(e.kind === 'forbidden' ? 403 : 502).json({ error: e.kind === 'forbidden' ? `o RBAC deste usuário não permite essa leitura: ${msg}` : msg })
+      res.status(e.kind === 'forbidden' ? 403 : 502).json({ error: e.kind === 'forbidden' ? say({ en: `this user's RBAC does not allow this read: ${msg}`, pt: `o RBAC deste usuário não permite essa leitura: ${msg}` }) : msg })
     }
     else throw e
   }
@@ -52,12 +53,12 @@ async function targetOf(req: Request) {
   }
 }
 
-// Namespaces e pods do kubeconfig escolhido nesta tela (independente da sessão do Cluster).
+// Namespaces and pods of the kubeconfig chosen on this screen (independent of the Cluster session).
 performanceRouter.get('/namespaces', handle(async req => {
   try {
     return { namespaces: await listNamespaces(await targetOf(req)), limitedRbac: false }
   } catch (e) {
-    // Usuário do Rancher costuma não listar namespaces: a tela pede para digitar.
+    // A Rancher user often cannot list namespaces: the screen asks to type one.
     if (e instanceof KubeError && e.kind === 'forbidden') return { namespaces: [], limitedRbac: true }
     throw e
   }
@@ -68,7 +69,7 @@ performanceRouter.get('/observations', handle(() => ({ observations: listObserva
 
 performanceRouter.post('/observations', handle(async req => {
   const b = req.body ?? {}
-  if (!Array.isArray(b.targets)) throw new BadRequest('selecione ao menos um pod')
+  if (!Array.isArray(b.targets)) throw new BadRequest(say({ en: 'select at least one pod', pt: 'selecione ao menos um pod' }))
   const targets: Target[] = b.targets.map((t: { pod?: unknown; containers?: unknown }) => ({
     pod: name('pod', t.pod),
     containers: Array.isArray(t.containers) ? t.containers.map((c: unknown) => name('container', c)) : [],
@@ -82,7 +83,7 @@ performanceRouter.post('/observations', handle(async req => {
 
 const existing = (req: Request) => {
   const meta = getObservation(String(req.params.id))
-  if (!meta) throw new BadRequest('observação não encontrada')
+  if (!meta) throw new BadRequest(say({ en: 'observation not found', pt: 'observação não encontrada' }))
   return meta
 }
 
@@ -96,11 +97,11 @@ performanceRouter.post('/observations/:id/resume', handle(async req => {
 }))
 performanceRouter.delete('/observations/:id', handle(req => deleteObservation(existing(req).id)))
 
-// Amostras já gravadas de uma vez (backlog) e depois as novas, enquanto a coleta estiver ativa.
+// Samples already stored, all at once (backlog), then the new ones while collection is active.
 performanceRouter.get('/observations/:id/stream', (req, res) => {
   const meta = getObservation(String(req.params.id))
   if (!meta) {
-    res.status(404).json({ error: 'observação não encontrada' })
+    res.status(404).json({ error: say({ en: 'observation not found', pt: 'observação não encontrada' }) })
     return
   }
   const sse = openSse(res)
@@ -114,15 +115,15 @@ performanceRouter.get('/observations/:id/stream', (req, res) => {
   sse.signal.addEventListener('abort', unsubscribe, { once: true })
 })
 
-// Histórico anterior ao início, reconstruído do Prometheus: degradação lenta aparece em horas.
+// History before the start, rebuilt from Prometheus: slow degradation shows up over hours.
 performanceRouter.get('/observations/:id/history', handle(async req => {
   const meta = existing(req)
   const hours = Math.min(72, Math.max(1, Number(req.query.hours) || 24))
   const toMs = Date.now()
-  // ~300 pontos por série bastam para o gráfico; passar disso só engorda a resposta.
+  // ~300 points per series are enough for the chart; more only bloats the response.
   const stepSec = Math.max(60, Math.round((hours * 3600) / 300 / 60) * 60)
   const samples = await fetchHistory(await resolveTarget(meta.kubeconfigId, meta.context), meta.namespace, meta.targets.map(t => t.pod), toMs - hours * 3600_000, toMs, stepSec)
-  if (!samples) throw new BadRequest('sem Prometheus neste cluster: não há histórico para reconstruir')
+  if (!samples) throw new BadRequest(say({ en: 'no Prometheus in this cluster: there is no history to rebuild', pt: 'sem Prometheus neste cluster: não há histórico para reconstruir' }))
   return { samples, hours, stepSec }
 }))
 
@@ -144,16 +145,16 @@ performanceRouter.post('/observations/:id/report', async (req, res) => {
     if (historyHours) {
       const toMs = Date.now()
       const history = await fetchHistory(await resolveTarget(meta.kubeconfigId, meta.context), meta.namespace, meta.targets.map(t => t.pod), toMs - historyHours * 3600_000, toMs, 300).catch(e => {
-        sse.send({ type: 'status', message: `histórico indisponível: ${cleanKubeMessage((e as Error).message)}` })
+        sse.send({ type: 'status', message: say({ en: 'history unavailable: ', pt: 'histórico indisponível: ' }) + cleanKubeMessage((e as Error).message) })
         return null
       })
       if (history?.length) samples = [...history.filter(h => !samples.length || h.t < samples[0].t), ...samples]
     }
-    if (!samples.length) throw new Error('sem amostras no período selecionado')
-    sse.send({ type: 'status', message: `${samples.length} amostras agregadas em blocos de 5 min` })
+    if (!samples.length) throw new Error(say({ en: 'no samples in the selected period', pt: 'sem amostras no período selecionado' }))
+    sse.send({ type: 'status', message: say({ en: `${samples.length} samples aggregated in 5-min blocks`, pt: `${samples.length} amostras agregadas em blocos de 5 min` }) })
     const prompt = buildReportPrompt({ namespace: meta.namespace, targets: meta.targets, from, to, buckets: aggregateSamples(samples) })
     const result = await runAi({ prompt, cwd, signal: sse.signal, onEvent: sse.send, timeoutMs: 5 * 60_000 })
-    if (result.stopped) throw new Error('geração interrompida')
+    if (result.stopped) throw new Error(say({ en: 'generation stopped', pt: 'geração interrompida' }))
     const report = saveReport(meta, sanitizeReport(result.text), { from, to, historyHours, provider: result.provider, model: result.model })
     sse.send({ type: 'done', report })
   } catch (e) {
@@ -167,9 +168,9 @@ performanceRouter.post('/observations/:id/report', async (req, res) => {
 performanceRouter.get('/reports', handle(() => ({ reports: listReports() })))
 performanceRouter.get('/reports/:id', handle(req => {
   const r = getReport(String(req.params.id))
-  if (!r) throw new BadRequest('relatório não encontrado')
+  if (!r) throw new BadRequest(say({ en: 'report not found', pt: 'relatório não encontrado' }))
   return r
 }))
 performanceRouter.delete('/reports/:id', handle(req => {
-  if (!deleteReport(String(req.params.id))) throw new BadRequest('relatório não encontrado')
+  if (!deleteReport(String(req.params.id))) throw new BadRequest(say({ en: 'report not found', pt: 'relatório não encontrado' }))
 }))

@@ -4,6 +4,7 @@ import { AGENT_HOME, expandHome, tildify } from '../paths.ts'
 import { AGENT_IDS, activate, agentTargets, deactivate, stateOf, type AgentId } from './agents.ts'
 import { discover, type DiscoveredItem, type Kind } from './discover.ts'
 import { readConfig, readMeta, saveMeta, saveRoots, STATUSES, type Status } from './store.ts'
+import { say } from '../i18n.ts'
 
 export class CatalogError extends Error {
   readonly status: number
@@ -46,23 +47,23 @@ export function listCatalog() {
 
 function findItem(id: string) {
   const item = load().items.find(i => i.id === id)
-  if (!item) throw new CatalogError('item não encontrado; a pasta pode ter mudado, atualize a lista', 404)
+  if (!item) throw new CatalogError(say({ en: 'item not found; the folder may have changed, refresh the list', pt: 'item não encontrado; a pasta pode ter mudado, atualize a lista' }), 404)
   return item
 }
 
 export function setRoots(input: unknown) {
-  if (!Array.isArray(input)) throw new CatalogError('informe a lista de pastas')
+  if (!Array.isArray(input)) throw new CatalogError(say({ en: 'send the list of folders', pt: 'informe a lista de pastas' }))
   const roots = [...new Set(input.map(r => expandHome(String(r).trim())).filter(Boolean))]
   for (const r of roots) {
-    if (!statSync(r, { throwIfNoEntry: false })?.isDirectory()) throw new CatalogError(`pasta não encontrada: ${r}`)
+    if (!statSync(r, { throwIfNoEntry: false })?.isDirectory()) throw new CatalogError(say({ en: `folder not found: ${r}`, pt: `pasta não encontrada: ${r}` }))
   }
   saveRoots(roots)
 }
 
 export function updateMeta(id: string, body: { status?: unknown; notes?: unknown }) {
   const item = findItem(id)
-  if (body.status !== undefined && !STATUSES.includes(body.status as Status)) throw new CatalogError('status inválido')
-  if (body.notes !== undefined && (typeof body.notes !== 'string' || body.notes.length > 20_000)) throw new CatalogError('notas inválidas')
+  if (body.status !== undefined && !STATUSES.includes(body.status as Status)) throw new CatalogError(say({ en: 'invalid status', pt: 'status inválido' }))
+  if (body.notes !== undefined && (typeof body.notes !== 'string' || body.notes.length > 20_000)) throw new CatalogError(say({ en: 'invalid notes', pt: 'notas inválidas' }))
   saveMeta(item.path, {
     ...(body.status !== undefined && { status: body.status as Status }),
     ...(body.notes !== undefined && { notes: body.notes as string }),
@@ -72,7 +73,7 @@ export function updateMeta(id: string, body: { status?: unknown; notes?: unknown
 const isAgent = (v: string): v is AgentId => AGENT_IDS.includes(v as AgentId)
 
 export function setAgent(id: string, agent: string, on: boolean) {
-  if (!isAgent(agent)) throw new CatalogError(`agente desconhecido: ${agent}`, 404)
+  if (!isAgent(agent)) throw new CatalogError(say({ en: `unknown agent: ${agent}`, pt: `agente desconhecido: ${agent}` }), 404)
   const item = findItem(id)
   try {
     if (on) activate(AGENT_HOME, agent, item)
@@ -111,15 +112,15 @@ const PREFIX: Record<string, string> = { rule: 'rule-', persona: 'persona-', tem
 // Cria o arquivo com o frontmatter da convenção; o conteúdo é escrito no editor, não em formulário.
 export function createItem(body: { root?: unknown; kind?: unknown; slug?: unknown; description?: unknown }) {
   const roots = readConfig().roots
-  if (typeof body.root !== 'string' || !roots.includes(body.root)) throw new CatalogError('escolha uma das pastas do catálogo')
-  if (!CREATABLE.includes(body.kind as never)) throw new CatalogError('tipo inválido')
-  if (typeof body.slug !== 'string' || !SLUG.test(body.slug)) throw new CatalogError('nome em minúsculas, sem acento, separado por hífen')
-  if (typeof body.description !== 'string' || !body.description.trim()) throw new CatalogError('a descrição é obrigatória')
+  if (typeof body.root !== 'string' || !roots.includes(body.root)) throw new CatalogError(say({ en: 'choose one of the catalog folders', pt: 'escolha uma das pastas do catálogo' }))
+  if (!CREATABLE.includes(body.kind as never)) throw new CatalogError(say({ en: 'invalid type', pt: 'tipo inválido' }))
+  if (typeof body.slug !== 'string' || !SLUG.test(body.slug)) throw new CatalogError(say({ en: 'name in lowercase, no accents, separated by hyphens', pt: 'nome em minúsculas, sem acento, separado por hífen' }))
+  if (typeof body.description !== 'string' || !body.description.trim()) throw new CatalogError(say({ en: 'the description is required', pt: 'a descrição é obrigatória' }))
 
   const kind = body.kind as (typeof CREATABLE)[number]
   const description = body.description.trim().replace(/\n/g, ' ')
   const file = kind === 'skill' ? join(body.root, body.slug, 'SKILL.md') : join(body.root, `${PREFIX[kind]}${body.slug}.md`)
-  if (existsSync(file)) throw new CatalogError(`${tildify(file)} já existe`, 409)
+  if (existsSync(file)) throw new CatalogError(say({ en: `${tildify(file)} already exists`, pt: `${tildify(file)} já existe` }), 409)
 
   mkdirSync(join(file, '..'), { recursive: true })
   writeFileSync(file, ['---', `name: ${body.slug}`, `description: ${description}`, '---', '', `# ${body.slug}`, '', ''].join('\n'))

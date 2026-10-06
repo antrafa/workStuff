@@ -13,6 +13,7 @@ import { PodsTable } from './PodsTable'
 import { ProblemsPanel } from './ProblemsPanel'
 import { usePolling } from './usePolling'
 import { fetchNamespaces, fetchPods, refreshSession, setShared, useClusterShared, type Pod } from './api'
+import { tx } from '@/lib/i18n'
 
 export default function ClusterPage() {
   const { aba } = useParams()
@@ -42,13 +43,13 @@ export default function ClusterPage() {
   return (
     <Page
       title="Cluster"
-      hint="Pods, nodes e problemas do kubeconfig ativo, com diagnóstico por IA."
+      hint={tx({ en: 'Pods, nodes and problems of the active kubeconfig, with AI diagnosis.', pt: 'Pods, nodes e problemas do kubeconfig ativo, com diagnóstico por IA.' })}
       actions={
         session && (
           <>
             {pods.data && <PodCounts pods={pods.data} />}
-            <button className="btn" onClick={pods.reload} title="Recarrega os pods agora (o painel já atualiza a cada 30s)">
-              <RotateCw size={14} className={pods.loading ? 'spin' : ''} /> Atualizar
+            <button className="btn" onClick={pods.reload} title={tx({ en: 'Reloads the pods now (the panel already refreshes every 30s)', pt: 'Recarrega os pods agora (o painel já atualiza a cada 30s)' })}>
+              <RotateCw size={14} className={pods.loading ? 'spin' : ''} /> {tx({ en: 'Refresh', pt: 'Atualizar' })}
             </button>
           </>
         )
@@ -59,14 +60,14 @@ export default function ClusterPage() {
       {session && (
         <>
           <nav className="tabs" role="tablist">
-            <TabLink to="/cluster" end icon={LayoutGrid} label="Visão geral" />
+            <TabLink to="/cluster" end icon={LayoutGrid} label={tx({ en: 'Overview', pt: 'Visão geral' })} />
             <TabLink
               to="/cluster/problemas"
               icon={TriangleAlert}
-              label="Problemas"
+              label={tx({ en: 'Problems', pt: 'Problemas' })}
               badge={problems > 0 ? <span className="badge badge-crit">{problems}</span> : null}
             />
-            <TabLink to="/cluster/doctor" icon={Bot} label="Cluster Doctor" badge={<span className="badge badge-signal">IA</span>} />
+            <TabLink to="/cluster/doctor" icon={Bot} label="Cluster Doctor" badge={<span className="badge badge-signal">{tx({ en: 'AI', pt: 'IA' })}</span>} />
           </nav>
 
           {!aba && (
@@ -104,15 +105,15 @@ export default function ClusterPage() {
   )
 }
 
-// Os números que respondem "está tudo bem?" ao lado do título, sem precisar rolar.
+// The numbers that answer "is everything fine?" next to the title, without scrolling.
 function PodCounts({ pods }: { pods: Pod[] }) {
   const critical = pods.filter(p => p.health.level === 'critical').length
   const warning = pods.filter(p => p.health.level === 'warning').length
   return (
     <dl className="head-stats">
       <div><dt className="eyebrow">Pods</dt><dd>{pods.length}</dd></div>
-      <div className={critical ? 'is-crit' : ''}><dt className="eyebrow">◆ Crítico</dt><dd>{critical}</dd></div>
-      <div className={warning ? 'is-warn' : ''}><dt className="eyebrow">▲ Atenção</dt><dd>{warning}</dd></div>
+      <div className={critical ? 'is-crit' : ''}><dt className="eyebrow">◆ {tx({ en: 'Critical', pt: 'Crítico' })}</dt><dd>{critical}</dd></div>
+      <div className={warning ? 'is-warn' : ''}><dt className="eyebrow">▲ {tx({ en: 'Warning', pt: 'Atenção' })}</dt><dd>{warning}</dd></div>
     </dl>
   )
 }

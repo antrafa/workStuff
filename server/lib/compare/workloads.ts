@@ -5,6 +5,7 @@
 import assert from 'node:assert/strict'
 import { createHmac, randomBytes } from 'node:crypto'
 import { KubeError, kubectlJson, type Target } from '../k8s/kubectl.ts'
+import { say } from '../i18n.ts'
 
 type EnvVar = { name: string; value?: string; valueFrom?: { secretKeyRef?: { name: string; key: string }; configMapKeyRef?: { name: string; key: string }; fieldRef?: { fieldPath: string } } }
 type Probe = { httpGet?: { path?: string; port?: number | string }; tcpSocket?: { port?: number | string }; exec?: unknown; initialDelaySeconds?: number; periodSeconds?: number; timeoutSeconds?: number; failureThreshold?: number }
@@ -110,7 +111,7 @@ export async function readWorkloads(t: Target, namespace: string): Promise<{ wor
     if (e instanceof KubeError && e.kind === 'forbidden') return (forbidden.push(kind), { items: [] })
     throw e
   })))
-  if (forbidden.length === KINDS.length) throw new KubeError(`sem permissão para listar ${KINDS.join(', ')} em ${namespace}`, 'forbidden')
+  if (forbidden.length === KINDS.length) throw new KubeError(say({ en: `no permission to list ${KINDS.join(', ')} in ${namespace}`, pt: `sem permissão para listar ${KINDS.join(', ')} em ${namespace}` }), 'forbidden')
   return { workloads: lists.flatMap(l => l.items.map(flatten)), forbidden }
 }
 

@@ -10,15 +10,17 @@ import { StatusBar } from './StatusBar'
 import { helpFor } from './help'
 import { setTheme, useTheme } from './theme'
 import { refreshSession, useClusterShared } from '@/features/cluster/api'
+import { tx } from '@/lib/i18n'
 
-// O que a moldura avisa em cada ambiente; sem classificação vale como PRO.
+// What the frame says in each environment; an unclassified one counts as PRO.
 const FRAME_TAG: Record<string, string> = {
-  DES: 'DES · desenvolvimento · ações com confirmação',
-  ITG: 'ITG · integração · ações com confirmação',
-  HML: 'HML · homologação · ações com confirmação',
-  PRO: 'PRO · produção · somente leitura',
-  none: 'sem ambiente · somente leitura até classificar',
+  DES: tx({ en: 'DES · development · actions ask for confirmation', pt: 'DES · desenvolvimento · ações com confirmação' }),
+  ITG: tx({ en: 'ITG · integration · actions ask for confirmation', pt: 'ITG · integração · ações com confirmação' }),
+  HML: tx({ en: 'HML · staging · actions ask for confirmation', pt: 'HML · homologação · ações com confirmação' }),
+  PRO: tx({ en: 'PRO · production · read-only', pt: 'PRO · produção · somente leitura' }),
+  none: tx({ en: 'no environment · read-only until classified', pt: 'sem ambiente · somente leitura até classificar' }),
 }
+const SETTINGS = tx({ en: 'Settings', pt: 'Configurações' })
 
 export function Layout() {
   const { pathname } = useLocation()
@@ -35,8 +37,8 @@ export function Layout() {
   const help = helpFor(pathname)
   const pageHelp = help ? { purpose: help.purpose, open: () => setHelpOpen(true) } : null
 
-  // A moldura só aparece nas telas que agem sobre o cluster conectado; o resto é esta máquina.
-  const onCluster = current?.group.label === 'Kubernetes' && cluster.session
+  // The frame only shows on screens that act on the connected cluster; the rest is this machine.
+  const onCluster = current?.group.id === 'kubernetes' && cluster.session
   const env = onCluster ? (cluster.session!.kubeconfig.environment ?? 'none') : null
 
   // No celular o menu é gaveta: fecha sozinho ao trocar de tela.
@@ -66,11 +68,11 @@ export function Layout() {
       {env && <div className="env-frame" aria-hidden />}
       {env && <div className="env-tag" role="status">{FRAME_TAG[env]}</div>}
       <div className="nav-backdrop" onClick={() => setNavOpen(false)} />
-      <Sidebar currentGroup={current?.group.label} favorites={favorites} onSearch={() => setPaletteOpen(true)} />
+      <Sidebar currentGroup={current?.group.id} favorites={favorites} onSearch={() => setPaletteOpen(true)} />
 
       <div className="main">
         <header className="topbar">
-          <button className="btn btn-ghost btn-icon nav-toggle" onClick={() => setNavOpen(true)} title="Abrir menu">
+          <button className="btn btn-ghost btn-icon nav-toggle" onClick={() => setNavOpen(true)} title={tx({ en: 'Open menu', pt: 'Abrir menu' })}>
             <Menu size={18} />
           </button>
           {onCluster ? (
@@ -80,12 +82,12 @@ export function Layout() {
                 <b>{cluster.session!.kubeconfig.filename.replace(/\.(ya?ml|kubeconfig)$/, '')}</b>
                 <small>{cluster.session!.context}</small>
               </div>
-              <Link to="/cluster" className="btn btn-sm">trocar</Link>
+              <Link to="/cluster" className="btn btn-sm">{tx({ en: 'switch', pt: 'trocar' })}</Link>
             </div>
           ) : (
             <div className="topbar-env">
               <EnvStamp env="LOCAL" large />
-              <span className="mono muted topbar-env-name">esta máquina</span>
+              <span className="mono muted topbar-env-name">{tx({ en: 'this machine', pt: 'esta máquina' })}</span>
             </div>
           )}
           <div className="crumbs">
@@ -95,26 +97,30 @@ export function Layout() {
                 <button
                   className={`btn btn-ghost btn-sm btn-icon fav-toggle ${favorites.includes(current.item.path) ? 'on' : ''}`}
                   onClick={() => toggleFavorite(current.item.path)}
-                  title={favorites.includes(current.item.path) ? 'Tirar dos favoritos' : 'Favoritar: aparece no topo do menu e abre com Alt + número'}
+                  title={favorites.includes(current.item.path)
+                    ? tx({ en: 'Remove from favorites', pt: 'Tirar dos favoritos' })
+                    : tx({ en: 'Favorite: shows at the top of the menu and opens with Alt + number', pt: 'Favoritar: aparece no topo do menu e abre com Alt + número' })}
                 >
                   <Star size={14} />
                 </button>
               </>
             ) : (
-              <b>Configurações</b>
+              <b>{SETTINGS}</b>
             )}
           </div>
           <div className="spacer" />
           {cluster.session && cluster.problems > 0 && (
-            <Link to="/cluster/problemas" className="pill-link crit" title="Pods com problema na última leitura do cluster ativo">
+            <Link to="/cluster/problemas" className="pill-link crit" title={tx({ en: 'Pods with problems in the last read of the active cluster', pt: 'Pods com problema na última leitura do cluster ativo' })}>
               <AlertTriangle size={13} />
-              {cluster.problems} pods com problema
+              {tx({ en: `${cluster.problems} pods with problems`, pt: `${cluster.problems} pods com problema` })}
             </Link>
           )}
           <button
             className="btn btn-ghost btn-icon"
             onClick={() => setTheme(dark ? 'light' : 'dark')}
-            title={`Tema atual: ${theme}. Clique para ${dark ? 'claro' : 'escuro'}`}
+            title={dark
+              ? tx({ en: `Current theme: ${theme}. Click for light`, pt: `Tema atual: ${theme}. Clique para claro` })
+              : tx({ en: `Current theme: ${theme}. Click for dark`, pt: `Tema atual: ${theme}. Clique para escuro` })}
           >
             {dark ? <Sun size={16} /> : <Moon size={16} />}
           </button>
@@ -124,7 +130,10 @@ export function Layout() {
             <div className="mock-banner" role="status">
               <FlaskConical size={15} />
               <span>
-                <b>Tela em mock.</b> Os dados são de exemplo e as ações só simulam o resultado: nada é lido nem alterado de verdade.
+                {tx({
+                  en: <><b>Mock screen.</b> The data is sample data and actions only simulate the result: nothing is actually read or changed.</>,
+                  pt: <><b>Tela em mock.</b> Os dados são de exemplo e as ações só simulam o resultado: nada é lido nem alterado de verdade.</>,
+                })}
               </span>
             </div>
           )}
@@ -133,7 +142,7 @@ export function Layout() {
               <Outlet />
             </Suspense>
           </PageHelpContext.Provider>
-          {helpOpen && <HelpModal pathname={pathname} title={current?.item.label ?? 'Configurações'} onClose={() => setHelpOpen(false)} />}
+          {helpOpen && <HelpModal pathname={pathname} title={current?.item.label ?? SETTINGS} onClose={() => setHelpOpen(false)} />}
         </main>
         <StatusBar />
       </div>
@@ -154,23 +163,23 @@ function Sidebar({ currentGroup, favorites, onSearch }: SidebarProps) {
       <Link to="/" className="brand">
         <span className="brand-name display">workStuff</span>
       </Link>
-      <button className="nav-search" onClick={onSearch} title="Ir para qualquer tela pelo nome ou pelo que ela faz">
-        <Search size={14} /> <span>Buscar tela</span> <kbd>Ctrl K</kbd>
+      <button className="nav-search" onClick={onSearch} title={tx({ en: 'Go to any screen by its name or what it does', pt: 'Ir para qualquer tela pelo nome ou pelo que ela faz' })}>
+        <Search size={14} /> <span>{tx({ en: 'Find screen', pt: 'Buscar tela' })}</span> <kbd>Ctrl K</kbd>
       </button>
       <nav className="nav">
         {favoriteItems.length > 0 && (
           <div className="nav-group">
-            <div className="eyebrow nav-group-head static">Favoritos</div>
+            <div className="eyebrow nav-group-head static">{tx({ en: 'Favorites', pt: 'Favoritos' })}</div>
             {favoriteItems.map((item, i) => <NavItemLink key={item.path} item={item} favorite shortcut={i + 1} />)}
           </div>
         )}
         {NAV.map(group => {
           const items = group.items.filter(i => !hidden.includes(i.path))
           if (items.length === 0) return null
-          const open = group.label === currentGroup || openGroups.includes(group.label)
+          const open = group.id === currentGroup || openGroups.includes(group.id)
           return (
-            <div key={group.label} className="nav-group">
-              <button className="eyebrow nav-group-head" aria-expanded={open} onClick={() => toggleGroup(group.label)} disabled={group.label === currentGroup}>
+            <div key={group.id} className="nav-group">
+              <button className="eyebrow nav-group-head" aria-expanded={open} onClick={() => toggleGroup(group.id)} disabled={group.id === currentGroup}>
                 {group.label} <span className="spacer" /> <span className="mono">{items.length}</span> <ChevronRight size={11} className="nav-chevron" />
               </button>
               {open && items.map(item => <NavItemLink key={item.path} item={item} />)}
@@ -181,7 +190,7 @@ function Sidebar({ currentGroup, favorites, onSearch }: SidebarProps) {
       <div className="nav-foot">
         <NavLink to="/configuracoes" className="nav-link">
           <Settings size={15} />
-          <span>Configurações</span>
+          <span>{SETTINGS}</span>
         </NavLink>
       </div>
     </aside>
@@ -195,7 +204,7 @@ function NavItemLink({ item, favorite, shortcut }: { item: NavItem; favorite?: b
       to={item.path}
       end={item.path === '/'}
       className={`nav-link ${favorite ? 'is-favorite' : ''}`}
-      title={item.mock ? `${item.hint} · ainda com dados de exemplo` : item.hint}
+      title={item.mock ? tx({ en: `${item.hint} · still with sample data`, pt: `${item.hint} · ainda com dados de exemplo` }) : item.hint}
     >
       <Icon size={15} />
       <span>{item.label}{item.mock && <span className="nav-mock">mock</span>}</span>

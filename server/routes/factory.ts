@@ -29,8 +29,13 @@ import {
   ExecutionCancelledError,
   type ExecutionKind,
 } from '../lib/factory/executions.ts'
+import { say } from '../lib/i18n.ts'
+import type { Pair } from '../lib/lang.ts'
 
 export const factoryRouter = Router()
+
+const NOT_FOUND = () => say({ en: 'task not found', pt: 'tarefa não encontrada' })
+const NO_WORKTREE = () => say({ en: 'task or worktree not found', pt: 'tarefa ou worktree não encontrada' })
 
 // ── Execution core ──────────────────────────────────────────────────────────
 // Every agent pipeline runs through runExecution: it owns the AbortSignal
@@ -90,9 +95,9 @@ async function runExecution(
 
 // Each action only makes sense from some states; anything else is a stale button
 // or a double click, and running it would rebuild a worktree or merge the wrong thing.
-function refuseState(res: Response, task: FactoryTask, allowed: FactoryTaskState[], action: string): boolean {
+function refuseState(res: Response, task: FactoryTask, allowed: FactoryTaskState[], action: Pair): boolean {
   if (allowed.includes(task.state) && !isExecuting(task.id)) return false
-  res.status(409).json({ error: `não é possível ${action} com a tarefa no estado "${task.state}"` })
+  res.status(409).json({ error: say({ en: `cannot ${action.en} with the task in state "${task.state}"`, pt: `não é possível ${action.pt} com a tarefa no estado "${task.state}"` }) })
   return true
 }
 
@@ -104,7 +109,7 @@ async function reconcileTask(task: FactoryTask): Promise<FactoryTask> {
   const executing = isExecuting(task.id)
   if (executing || !RUNNING_STATES.includes(task.state)) return { ...task, executing }
 
-  await defaultFactoryStore.failRunningSpans(task.id, 'Execução interrompida: o servidor foi reiniciado.')
+  await defaultFactoryStore.failRunningSpans(task.id, say({ en: 'Run interrupted: the server was restarted.', pt: 'Execução interrompida: o servidor foi reiniciado.' }))
   // Re-read: building from `task` would put back the spans just closed
   const fresh = (await defaultFactoryStore.getTask(task.id)) ?? task
   const backToReview = await restoreReviewedWork(fresh)
@@ -112,8 +117,8 @@ async function reconcileTask(task: FactoryTask): Promise<FactoryTask> {
     ...fresh,
     state: backToReview ? 'review' : 'error',
     error: backToReview
-      ? 'O servidor foi reiniciado durante o ajuste: a worktree voltou ao ponto da última revisão. Peça o ajuste de novo.'
-      : 'Execução interrompida: o servidor foi reiniciado durante o processamento. Tente novamente.',
+      ? say({ en: 'The server restarted during the adjustment: the worktree went back to the last review. Ask for the adjustment again.', pt: 'O servidor foi reiniciado durante o ajuste: a worktree voltou ao ponto da última revisão. Peça o ajuste de novo.' })
+      : say({ en: 'Run interrupted: the server restarted during processing. Try again.', pt: 'Execução interrompida: o servidor foi reiniciado durante o processamento. Tente novamente.' }),
     updatedAt: new Date().toISOString(),
   }
   await defaultFactoryStore.saveTask(fixed)
@@ -126,7 +131,7 @@ async function restoreReviewedWork(task: FactoryTask): Promise<boolean> {
     await resetWorktree(task.worktreePath, task.reviewedHead)
     return true
   } catch (e) {
-    console.error(`[factory] não foi possível voltar ${task.id} à última revisão:`, e)
+    console.error(`[factory] could not put ${task.id} back on its last review:`, e)
     return false
   }
 }
@@ -135,12 +140,12 @@ async function restoreReviewedWork(task: FactoryTask): Promise<boolean> {
 const MODEL_ID = /^[\w.:/-]{1,200}$/
 function agentModelsOf(raw: unknown): FactoryTask['agentModels'] {
   if (raw === null || raw === undefined) return undefined
-  if (typeof raw !== 'object') throw new Error('modelos por agente inválidos')
+  if (typeof raw !== 'object') throw new Error(say({ en: 'invalid per-agent models', pt: 'modelos por agente inválidos' }))
   const out: NonNullable<FactoryTask['agentModels']> = {}
   for (const [id, model] of Object.entries(raw)) {
-    if (!AGENT_ORDER.includes(id as SpecializedAgentId)) throw new Error(`agente desconhecido: ${id}`)
+    if (!AGENT_ORDER.includes(id as SpecializedAgentId)) throw new Error(say({ en: `unknown agent: ${id}`, pt: `agente desconhecido: ${id}` }))
     if (!model) continue
-    if (!MODEL_ID.test(String(model))) throw new Error(`id de modelo inválido para ${id}`)
+    if (!MODEL_ID.test(String(model))) throw new Error(say({ en: `invalid model id for ${id}`, pt: `id de modelo inválido para ${id}` }))
     out[id as SpecializedAgentId] = String(model)
   }
   return Object.keys(out).length ? out : undefined
@@ -149,14 +154,14 @@ function agentModelsOf(raw: unknown): FactoryTask['agentModels'] {
 function budgetOf(raw: unknown): number | undefined {
   if (raw === null || raw === undefined || raw === '') return undefined
   const n = Number(raw)
-  if (!Number.isFinite(n) || n <= 0 || n > 10_000) throw new Error('teto de custo inválido: use um valor em US$ maior que zero')
+  if (!Number.isFinite(n) || n <= 0 || n > 10_000) throw new Error(say({ en: 'invalid cost cap: use a USD value greater than zero', pt: 'teto de custo inválido: use um valor em US$ maior que zero' }))
   return n
 }
 
 type TaskOptions = Pick<FactoryTask, 'provider' | 'model' | 'verifyCommand' | 'agentModels' | 'budgetUsd'>
 function taskOptions(b: Record<string, any>, current?: FactoryTask): TaskOptions {
-  if (b.provider !== undefined && !isProviderId(b.provider)) throw new Error('provedor inválido: use claude, agy ou codex')
-  if (b.model && !MODEL_ID.test(String(b.model))) throw new Error('id de modelo inválido')
+  if (b.provider !== undefined && !isProviderId(b.provider)) throw new Error(say({ en: 'invalid provider: use claude, agy or codex', pt: 'provedor inválido: use claude, agy ou codex' }))
+  if (b.model && !MODEL_ID.test(String(b.model))) throw new Error(say({ en: 'invalid model id', pt: 'id de modelo inválido' }))
   const settings = readSettings()
   return {
     provider: b.provider ?? current?.provider ?? settings.provider,
@@ -194,7 +199,7 @@ factoryRouter.get('/tasks/:id', async (req, res) => {
   try {
     const task = await defaultFactoryStore.getTask(req.params.id as string)
     if (!task) {
-      res.status(404).json({ error: 'tarefa nao encontrada' })
+      res.status(404).json({ error: NOT_FOUND() })
       return
     }
     res.json(await reconcileTask(task))
@@ -241,7 +246,7 @@ factoryRouter.patch('/tasks/:id', async (req, res) => {
   try {
     const task = await defaultFactoryStore.getTask(req.params.id as string)
     if (!task) {
-      res.status(404).json({ error: 'tarefa nao encontrada' })
+      res.status(404).json({ error: NOT_FOUND() })
       return
     }
     const b = req.body ?? {}
@@ -264,7 +269,7 @@ factoryRouter.post('/tasks', async (req, res) => {
   try {
     const b = req.body ?? {}
     if (!b.title || !b.source?.repoPath) {
-      res.status(400).json({ error: 'titulo e caminho do repositorio sao obrigatorios' })
+      res.status(400).json({ error: say({ en: 'title and repository path are required', pt: 'título e caminho do repositório são obrigatórios' }) })
       return
     }
 
@@ -279,7 +284,7 @@ factoryRouter.post('/tasks', async (req, res) => {
     const baseBranch = b.baseBranch || info?.defaultBase || info?.current || 'main'
     // The base branch reaches git as a bare argument: a leading '-' would be read as an option
     if (!validRef(baseBranch)) {
-      res.status(400).json({ error: `branch base inválida: ${baseBranch}` })
+      res.status(400).json({ error: say({ en: `invalid base branch: ${baseBranch}`, pt: `branch base inválida: ${baseBranch}` }) })
       return
     }
     const id = `fac-${Date.now()}`
@@ -332,7 +337,7 @@ factoryRouter.get('/preflight', async (req, res) => {
 // Seletor de pasta nativa
 factoryRouter.post('/pick-folder', async (_req, res) => {
   try {
-    res.json({ path: await pickFolder('Escolha o repositório do projeto') })
+    res.json({ path: await pickFolder(say({ en: "Choose the project's repository", pt: "Escolha o repositório do projeto" })) })
   } catch (e) {
     res.status(400).json({ error: (e as Error).message })
   }
@@ -398,7 +403,7 @@ factoryRouter.post('/tasks/:id/cancel', async (req, res) => {
     const id = req.params.id as string
     const task = await defaultFactoryStore.getTask(id)
     if (!task) {
-      res.status(404).json({ error: 'tarefa nao encontrada' })
+      res.status(404).json({ error: NOT_FOUND() })
       return
     }
     if (cancelExecution(id)) {
@@ -418,13 +423,13 @@ factoryRouter.post('/tasks/:id/cancel', async (req, res) => {
 factoryRouter.post('/tasks/:id/plan', async (req, res) => {
   const task = await defaultFactoryStore.getTask(req.params.id as string)
   if (!task) {
-    res.status(404).json({ error: 'tarefa nao encontrada' })
+    res.status(404).json({ error: NOT_FOUND() })
     return
   }
-  if (refuseState(res, task, ['intake', 'waiting_clarification', 'waiting_approval', 'error'], 'planejar')) return
+  if (refuseState(res, task, ['intake', 'waiting_clarification', 'waiting_approval', 'error'], { en: 'plan', pt: 'planejar' })) return
   const answers = String(req.body?.answers ?? '').trim()
   if (task.state === 'waiting_clarification' && !answers) {
-    res.status(400).json({ error: 'responda às dúvidas do Analyst antes de planejar de novo' })
+    res.status(400).json({ error: say({ en: "answer the Analyst's questions before planning again", pt: "responda às dúvidas do Analyst antes de planejar de novo" }) })
     return
   }
   const questions = task.handoffs?.spec?.openQuestions ?? []
@@ -443,14 +448,14 @@ factoryRouter.post('/tasks/:id/plan', async (req, res) => {
 factoryRouter.post('/tasks/:id/approve-plan', async (req, res) => {
   const task = await defaultFactoryStore.getTask(req.params.id as string)
   if (!task) {
-    res.status(404).json({ error: 'tarefa nao encontrada' })
+    res.status(404).json({ error: NOT_FOUND() })
     return
   }
-  if (refuseState(res, task, ['waiting_approval', 'error'], 'aprovar o plano')) return
+  if (refuseState(res, task, ['waiting_approval', 'error'], { en: 'approve the plan', pt: 'aprovar o plano' })) return
   const editedPlan = typeof req.body?.plan === 'string' ? req.body.plan.trim() : ''
   const plan = editedPlan || task.plan
   if (!plan) {
-    res.status(409).json({ error: 'a tarefa ainda não tem plano aprovado; rode o planejamento antes' })
+    res.status(409).json({ error: say({ en: 'the task has no approved plan yet; run planning first', pt: 'a tarefa ainda não tem plano aprovado; rode o planejamento antes' }) })
     return
   }
   const planEnv = task.handoffs?.plan
@@ -470,14 +475,14 @@ factoryRouter.post('/tasks/:id/approve-plan', async (req, res) => {
 factoryRouter.post('/tasks/:id/adjust', async (req, res) => {
   const task = await defaultFactoryStore.getTask(req.params.id as string)
   if (!task || !task.worktreePath) {
-    res.status(404).json({ error: 'tarefa ou worktree nao encontrada' })
+    res.status(404).json({ error: NO_WORKTREE() })
     return
   }
   // Not from 'error': a build that died midway has no review to adjust, and a failed adjust lands in 'review'
-  if (refuseState(res, task, ['review'], 'pedir ajuste')) return
+  if (refuseState(res, task, ['review'], { en: 'request an adjustment', pt: 'pedir ajuste' })) return
   const feedback = String(req.body?.feedback ?? '').trim()
   if (!feedback) {
-    res.status(400).json({ error: 'feedback e obrigatorio' })
+    res.status(400).json({ error: say({ en: 'feedback is required', pt: 'feedback é obrigatório' }) })
     return
   }
 
@@ -492,7 +497,7 @@ factoryRouter.get('/tasks/:id/diff', async (req, res) => {
   try {
     const task = await defaultFactoryStore.getTask(req.params.id as string)
     if (!task || !task.worktreePath) {
-      res.status(404).json({ error: 'tarefa ou worktree nao encontrada' })
+      res.status(404).json({ error: NO_WORKTREE() })
       return
     }
     const diffData = await getWorktreeDiff(task.worktreePath, task.baseBranch)
@@ -507,7 +512,7 @@ factoryRouter.post('/tasks/:id/open-editor', async (req, res) => {
   try {
     const task = await defaultFactoryStore.getTask(req.params.id as string)
     if (!task || !task.worktreePath) {
-      res.status(404).json({ error: 'tarefa ou worktree nao encontrada' })
+      res.status(404).json({ error: NO_WORKTREE() })
       return
     }
     await openInEditor(task.worktreePath)
@@ -522,13 +527,13 @@ factoryRouter.post('/tasks/:id/finish', async (req, res) => {
   try {
     const task = await defaultFactoryStore.getTask(req.params.id as string)
     if (!task) {
-      res.status(404).json({ error: 'tarefa nao encontrada' })
+      res.status(404).json({ error: NOT_FOUND() })
       return
     }
-    if (refuseState(res, task, ['review'], 'finalizar')) return
+    if (refuseState(res, task, ['review'], { en: 'finish', pt: 'finalizar' })) return
     const mode = req.body?.mode || 'local_merge'
     if (mode !== 'mr' && mode !== 'local_merge') {
-      res.status(400).json({ error: `modo de finalização inválido: ${mode}` })
+      res.status(400).json({ error: say({ en: `invalid finish mode: ${mode}`, pt: `modo de finalização inválido: ${mode}` }) })
       return
     }
     // Same tick as refuseState: a second click finds this execution and gets 409
@@ -555,7 +560,7 @@ async function finishTask(task: FactoryTask, mode: 'mr' | 'local_merge', res: Re
       try {
         await pushWorktreeBranch(task.worktreePath, task.branchName)
       } catch (pushErr) {
-        throw new Error(`Falha ao enviar branch para o servidor remoto: ${(pushErr as Error).message}`)
+        throw new Error(say({ en: `Failed to push the branch to the remote: ${(pushErr as Error).message}`, pt: `Falha ao enviar branch para o servidor remoto: ${(pushErr as Error).message}` }))
       }
     }
 
@@ -603,7 +608,8 @@ async function finishTask(task: FactoryTask, mode: 'mr' | 'local_merge', res: Re
             const data = await resp.json() as { web_url?: string }
             prUrl = data.web_url
           } else {
-            warning = `Branch enviada, mas o GitLab recusou o MR (HTTP ${resp.status}): ${(await resp.text()).slice(0, 300)}`
+            const body = (await resp.text()).slice(0, 300)
+            warning = say({ en: `Branch pushed, but GitLab refused the MR (HTTP ${resp.status}): ${body}`, pt: `Branch enviada, mas o GitLab recusou o MR (HTTP ${resp.status}): ${body}` })
           }
         } else if (src.provider === 'github') {
           const parts = target.projectPath.split('/').filter(Boolean)
@@ -624,15 +630,16 @@ async function finishTask(task: FactoryTask, mode: 'mr' | 'local_merge', res: Re
               const data = await resp.json() as { html_url?: string }
               prUrl = data.html_url
             } else {
-              warning = `Branch enviada, mas o GitHub recusou o PR (HTTP ${resp.status}): ${(await resp.text()).slice(0, 300)}`
+              const body = (await resp.text()).slice(0, 300)
+              warning = say({ en: `Branch pushed, but GitHub refused the PR (HTTP ${resp.status}): ${body}`, pt: `Branch enviada, mas o GitHub recusou o PR (HTTP ${resp.status}): ${body}` })
             }
           }
         }
       } catch (e) {
-        warning = `Branch enviada, mas a abertura do MR falhou: ${(e as Error).message}`
+        warning = say({ en: `Branch pushed, but opening the MR failed: ${(e as Error).message}`, pt: `Branch enviada, mas a abertura do MR falhou: ${(e as Error).message}` })
       }
     } else {
-      warning = `Branch ${task.branchName} enviada, mas nenhuma conexão de Repositórios corresponde a este projeto; abra o MR manualmente.`
+      warning = say({ en: `Branch ${task.branchName} pushed, but no Repositories connection matches this project; open the MR by hand.`, pt: `Branch ${task.branchName} enviada, mas nenhuma conexão de Repositórios corresponde a este projeto; abra o MR manualmente.` })
     }
   }
 
@@ -659,7 +666,7 @@ factoryRouter.delete('/tasks/:id', async (req, res) => {
     cancelExecution(id)
     // Deleting while the run still writes would let it save the task back
     if (!(await waitForIdle(id, 5000))) {
-      res.status(409).json({ error: 'a execução ainda está parando; tente excluir de novo em alguns segundos' })
+      res.status(409).json({ error: say({ en: 'the run is still stopping; try deleting again in a few seconds', pt: 'a execução ainda está parando; tente excluir de novo em alguns segundos' }) })
       return
     }
     const task = await defaultFactoryStore.getTask(id)
@@ -681,11 +688,11 @@ factoryRouter.post('/agents/run', async (req, res) => {
   const prompt = String(b.prompt ?? '').trim()
 
   if (!agentId || !SPECIALIZED_AGENTS[agentId]) {
-    res.status(400).json({ error: 'agente invalido' })
+    res.status(400).json({ error: say({ en: 'invalid agent', pt: 'agente inválido' }) })
     return
   }
   if (!repoPath || !prompt) {
-    res.status(400).json({ error: 'repositorio e prompt sao obrigatorios' })
+    res.status(400).json({ error: say({ en: 'repository and prompt are required', pt: 'repositório e prompt são obrigatórios' }) })
     return
   }
 

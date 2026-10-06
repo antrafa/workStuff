@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router'
 import { useClusterShared } from '@/features/cluster/api'
 import { NAV, type NavItem } from './nav'
 import { toggleFavorite, useFavorites, useHiddenPaths, useRecents } from './menu'
+import { tx } from '@/lib/i18n'
 
 type Entry = { item: NavItem; group: string; signal?: string }
 type Section = { title: string; entries: Entry[] }
@@ -11,10 +12,10 @@ type Section = { title: string; entries: Entry[] }
 const ALL: Entry[] = NAV.flatMap(g => g.items.map(item => ({ item, group: g.label })))
 const byPath = (path: string) => ALL.find(e => e.item.path === path)
 
-// Sem acento e minúsculo: "comparar" acha "Comparar", "servico" acha "Serviços".
+// No accents, lowercase: "comparar" finds "Comparar", "servico" finds "Serviços".
 const fold = (s: string) => s.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase()
 
-// Ctrl K: ir para qualquer tela pelo nome ou pelo que ela faz. Ctrl D fixa a tela marcada nos favoritos.
+// Ctrl K: go to any screen by its name or what it does. Ctrl D pins the highlighted screen to favorites.
 export function CommandPalette({ onClose }: { onClose: () => void }) {
   const [query, setQuery] = useState('')
   const [cursor, setCursor] = useState(0)
@@ -28,17 +29,20 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
     const q = fold(query.trim())
     if (q) {
       const hits = ALL.filter(e => fold(`${e.item.label} ${e.item.hint} ${e.group}`).includes(q))
-      return [{ title: `Telas · ${hits.length}`, entries: hits }]
+      return [{ title: tx({ en: `Screens · ${hits.length}`, pt: `Telas · ${hits.length}` }), entries: hits }]
     }
     const urgent: Entry[] = session && problems > 0
-      ? [{ ...byPath('/cluster')!, signal: `${problems} pods com problema · ${session.kubeconfig.environment ?? 'sem ambiente'}` }]
+      ? [{ ...byPath('/cluster')!, signal: tx({
+        en: `${problems} pods with problems · ${session.kubeconfig.environment ?? 'no environment'}`,
+        pt: `${problems} pods com problema · ${session.kubeconfig.environment ?? 'sem ambiente'}`,
+      }) }]
       : []
     const pick = (paths: string[]) => paths.map(byPath).filter((e): e is Entry => Boolean(e))
     return [
-      { title: 'Precisa de você agora', entries: urgent },
-      { title: 'Favoritos · Alt 1–9', entries: pick(favorites) },
-      { title: 'Recentes', entries: pick(recents.filter(p => !favorites.includes(p))) },
-      { title: 'Todas as telas', entries: ALL.filter(e => !hidden.includes(e.item.path)) },
+      { title: tx({ en: 'Needs you now', pt: 'Precisa de você agora' }), entries: urgent },
+      { title: tx({ en: 'Favorites · Alt 1–9', pt: 'Favoritos · Alt 1–9' }), entries: pick(favorites) },
+      { title: tx({ en: 'Recent', pt: 'Recentes' }), entries: pick(recents.filter(p => !favorites.includes(p))) },
+      { title: tx({ en: 'All screens', pt: 'Todas as telas' }), entries: ALL.filter(e => !hidden.includes(e.item.path)) },
     ].filter(s => s.entries.length > 0)
   }, [query, favorites, recents, hidden, session, problems])
 
@@ -65,10 +69,10 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
   let index = -1
   return (
     <div className="overlay palette-overlay" onMouseDown={e => e.target === e.currentTarget && onClose()}>
-      <div className="palette" role="dialog" aria-modal="true" aria-label="Ir para tela" onKeyDown={onKey}>
+      <div className="palette" role="dialog" aria-modal="true" aria-label={tx({ en: 'Go to screen', pt: 'Ir para tela' })} onKeyDown={onKey}>
         <div className="palette-input">
           <Search size={16} />
-          <input autoFocus value={query} onChange={e => setQuery(e.target.value)} placeholder="Tela ou o que ela faz…" spellCheck={false} />
+          <input autoFocus value={query} onChange={e => setQuery(e.target.value)} placeholder={tx({ en: 'Screen or what it does…', pt: 'Tela ou o que ela faz…' })} spellCheck={false} />
           <kbd>Esc</kbd>
         </div>
         <div className="palette-list">
@@ -97,12 +101,12 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
               })}
             </section>
           ))}
-          {flat.length === 0 && <p className="muted palette-empty">Nenhuma tela casa com “{query}”.</p>}
+          {flat.length === 0 && <p className="muted palette-empty">{tx({ en: `No screen matches “${query}”.`, pt: `Nenhuma tela casa com “${query}”.` })}</p>}
         </div>
         <div className="palette-foot">
-          <span><kbd>↑↓</kbd> mover</span>
-          <span><kbd>↵</kbd> abrir</span>
-          <span><kbd>Ctrl D</kbd> {active && favorites.includes(active.item.path) ? 'tirar dos favoritos' : 'favoritar'}</span>
+          <span><kbd>↑↓</kbd> {tx({ en: 'move', pt: 'mover' })}</span>
+          <span><kbd>↵</kbd> {tx({ en: 'open', pt: 'abrir' })}</span>
+          <span><kbd>Ctrl D</kbd> {active && favorites.includes(active.item.path) ? tx({ en: 'remove from favorites', pt: 'tirar dos favoritos' }) : tx({ en: 'favorite', pt: 'favoritar' })}</span>
         </div>
       </div>
     </div>

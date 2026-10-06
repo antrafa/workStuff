@@ -5,6 +5,7 @@ import { dirname, join } from 'node:path'
 import { promisify } from 'node:util'
 import type { Project } from './providers.ts'
 import type { Protocol, ProviderKind } from './sources.ts'
+import { say } from '../i18n.ts'
 
 const exec = promisify(execFile)
 
@@ -34,8 +35,8 @@ const clean = (s: string) => s.split('\n').filter(l => l.trim() && !/^(Cloning i
 
 export async function cloneProject(p: Project, dest: string, opts: { provider: ProviderKind; protocol: Protocol; token: string | null; signal?: AbortSignal }): Promise<CloneResult> {
   const state = localState(dest)
-  if (state === 'cloned') return { fullPath: p.fullPath, dest, status: 'exists', detail: 'já estava clonado; nada foi alterado' }
-  if (state === 'occupied') return { fullPath: p.fullPath, dest, status: 'skipped', detail: 'a pasta existe, tem arquivos e não é um repositório git; não mexi nela' }
+  if (state === 'cloned') return { fullPath: p.fullPath, dest, status: 'exists', detail: say({ en: 'already cloned; nothing changed', pt: 'já estava clonado; nada foi alterado' }) }
+  if (state === 'occupied') return { fullPath: p.fullPath, dest, status: 'skipped', detail: say({ en: 'the folder exists, has files and is not a git repository; left untouched', pt: 'a pasta existe, tem arquivos e não é um repositório git; não mexi nela' }) }
 
   mkdirSync(dirname(dest), { recursive: true })
   const env: Record<string, string> = { ...process.env as Record<string, string>, GIT_TERMINAL_PROMPT: '0' }
@@ -50,13 +51,13 @@ export async function cloneProject(p: Project, dest: string, opts: { provider: P
   }
   try {
     await exec('git', ['-c', 'credential.helper=', 'clone', '--', opts.protocol === 'ssh' ? p.sshUrl : p.httpUrl, dest], { env, timeout: 15 * 60_000, signal: opts.signal, maxBuffer: 10 * 1024 * 1024 })
-    return { fullPath: p.fullPath, dest, status: 'cloned', detail: 'clonado' }
+    return { fullPath: p.fullPath, dest, status: 'cloned', detail: say({ en: 'cloned', pt: 'clonado' }) }
   } catch (e) {
     const err = e as { stderr?: string; message: string; name?: string }
     const aborted = err.name === 'AbortError'
-    // Clone interrompido deixa pasta pela metade: remove só se fomos nós que a criamos agora.
+    // A stopped clone leaves a half-done folder: remove it only if we just created it.
     if (localState(dest) !== 'cloned' && existsSync(dest)) rmSync(dest, { recursive: true, force: true })
-    const detail = aborted ? 'interrompido por você' : clean(err.stderr ?? err.message) || 'git clone falhou'
+    const detail = aborted ? say({ en: 'stopped by you', pt: 'interrompido por você' }) : clean(err.stderr ?? err.message) || say({ en: 'git clone failed', pt: 'git clone falhou' })
     return { fullPath: p.fullPath, dest, status: 'failed', detail: hint(detail, opts.protocol) }
   } finally {
     pass?.cleanup()
@@ -64,8 +65,8 @@ export async function cloneProject(p: Project, dest: string, opts: { provider: P
 }
 
 function hint(detail: string, protocol: Protocol) {
-  if (protocol === 'ssh' && /Permission denied \(publickey\)|Host key verification/i.test(detail)) return `${detail} → a chave SSH não foi aceita; use "Testar SSH" na conexão ou troque para HTTPS`
-  if (protocol === 'https' && /Authentication failed|could not read Username|403/i.test(detail)) return `${detail} → o token não tem permissão de leitura de repositório (read_repository no GitLab, repo no GitHub)`
+  if (protocol === 'ssh' && /Permission denied \(publickey\)|Host key verification/i.test(detail)) return `${detail} → ${say({ en: 'the SSH key was not accepted; use "Test SSH" on the connection or switch to HTTPS', pt: 'a chave SSH não foi aceita; use "Testar SSH" na conexão ou troque para HTTPS' })}`
+  if (protocol === 'https' && /Authentication failed|could not read Username|403/i.test(detail)) return `${detail} → ${say({ en: 'the token has no repository read permission (read_repository on GitLab, repo on GitHub)', pt: 'o token não tem permissão de leitura de repositório (read_repository no GitLab, repo no GitHub)' })}`
   return detail
 }
 

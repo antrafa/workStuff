@@ -3,6 +3,7 @@
 
 import { RepoError, type ProviderKind } from './sources.ts'
 import { normalizePath } from './layout.ts'
+import { say } from '../i18n.ts'
 
 export type Conn = { provider: ProviderKind; url: string; token: string | null }
 export type Group = { name: string; fullPath: string; description: string }
@@ -37,14 +38,18 @@ export async function send(c: Conn, path: string): Promise<Response> {
   try {
     res = await fetch(`${apiBase(c)}${path}`, { headers, signal: AbortSignal.timeout(TIMEOUT) })
   } catch (e) {
-    throw new RepoError((e as Error).name === 'TimeoutError' ? `${c.url} não respondeu em ${TIMEOUT / 1000}s` : `não consegui falar com ${c.url}: ${(e as Error).message}`, 504)
+    throw new RepoError((e as Error).name === 'TimeoutError'
+      ? say({ en: `${c.url} did not respond in ${TIMEOUT / 1000}s`, pt: `${c.url} não respondeu em ${TIMEOUT / 1000}s` })
+      : say({ en: `could not reach ${c.url}: ${(e as Error).message}`, pt: `não consegui falar com ${c.url}: ${(e as Error).message}` }), 504)
   }
   if (res.status === 401) {
-    throw new RepoError(c.token ? 'o token foi recusado (401): ele expirou ou não tem as permissões pedidas' : 'isto exige login (401): configure um token na conexão, na tela Repositórios', 401)
+    throw new RepoError(c.token
+      ? say({ en: 'the token was refused (401): it expired or lacks the required permissions', pt: 'o token foi recusado (401): ele expirou ou não tem as permissões pedidas' })
+      : say({ en: 'this needs a login (401): set a token on the connection, in the Repositories screen', pt: 'isto exige login (401): configure um token na conexão, na tela Repositórios' }), 401)
   }
-  if (res.status === 403 && res.headers.get('x-ratelimit-remaining') === '0') throw new RepoError('limite de chamadas da API atingido; configure um token para ter limite maior', 429)
-  if (res.status === 404) throw new RepoError('não encontrado: o caminho não existe ou o token não tem acesso a ele', 404)
-  if (!res.ok) throw new RepoError(`${c.url} respondeu ${res.status} em ${path.split('?')[0]}`, 502)
+  if (res.status === 403 && res.headers.get('x-ratelimit-remaining') === '0') throw new RepoError(say({ en: 'API rate limit reached; set a token for a higher limit', pt: 'limite de chamadas da API atingido; configure um token para ter limite maior' }), 429)
+  if (res.status === 404) throw new RepoError(say({ en: 'not found: the path does not exist or the token has no access to it', pt: 'não encontrado: o caminho não existe ou o token não tem acesso a ele' }), 404)
+  if (!res.ok) throw new RepoError(say({ en: `${c.url} answered ${res.status} on ${path.split('?')[0]}`, pt: `${c.url} respondeu ${res.status} em ${path.split('?')[0]}` }), 502)
   return res
 }
 
@@ -77,7 +82,7 @@ const fromGh = (r: GhRepo): Project => ({
 const enc = (p: string) => encodeURIComponent(p)
 
 export async function whoami(c: Conn): Promise<string> {
-  if (!c.token) return 'sem token (só o que é público)'
+  if (!c.token) return say({ en: 'no token (public content only)', pt: 'sem token (só o que é público)' })
   const { data } = await call(c, '/user')
   return (data as { username?: string; login?: string }).username ?? (data as { login: string }).login
 }
@@ -105,9 +110,9 @@ export async function children(c: Conn, rawPath: string): Promise<Children> {
   if (!path) {
     const orgs = c.token ? await all<{ login: string; description: string | null }>(c, '/user/orgs', 500) : []
     const me = c.token ? await whoami(c) : null
-    return { path, webUrl: c.url, groups: [...(me ? [{ name: `${me} (você)`, fullPath: me, description: 'seus repositórios' }] : []), ...orgs.map(o => ({ name: o.login, fullPath: o.login, description: o.description ?? '' }))], projects: [] }
+    return { path, webUrl: c.url, groups: [...(me ? [{ name: say({ en: `${me} (you)`, pt: `${me} (você)` }), fullPath: me, description: say({ en: 'your repositories', pt: 'seus repositórios' }) }] : []), ...orgs.map(o => ({ name: o.login, fullPath: o.login, description: o.description ?? '' }))], projects: [] }
   }
-  if (path.includes('/')) throw new RepoError('no GitHub não há subgrupos: navegue pela organização ou usuário')
+  if (path.includes('/')) throw new RepoError(say({ en: 'GitHub has no subgroups: browse by organization or user', pt: 'no GitHub não há subgrupos: navegue pela organização ou usuário' }))
   const repos = await reposOf(c, path)
   return { path, webUrl: `${c.url}/${path}`, groups: [], projects: repos.map(fromGh).sort((a, b) => a.name.localeCompare(b.name)) }
 }
@@ -123,7 +128,7 @@ async function reposOf(c: Conn, owner: string): Promise<GhRepo[]> {
 // Todos os projetos abaixo de um grupo, inclusive em subgrupos (para clonar o grupo inteiro).
 export async function projectsUnder(c: Conn, rawPath: string): Promise<Project[]> {
   const path = normalizePath(rawPath)
-  if (!path) throw new RepoError('escolha um grupo para clonar; clonar a raiz inteira não é permitido')
+  if (!path) throw new RepoError(say({ en: 'choose a group to clone; cloning the whole root is not allowed', pt: 'escolha um grupo para clonar; clonar a raiz inteira não é permitido' }))
   if (c.provider === 'gitlab') {
     const { data: group } = await call(c, `/groups/${enc(path)}`) as { data: GlGroup }
     return (await all<GlProject>(c, `/groups/${group.id}/projects?include_subgroups=true&with_shared=false&order_by=path&sort=asc`)).map(fromGl)

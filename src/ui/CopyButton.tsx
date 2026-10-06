@@ -1,5 +1,6 @@
 import { Check, Copy } from 'lucide-react'
 import { useState } from 'react'
+import { tx } from '@/lib/i18n'
 
 type Props = { value: string; label?: string }
 
@@ -16,10 +17,10 @@ export function CopyButton({ value, label }: Props) {
     <button
       className={label ? 'btn btn-sm' : 'btn btn-ghost btn-sm btn-icon'}
       onClick={copy}
-      title={`Copiar: ${value.length > 60 ? value.slice(0, 60) + '…' : value}`}
+      title={tx({ en: 'Copy: ', pt: 'Copiar: ' }) + (value.length > 60 ? value.slice(0, 60) + '…' : value)}
     >
       {copied ? <Check size={13} /> : <Copy size={13} />}
-      {label && (copied ? 'copiado' : label)}
+      {label && (copied ? tx({ en: 'copied', pt: 'copiado' }) : label)}
     </button>
   )
 }

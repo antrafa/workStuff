@@ -1,16 +1,22 @@
-// Funções de texto dos conversores: JSON, YAML (pela lib yaml) e diff por linha.
+// Text functions of the converters: JSON, YAML (through the yaml lib) and line diff.
 
 import { parseAllDocuments, stringify } from 'yaml'
+// Relative, not '@/': scripts/check-text.ts imports this file in Node
+import { tx } from '../../lib/i18n.ts'
 
 export function formatJson(input: string, indent = 2): string {
   try {
     return JSON.stringify(JSON.parse(input), null, indent)
   } catch (e) {
-    // A mensagem do JSON.parse varia entre motores e nem sempre traz a posição: ela sai de errorAt().
+    // JSON.parse's message varies between engines and does not always carry the position: errorAt() gives it.
     const pos = errorAt(input)
     const before = input.slice(0, pos).split('\n')
-    const found = pos < input.length ? `encontrei ${JSON.stringify(input[pos])}` : 'o texto terminou antes da hora'
-    throw new Error(`JSON inválido na linha ${before.length}, coluna ${before[before.length - 1].length + 1}: ${found}`)
+    const line = before.length
+    const col = before[before.length - 1].length + 1
+    const found = pos < input.length
+      ? tx({ en: `found ${JSON.stringify(input[pos])}`, pt: `encontrei ${JSON.stringify(input[pos])}` })
+      : tx({ en: 'the text ended too early', pt: 'o texto terminou antes da hora' })
+    throw new Error(tx({ en: `invalid JSON at line ${line}, column ${col}: ${found}`, pt: `JSON inválido na linha ${line}, coluna ${col}: ${found}` }))
   }
 }
 
@@ -83,7 +89,7 @@ export const toYaml = (value: unknown) => stringify(value, { indentSeq: false })
 export function yamlToJson(input: string, indent = 2): string {
   const docs = parseAllDocuments(input)
   const error = docs.flatMap(d => d.errors)[0]
-  if (error) throw new Error(`YAML inválido: ${error.message.split('\n')[0]}`)
+  if (error) throw new Error(tx({ en: 'invalid YAML: ', pt: 'YAML inválido: ' }) + error.message.split('\n')[0])
   const values = docs.map(d => d.toJS())
   return JSON.stringify(values.length === 1 ? values[0] : values, null, indent)
 }
@@ -96,7 +102,7 @@ export const MAX_DIFF_LINES = 4000
 
 export function lineDiff(left: string, right: string): DiffLine[] {
   const a = left.split('\n'), b = right.split('\n')
-  if (a.length > MAX_DIFF_LINES || b.length > MAX_DIFF_LINES) throw new Error(`texto grande demais: até ${MAX_DIFF_LINES} linhas de cada lado`)
+  if (a.length > MAX_DIFF_LINES || b.length > MAX_DIFF_LINES) throw new Error(tx({ en: `text too large: up to ${MAX_DIFF_LINES} lines on each side`, pt: `texto grande demais: até ${MAX_DIFF_LINES} linhas de cada lado` }))
   const lcs = Array.from({ length: a.length + 1 }, () => new Uint32Array(b.length + 1))
   for (let i = a.length - 1; i >= 0; i--) {
     for (let j = b.length - 1; j >= 0; j--) lcs[i][j] = a[i] === b[j] ? lcs[i + 1][j + 1] + 1 : Math.max(lcs[i + 1][j], lcs[i][j + 1])

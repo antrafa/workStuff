@@ -8,6 +8,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { DATA_DIR } from '../paths.ts'
 import type { FactoryTask, ExecutionSpan, ToolCallSpan } from './types.ts'
+import { say } from '../i18n.ts'
 
 export function createFactoryStore(baseDir: string = join(DATA_DIR, 'factory')) {
   // Fires (taskId, event) after each session append. The write is synchronous, so a
@@ -112,7 +113,7 @@ export function createFactoryStore(baseDir: string = join(DATA_DIR, 'factory')) 
     ): Promise<string> {
       const tasks = readTasks()
       const task = tasks.find(t => t.id === taskId)
-      if (!task) throw new Error(`Tarefa ${taskId} nao encontrada`)
+      if (!task) throw new Error(say({ en: `Task ${taskId} not found`, pt: `Tarefa ${taskId} não encontrada` }))
 
       const spanId = `span-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`
       const newSpan: ExecutionSpan = {

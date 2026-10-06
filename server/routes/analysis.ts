@@ -9,6 +9,7 @@ import { REPORT_PROMPT, buildChatPrompt, buildChatSystemPrompt, buildReportSyste
 import {
   AnalysisError, deleteEntry, gitCommit, graphHtmlPath, listReports, readHistory, resolveProject, saveEntry, writeReportFile,
 } from '../lib/analysis/store.ts'
+import { say } from '../lib/i18n.ts'
 
 export const analysisRouter = Router()
 
@@ -22,11 +23,11 @@ function handle(res: Response, fn: () => unknown) {
     })
     .catch(e => {
       console.error('[analysis]', e)
-      res.status(500).json({ error: 'erro interno no servidor; veja o terminal do npm run dev' })
+      res.status(500).json({ error: say({ en: 'internal server error; see the npm run dev terminal', pt: 'erro interno no servidor; veja o terminal do npm run dev' }) })
     })
 }
 
-// Abre o SSE só depois de validar a entrada: erro de validação volta como JSON com status.
+// Opens the SSE only after validating the input: a validation error comes back as JSON with a status.
 function withProject(req: Request, res: Response) {
   try {
     return resolveProject(req.body?.projectPath ?? req.query.projectPath)
@@ -53,19 +54,19 @@ analysisRouter.get('/report', (req, res) =>
 analysisRouter.delete('/report', (req, res) =>
   handle(res, () => {
     const projectPath = String(req.query.projectPath ?? '')
-    if (!deleteEntry(projectPath)) throw new AnalysisError('análise não encontrada', 404)
+    if (!deleteEntry(projectPath)) throw new AnalysisError(say({ en: 'analysis not found', pt: 'análise não encontrada' }), 404)
   }),
 )
 
 analysisRouter.post('/pick-folder', async (_req, res) => {
-  res.json({ path: await pickFolder('Pasta do projeto para analisar') })
+  res.json({ path: await pickFolder(say({ en: 'Project folder to analyze', pt: 'Pasta do projeto para analisar' })) })
 })
 
 analysisRouter.post('/save-to-project', (req, res) =>
   handle(res, () => {
     const projectPath = resolveProject(req.body?.projectPath)
     const entry = readHistory()[projectPath]
-    if (!entry) throw new AnalysisError('gere o relatório antes de gravar', 404)
+    if (!entry) throw new AnalysisError(say({ en: 'generate the report before saving', pt: 'gere o relatório antes de gravar' }), 404)
     return { relativePath: writeReportFile(projectPath, entry) }
   }),
 )
@@ -106,7 +107,7 @@ analysisRouter.post('/run', async (req, res) => {
       },
     })
     if (result.stopped || !result.text.trim()) {
-      sse.send({ type: 'error', message: result.stopped ? 'análise parada; nada foi salvo' : 'o agente terminou sem produzir relatório' })
+      sse.send({ type: 'error', message: result.stopped ? say({ en: 'analysis stopped; nothing was saved', pt: 'análise parada; nada foi salvo' }) : say({ en: 'the agent finished without producing a report', pt: 'o agente terminou sem produzir relatório' }) })
       return
     }
     const entry = { report: sanitizeReport(result.text), generatedAt: new Date().toISOString(), gitCommit: commit, provider: result.provider, model: result.model, durationMs: result.durationMs }
@@ -131,7 +132,7 @@ analysisRouter.post('/chat', async (req, res) => {
   if (!projectPath) return
   const question = typeof req.body?.question === 'string' ? req.body.question.trim() : ''
   if (!question) {
-    res.status(400).json({ error: 'escreva a pergunta' })
+    res.status(400).json({ error: say({ en: 'write the question', pt: 'escreva a pergunta' }) })
     return
   }
   const sse = openSse(res)
@@ -166,7 +167,7 @@ analysisRouter.get('/graph', (req, res) => {
     return
   }
   if (!(projectPath in readHistory())) {
-    res.status(403).json({ error: 'projeto sem análise gerada' })
+    res.status(403).json({ error: say({ en: 'project without a generated analysis', pt: 'projeto sem análise gerada' }) })
     return
   }
   try {
@@ -174,6 +175,6 @@ analysisRouter.get('/graph', (req, res) => {
     res.setHeader('Content-Security-Policy', 'sandbox allow-scripts')
     res.type('html').send(html)
   } catch {
-    res.status(404).json({ error: 'este projeto não tem graphify-out/graph.html' })
+    res.status(404).json({ error: say({ en: 'this project has no graphify-out/graph.html', pt: 'este projeto não tem graphify-out/graph.html' }) })
   }
 })

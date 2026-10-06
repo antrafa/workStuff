@@ -23,7 +23,7 @@ export function recordVisit(path: string) {
 }
 
 export const useOpenGroups = openGroups.use
-export function toggleGroup(label: string) {
+export function toggleGroup(id: string) {
   const list = openGroups.read()
-  openGroups.set(list.includes(label) ? list.filter(l => l !== label) : [...list, label])
+  openGroups.set(list.includes(id) ? list.filter(l => l !== id) : [...list, id])
 }

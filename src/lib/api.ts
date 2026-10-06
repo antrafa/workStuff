@@ -1,4 +1,6 @@
-// Cliente da API local. O erro devolvido traz a mensagem do servidor, pronta para a tela.
+import { tx } from './i18n'
+
+// Local API client. The error it throws carries the server's message, ready for the screen.
 async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
   let res: Response
   try {
@@ -8,10 +10,10 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
       body: body === undefined ? undefined : JSON.stringify(body),
     })
   } catch {
-    throw new Error('o servidor local não respondeu; ele está rodando? (npm run dev)')
+    throw new Error(tx({ en: 'the local server did not respond; is it running? (npm run dev)', pt: 'o servidor local não respondeu; ele está rodando? (npm run dev)' }))
   }
   const data = await res.json().catch(() => null)
-  if (!res.ok) throw new Error(data?.error ?? `${method} ${path} respondeu ${res.status}`)
+  if (!res.ok) throw new Error(data?.error ?? tx({ en: `${method} ${path} answered ${res.status}`, pt: `${method} ${path} respondeu ${res.status}` }))
   return data as T
 }
 

@@ -5,6 +5,7 @@
 import assert from 'node:assert/strict'
 import { run, which } from '../run.ts'
 import type { Severity } from './osv.ts'
+import { say } from '../i18n.ts'
 
 export type TrivyFinding = {
   target: string
@@ -57,8 +58,8 @@ export function parseTrivy(json: TrivyJson): TrivyFinding[] {
 }
 
 export async function runTrivy(t: TrivyTarget): Promise<TrivyFinding[]> {
-  if (t.kind === 'image' && !validImage(t.image)) throw new Error('referência de imagem inválida')
-  if (!(await trivyAvailable())) throw new Error('o trivy não está instalado; veja a tela Máquina')
+  if (t.kind === 'image' && !validImage(t.image)) throw new Error(say({ en: 'invalid image reference', pt: 'referência de imagem inválida' }))
+  if (!(await trivyAvailable())) throw new Error(say({ en: 'trivy is not installed; see the Machine screen', pt: 'o trivy não está instalado; veja a tela Máquina' }))
   // A primeira execução baixa a base de falhas (centenas de MB): limite folgado.
   return parseTrivy(JSON.parse(await run('trivy', trivyArgs(t), 15 * 60_000)) as TrivyJson)
 }

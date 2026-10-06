@@ -1,5 +1,5 @@
-// Runbooks de Dev: automações e procedimentos locais do dia a dia do desenvolvedor (Git, Docker, npm/pnpm).
-// Comandos de leitura rodam direto; comandos que alteram o ambiente (escrita) exibem prévia e pedem confirmação.
+// Dev runbooks: local day-to-day developer procedures (Git, Docker, npm/pnpm).
+// Read commands run directly; commands that change the environment (write) show a preview and ask for confirmation.
 // Autoteste: node server/lib/devRunbooks/devRunbooks.ts --selfcheck
 
 import assert from 'node:assert/strict'
@@ -10,6 +10,7 @@ import { join, relative, resolve, sep } from 'node:path'
 import { promisify } from 'node:util'
 import { DEFAULT_DEV_RUNBOOKS_DIR, dataFile, expandHome } from '../paths.ts'
 import { readJson, writeJson } from '../jsonFile.ts'
+import { say } from '../i18n.ts'
 
 const execFileAsync = promisify(execFile)
 
@@ -56,7 +57,7 @@ export function listDevRunbooks(root: string): { file: string; title: string }[]
 
 export function devRunbookPath(root: string, file: string): string {
   const full = resolve(root, file)
-  if (!full.startsWith(resolve(root) + sep) || !full.endsWith('.md')) throw new Error('runbook fora da pasta configurada')
+  if (!full.startsWith(resolve(root) + sep) || !full.endsWith('.md')) throw new Error(say({ en: 'runbook outside the configured folder', pt: 'runbook fora da pasta configurada' }))
   return full
 }
 
@@ -98,8 +99,8 @@ const VALUE = /^[a-zA-Z0-9_./@:=-]{1,250}$/
 export function fill(line: string, values: Record<string, string>): string {
   return line.replace(VAR, (_all, name: string) => {
     const v = values[name]
-    if (v === undefined || v === '') throw new Error(`preencha a variável ${name}`)
-    if (!VALUE.test(v)) throw new Error(`valor inválido para ${name}: use apenas letras, números e . _ - / @ : =`)
+    if (v === undefined || v === '') throw new Error(say({ en: `fill in the variable ${name}`, pt: `preencha a variável ${name}` }))
+    if (!VALUE.test(v)) throw new Error(say({ en: `invalid value for ${name}: use only letters, numbers and . _ - / @ : =`, pt: `valor inválido para ${name}: use apenas letras, números e . _ - / @ : =` }))
     return v
   })
 }
@@ -132,7 +133,7 @@ export function tokenize(line: string): { tokens: string[] } | { error: string }
     } else if (quote === '"') {
       if (ch === '"') quote = null
       else if (ch === '`' || ch === '$' || ch === '\\' || ch === '\n' || ch === '\r') {
-        return { error: `"${ch}" dentro de aspas duplas é interpretado pelo shell; use aspas simples` }
+        return { error: say({ en: `"${ch}" inside double quotes is interpreted by the shell; use single quotes`, pt: `"${ch}" dentro de aspas duplas é interpretado pelo shell; use aspas simples` }) }
       } else current += ch
     } else if (ch === '"' || ch === "'") {
       quote = ch
@@ -142,13 +143,13 @@ export function tokenize(line: string): { tokens: string[] } | { error: string }
       current = ''
       started = false
     } else if (UNQUOTED_SHELL.test(ch)) {
-      return { error: `só um comando por vez, sem operadores de shell ("${ch}")` }
+      return { error: say({ en: `one command at a time, no shell operators ("${ch}")`, pt: `só um comando por vez, sem operadores de shell ("${ch}")` }) }
     } else {
       current += ch
       started = true
     }
   }
-  if (quote) return { error: 'aspas sem fechamento' }
+  if (quote) return { error: say({ en: 'unclosed quote', pt: 'aspas sem fechamento' }) }
   if (started || current) tokens.push(current)
   return { tokens }
 }
@@ -167,7 +168,7 @@ export function classify(line: string, values: Record<string, string>): Classifi
   }
 
   const trimmed = filled.trim().replace(/^\$\s+/, '')
-  if (!trimmed) return { kind: 'blocked', reason: 'comando vazio' }
+  if (!trimmed) return { kind: 'blocked', reason: say({ en: 'empty command', pt: 'comando vazio' }) }
 
   const parsed = tokenize(trimmed)
   if ('error' in parsed) return { kind: 'blocked', reason: parsed.error }
@@ -175,7 +176,7 @@ export function classify(line: string, values: Record<string, string>): Classifi
 
   const bin = tokens[0]
   if (!ALLOWED_BINS.has(bin)) {
-    return { kind: 'blocked', reason: `comando "${bin}" não permitido; use apenas ferramentas de dev homologadas (git, docker, npm, etc.)` }
+    return { kind: 'blocked', reason: say({ en: `command "${bin}" not allowed; use only approved dev tools (git, docker, npm, etc.)`, pt: `comando "${bin}" não permitido; use apenas ferramentas de dev homologadas (git, docker, npm, etc.)` }) }
   }
 
   const args = tokens.slice(1)
@@ -185,7 +186,7 @@ export function classify(line: string, values: Record<string, string>): Classifi
   if (isVersionQuery) return { kind: 'read', bin, args }
   if (bin === 'git') return classifyGit(args)
 
-  // Classificação Docker
+  // Docker classification
   if (bin === 'docker' || bin === 'docker-compose') {
     if (['ps', 'images', 'logs', 'stats', 'top', 'inspect', 'version', 'info'].includes(sub)) {
       return { kind: 'read', bin, args }
@@ -199,7 +200,7 @@ export function classify(line: string, values: Record<string, string>): Classifi
     return { kind: 'write', bin, args, action: `${bin} ${sub}` }
   }
 
-  // Classificação npm / pnpm / yarn
+  // npm / pnpm / yarn classification
   if (bin === 'npm' || bin === 'pnpm' || bin === 'yarn') {
     const isAuditFix = sub === 'audit' && args[1] === 'fix'
     if (['outdated', 'audit', 'list', 'ls', 'view', 'why'].includes(sub) && !isAuditFix) {
@@ -209,12 +210,12 @@ export function classify(line: string, values: Record<string, string>): Classifi
     return { kind: 'write', bin, args, action: `${bin} ${sub}` }
   }
 
-  // cargo, mvn, gradle, go e make compilam, baixam e gravam artefatos: nunca contam como leitura.
+  // cargo, mvn, gradle, go and make compile, download and write artifacts: never a read.
   return { kind: 'write', bin, args, action: `${bin} ${sub}`.trim() }
 }
 
-// Git: só o que comprovadamente não altera repositório, índice ou working tree roda sem confirmação.
-// Subcomando desconhecido conta como escrita (cherry-pick, clean, bisect, add, revert…).
+// Git: only what provably leaves the repository, index and working tree alone runs without confirmation.
+// An unknown subcommand counts as a write (cherry-pick, clean, bisect, add, revert…).
 const GIT_READ = new Set([
   'status', 'log', 'diff', 'show', 'reflog', 'rev-parse', 'ls-files', 'blame', 'shortlog', 'describe',
   'merge-base', 'rev-list', 'cherry', 'grep', 'range-diff', 'count-objects', 'check-ignore', 'for-each-ref',
@@ -238,17 +239,17 @@ function classifyGit(args: string[]): Classified {
   if (sub === 'fsck') return args.includes('--lost-found') ? write('git fsck --lost-found') : read
   if (sub === 'branch') {
     if (isBranchListing(args.slice(1))) return read
-    return args.some(a => /^(-d|-D|--delete)$/.test(a)) ? write('remover branch') : write('criar ou alterar branch')
+    return args.some(a => /^(-d|-D|--delete)$/.test(a)) ? write(say({ en: 'delete branch', pt: 'remover branch' })) : write(say({ en: 'create or change branch', pt: 'criar ou alterar branch' }))
   }
   if (sub === 'worktree') return !op || op === 'list' ? read : write(`git worktree ${op}`)
   if (sub === 'stash') return op === 'list' || op === 'show' ? read : write(`git stash ${op ?? 'push'}`)
   if (sub === 'remote') return !op || op === '-v' || op === 'show' || op === 'get-url' ? read : write(`git remote ${op}`)
-  if (sub === 'tag') return !op || ['-l', '--list', '-n', '--contains', '--points-at'].includes(op) ? read : write('criar ou remover tag')
-  if (sub === 'fetch') return args.some(a => a === '-p' || a === '--prune') ? write('limpar referências remotas') : read
+  if (sub === 'tag') return !op || ['-l', '--list', '-n', '--contains', '--points-at'].includes(op) ? read : write(say({ en: 'create or delete tag', pt: 'criar ou remover tag' }))
+  if (sub === 'fetch') return args.some(a => a === '-p' || a === '--prune') ? write(say({ en: 'prune remote references', pt: 'limpar referências remotas' })) : read
   return write(`git ${sub}`)
 }
 
-// Comando que depende da pasta do projeto (todos, exceto docker fora do compose, que é global ao daemon).
+// Commands that depend on the project folder (all but docker outside compose, which is global to the daemon).
 export const needsProject = (bin: string, args: string[]) => !(bin === 'docker' && args[0] !== 'compose')
 
 export async function execDevCommand(bin: string, args: string[], cwd?: string, timeoutMs = 60_000): Promise<string> {
@@ -263,7 +264,7 @@ export async function execDevCommand(bin: string, args: string[], cwd?: string, 
   } catch (e) {
     const err = e as { stdout?: string; stderr?: string; message?: string }
     const out = (err.stdout ?? '') + (err.stderr ? `\n${err.stderr}` : '')
-    throw new Error(out.trim() || err.message || 'comando falhou')
+    throw new Error(out.trim() || err.message || say({ en: 'command failed', pt: 'comando falhou' }))
   }
 }
 
@@ -331,8 +332,8 @@ if (import.meta.main && process.argv.includes('--selfcheck')) {
     writeFileSync(join(root, 'git', 'clean.md'), md)
     writeFileSync(join(root, 'leia.txt'), 'x')
     assert.deepEqual(listDevRunbooks(root), [{ file: join('git', 'clean.md'), title: 'Limpeza Git' }])
-    assert.throws(() => devRunbookPath(root, '../fora.md'), /fora da pasta/)
-    assert.throws(() => devRunbookPath(root, 'leia.txt'), /fora da pasta/)
+    assert.throws(() => devRunbookPath(root, '../fora.md'), /outside the configured folder/)
+    assert.throws(() => devRunbookPath(root, 'leia.txt'), /outside the configured folder/)
     assert.equal(devRunbookPath(root, 'git/clean.md'), join(root, 'git', 'clean.md'))
   } finally {
     rmSync(root, { recursive: true, force: true })

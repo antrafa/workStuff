@@ -5,6 +5,7 @@
 
 import assert from 'node:assert/strict'
 import type { FactoryTask, FactoryTaskState } from './types.ts'
+import { say } from '../i18n.ts'
 
 export { RUNNING_STATES } from './types.ts'
 
@@ -22,14 +23,14 @@ const running = new Map<string, Execution>()
 
 export class ExecutionCancelledError extends Error {
   constructor() {
-    super('Execução interrompida pelo usuário.')
+    super(say({ en: 'Run stopped by the user.', pt: 'Execução interrompida pelo usuário.' }))
     this.name = 'ExecutionCancelledError'
   }
 }
 
 export class ExecutionBusyError extends Error {
   constructor() {
-    super('Já existe uma execução em andamento para esta tarefa. Pare a execução atual antes de iniciar outra.')
+    super(say({ en: 'This task already has a run in progress. Stop it before starting another.', pt: 'Já existe uma execução em andamento para esta tarefa. Pare a execução atual antes de iniciar outra.' }))
     this.name = 'ExecutionBusyError'
   }
 }

@@ -8,14 +8,15 @@ import { NewObservation } from './NewObservation'
 import { ObservationDetail } from './ObservationDetail'
 import { ReportSection } from './ReportSection'
 import { deleteObservation, fetchKubeconfigs, fetchObservations, resumeObservation, stopObservation, type Observation, type Status } from './api'
+import { locale, tx } from '@/lib/i18n'
 
 const STATUS: Record<Status, { label: string; badge: string }> = {
-  running: { label: 'rodando', badge: 'badge-ok' },
-  stopped: { label: 'parada', badge: '' },
-  failed: { label: 'falhou', badge: 'badge-crit' },
+  running: { label: tx({ en: 'running', pt: 'rodando' }), badge: 'badge-ok' },
+  stopped: { label: tx({ en: 'stopped', pt: 'parada' }), badge: '' },
+  failed: { label: tx({ en: 'failed', pt: 'falhou' }), badge: 'badge-crit' },
 }
 
-// Observação aberta por último: conveniência deste navegador.
+// Last opened observation: a convenience of this browser.
 const LAST = 'performance-last-observation'
 const readLast = () => {
   try {
@@ -36,7 +37,7 @@ export default function PerformancePage() {
 
   const items = kubeconfigs.data?.items
   const selectedKube = items?.find(k => k.id === kubeconfigId)
-  // Começa pelo kubeconfig ativo na tela Cluster; sem sessão, o primeiro da lista.
+  // Starts with the kubeconfig active on the Cluster screen; with no session, the first in the list.
   useEffect(() => {
     if (kubeconfigId || !items?.length) return
     const session = kubeconfigs.data?.session
@@ -48,7 +49,7 @@ export default function PerformancePage() {
     setContext(session?.kubeconfigId === selectedKube.id ? session.context : selectedKube.currentContext)
   }, [selectedKube])
 
-  // Batimento e status mudam no servidor: relista a cada 15s enquanto houver coleta.
+  // Heartbeat and status change on the server: lists again every 15s while something collects.
   const anyRunning = state.data?.some(o => o.status === 'running') ?? false
   useEffect(() => {
     if (!anyRunning) return
@@ -62,7 +63,7 @@ export default function PerformancePage() {
       if (id) localStorage.setItem(LAST, id)
       else localStorage.removeItem(LAST)
     } catch {
-      // sem storage a seleção vale só nesta aba
+      // no storage: the selection lasts for this tab only
     }
   }
 
@@ -81,15 +82,15 @@ export default function PerformancePage() {
   return (
     <Page
       title="Performance"
-      hint="Grava CPU, memória, restarts, throttling e latência do Istio de pods escolhidos ao longo do tempo, e gera um relatório com IA."
+      hint={tx({ en: 'Records CPU, memory, restarts, throttling and Istio latency of chosen pods over time, and writes a report with AI.', pt: 'Grava CPU, memória, restarts, throttling e latência do Istio de pods escolhidos ao longo do tempo, e gera um relatório com IA.' })}
       actions={
-        <div className="row" title="Kubeconfig desta tela, separado da sessão do Cluster. Cada observação guarda o seu.">
+        <div className="row" title={tx({ en: "This screen's kubeconfig, separate from the Cluster session. Each observation keeps its own.", pt: 'Kubeconfig desta tela, separado da sessão do Cluster. Cada observação guarda o seu.' })}>
           <span className="eyebrow">Kubeconfig</span>
           <select className="select" value={kubeconfigId} onChange={e => setKubeconfigId(e.target.value)} disabled={!items?.length}>
             {items?.map(k => <option key={k.id} value={k.id}>{k.id}{k.environment ? ` · ${k.environment}` : ''}</option>)}
           </select>
           {selectedKube && selectedKube.contexts.length > 1 && (
-            <select className="select" value={context} onChange={e => setContext(e.target.value)} title="Contexto">
+            <select className="select" value={context} onChange={e => setContext(e.target.value)} title={tx({ en: 'Context', pt: 'Contexto' })}>
               {selectedKube.contexts.map(c => <option key={c}>{c}</option>)}
             </select>
           )}
@@ -98,7 +99,7 @@ export default function PerformancePage() {
     >
       {kubeconfigs.error && <div className="callout callout-crit">{kubeconfigs.error}</div>}
       {items?.length === 0 && (
-        <div className="callout callout-warn">Nenhum kubeconfig em ~/.kube. Adicione um pela tela Cluster para observar pods.</div>
+        <div className="callout callout-warn">{tx({ en: 'No kubeconfig in ~/.kube. Add one on the Cluster screen to observe pods.', pt: 'Nenhum kubeconfig em ~/.kube. Adicione um pela tela Cluster para observar pods.' })}</div>
       )}
       {kubeconfigId && context && (
         <NewObservation
@@ -106,7 +107,7 @@ export default function PerformancePage() {
           kubeconfigId={kubeconfigId}
           context={context}
           onStarted={o => {
-            toast(`Observação iniciada com ${o.targets.length} pod(s)`)
+            toast(tx({ en: `Observation started with ${o.targets.length} pod(s)`, pt: `Observação iniciada com ${o.targets.length} pod(s)` }))
             select(o.id)
             state.reload()
           }}
@@ -115,14 +116,14 @@ export default function PerformancePage() {
 
       <section className="card">
         <div className="card-head">
-          <div className="card-title spacer">Observações</div>
+          <div className="card-title spacer">{tx({ en: 'Observations', pt: 'Observações' })}</div>
           <span className="mono muted" style={{ fontSize: 12 }}>{state.data?.length ?? 0}</span>
         </div>
         <Async
           state={state}
           isEmpty={d => d.length === 0}
           skeleton={<div className="card-pad"><SkeletonRows rows={3} /></div>}
-          empty={<Empty icon={Activity} title="Nenhuma observação ainda">Escolha pods acima e clique em “Iniciar observação” para começar a coletar.</Empty>}
+          empty={<Empty icon={Activity} title={tx({ en: 'No observation yet', pt: 'Nenhuma observação ainda' })}>{tx({ en: 'Choose pods above and click “Start observation” to begin collecting.', pt: 'Escolha pods acima e clique em “Iniciar observação” para começar a coletar.' })}</Empty>}
         >
           {list => (
             <div className="obs-list">
@@ -132,18 +133,18 @@ export default function PerformancePage() {
                   <div className="stack spacer" style={{ ['--gap' as string]: '2px' }}>
                     <b className="mono" style={{ fontSize: 12.5 }}>{o.kubeconfigId.replace(/\.(ya?ml|kubeconfig)$/, '')} · {o.namespace} · {o.targets.length} pod(s)</b>
                     <span className="muted" style={{ fontSize: 12 }}>
-                      início {new Date(o.startedAt).toLocaleString('pt-BR')} · a cada {o.intervalSeconds}s
+                      {tx({ en: `started ${new Date(o.startedAt).toLocaleString(locale())} · every ${o.intervalSeconds}s`, pt: `início ${new Date(o.startedAt).toLocaleString(locale())} · a cada ${o.intervalSeconds}s` })}
                       {(o.failure ?? o.lastError) && <span style={{ color: 'var(--crit)' }}> · {o.failure ?? o.lastError}</span>}
                     </span>
                   </div>
                   <span className={`badge ${STATUS[o.status].badge}`}>{STATUS[o.status].label}</span>
                   <div className="row" style={{ ['--gap' as string]: '4px' }} onClick={e => e.stopPropagation()}>
                     {o.status === 'running' ? (
-                      <button className="btn btn-sm" onClick={() => act(() => stopObservation(o.id), 'Coleta parada; os pontos ficam salvos')} title="Para a coleta; os pontos ficam salvos"><Pause size={13} /> Parar</button>
+                      <button className="btn btn-sm" onClick={() => act(() => stopObservation(o.id), tx({ en: 'Collection stopped; the points stay saved', pt: 'Coleta parada; os pontos ficam salvos' }))} title={tx({ en: 'Stops collecting; the points stay saved', pt: 'Para a coleta; os pontos ficam salvos' })}><Pause size={13} /> {tx({ en: 'Stop', pt: 'Parar' })}</button>
                     ) : (
-                      <button className="btn btn-sm" onClick={() => act(() => resumeObservation(o.id), 'Coleta retomada')} title={`Volta a coletar com ${o.kubeconfigId}`}><Play size={13} /> Retomar</button>
+                      <button className="btn btn-sm" onClick={() => act(() => resumeObservation(o.id), tx({ en: 'Collection resumed', pt: 'Coleta retomada' }))} title={tx({ en: `Starts collecting again with ${o.kubeconfigId}`, pt: `Volta a coletar com ${o.kubeconfigId}` })}><Play size={13} /> {tx({ en: 'Resume', pt: 'Retomar' })}</button>
                     )}
-                    <button className="btn btn-ghost btn-sm btn-icon" onClick={() => setDeleting(o)} title="Apagar observação e pontos coletados"><Trash2 size={13} /></button>
+                    <button className="btn btn-ghost btn-sm btn-icon" onClick={() => setDeleting(o)} title={tx({ en: 'Delete the observation and its collected points', pt: 'Apagar observação e pontos coletados' })}><Trash2 size={13} /></button>
                   </div>
                 </div>
               ))}
@@ -157,14 +158,16 @@ export default function PerformancePage() {
 
       {deleting && (
         <ConfirmModal
-          title="Apagar a observação?"
-          confirmLabel="Apagar"
+          title={tx({ en: 'Delete the observation?', pt: 'Apagar a observação?' })}
+          confirmLabel={tx({ en: 'Delete', pt: 'Apagar' })}
           icon={Trash2}
           onClose={() => setDeleting(null)}
-          onConfirm={() => void act(() => deleteObservation(deleting.id), 'Observação apagada').then(() => deleting.id === selectedId && select(null))}
+          onConfirm={() => void act(() => deleteObservation(deleting.id), tx({ en: 'Observation deleted', pt: 'Observação apagada' })).then(() => deleting.id === selectedId && select(null))}
         >
-          A observação de <code className="inline">{deleting.namespace}</code> e todos os pontos coletados são apagados. Não dá para desfazer;
-          relatórios já gerados continuam salvos.
+          {tx({
+            en: <>The observation of <code className="inline">{deleting.namespace}</code> and every collected point are deleted. It cannot be undone; reports already generated stay saved.</>,
+            pt: <>A observação de <code className="inline">{deleting.namespace}</code> e todos os pontos coletados são apagados. Não dá para desfazer; relatórios já gerados continuam salvos.</>,
+          })}
         </ConfirmModal>
       )}
     </Page>
@@ -172,8 +175,8 @@ export default function PerformancePage() {
 }
 
 function Heartbeat({ o }: { o: Observation }) {
-  if (o.status !== 'running') return <span className="dot" title="Sem coleta" />
-  if (!o.lastTickAt) return <span className="dot dot-warn" title="aguardando a 1ª coleta" />
+  if (o.status !== 'running') return <span className="dot" title={tx({ en: 'Not collecting', pt: 'Sem coleta' })} />
+  if (!o.lastTickAt) return <span className="dot dot-warn" title={tx({ en: 'waiting for the 1st collection', pt: 'aguardando a 1ª coleta' })} />
   const stale = Date.now() - new Date(o.lastTickAt).getTime() > o.intervalSeconds * 3000
-  return <span className={`dot ${stale ? 'dot-warn' : 'dot-ok pulse'}`} title={`última coleta ${relTime(o.lastTickAt)}${stale ? ' (atrasada)' : ''}`} />
+  return <span className={`dot ${stale ? 'dot-warn' : 'dot-ok pulse'}`} title={tx({ en: `last collection ${relTime(o.lastTickAt)}${stale ? ' (late)' : ''}`, pt: `última coleta ${relTime(o.lastTickAt)}${stale ? ' (atrasada)' : ''}` })} />
 }

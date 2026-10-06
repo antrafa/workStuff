@@ -11,6 +11,7 @@ import {
   XCircle,
 } from 'lucide-react'
 import type { ExecutionSpan } from '../../../server/lib/factory/types.ts'
+import { locale, tx } from '@/lib/i18n'
 
 type Props = {
   spans?: ExecutionSpan[]
@@ -22,17 +23,17 @@ function formatDuration(ms?: number): string {
   return `${(ms / 1000).toFixed(1)}s`
 }
 
-// Cor do tipo de span: as mesmas variáveis --fx-* da fábrica toda (factory.css)
+// Span kind color: the same --fx-* variables as the rest of the factory (factory.css)
 function getKindBadge(span: ExecutionSpan) {
   switch (span.kind) {
     case 'code':
-      return { label: 'Código Determinístico', icon: Code2, color: 'var(--fx-code)' }
+      return { label: tx({ en: 'Deterministic code', pt: 'Código Determinístico' }), icon: Code2, color: 'var(--fx-code)' }
     case 'gate':
-      return { label: 'Portão de Aceitação', icon: ShieldCheck, color: 'var(--fx-gates)' }
+      return { label: tx({ en: 'Acceptance gate', pt: 'Portão de Aceitação' }), icon: ShieldCheck, color: 'var(--fx-gates)' }
     case 'agent':
     default:
       return {
-        label: 'Agente IA',
+        label: tx({ en: 'AI agent', pt: 'Agente IA' }),
         icon: Cpu,
         color: span.agentId ? `var(--fx-${span.agentId})` : 'var(--fx-engineer)',
       }
@@ -46,15 +47,18 @@ export function TraceTimeline({ spans = [] }: Props) {
     return (
       <div className="card card-pad stack" style={{ textAlign: 'center', padding: 32, gap: 12 }}>
         <Clock size={32} style={{ margin: '0 auto', color: 'var(--muted)' }} />
-        <span style={{ fontWeight: 600 }}>Nenhum trace de execução disponível</span>
+        <span style={{ fontWeight: 600 }}>{tx({ en: 'No execution trace yet', pt: 'Nenhum trace de execução disponível' })}</span>
         <span className="muted" style={{ fontSize: 13, maxWidth: 440, margin: '0 auto' }}>
-          À medida que as fases forem disparadas (planejamento, worktree, agentes, portões e commits), a linha do tempo e as chamadas de ferramentas aparecerão aqui em cascata.
+          {tx({
+            en: 'As the phases run (planning, worktree, agents, gates and commits), the timeline and the tool calls show up here as a waterfall.',
+            pt: 'À medida que as fases forem disparadas (planejamento, worktree, agentes, portões e commits), a linha do tempo e as chamadas de ferramentas aparecerão aqui em cascata.',
+          })}
         </span>
       </div>
     )
   }
 
-  // Calcula limites temporais para o gráfico em cascata (waterfall)
+  // Time bounds for the waterfall
   const timestamps = spans.flatMap(s => [
     new Date(s.startedAt).getTime(),
     s.finishedAt ? new Date(s.finishedAt).getTime() : Date.now(),
@@ -69,15 +73,15 @@ export function TraceTimeline({ spans = [] }: Props) {
 
   return (
     <div className="stack" style={{ gap: 16 }}>
-      {/* Resumo da Execução */}
+      {/* Run summary */}
       <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center', padding: '0 4px' }}>
-        <span className="eyebrow">Cascata de Execução (Waterfall & Spans)</span>
+        <span className="eyebrow">{tx({ en: 'Execution waterfall', pt: 'Cascata de execução' })}</span>
         <span className="muted" style={{ fontSize: 12 }}>
-          Duração total acumulada: {formatDuration(totalDuration)}
+          {tx({ en: 'Total time: ', pt: 'Duração total acumulada: ' })}{formatDuration(totalDuration)}
         </span>
       </div>
 
-      {/* Lista de Spans */}
+      {/* Spans */}
       <div className="stack" style={{ gap: 8 }}>
         {spans.map(span => {
           const startTime = new Date(span.startedAt).getTime()
@@ -100,7 +104,7 @@ export function TraceTimeline({ spans = [] }: Props) {
                 transition: 'border-color 0.2s ease',
               }}
             >
-              {/* Cabeçalho do Span */}
+              {/* Span header */}
               <div
                 className="row"
                 style={{
@@ -122,10 +126,10 @@ export function TraceTimeline({ spans = [] }: Props) {
                     <Clock size={16} className="spin" style={{ color: 'var(--signal)' }} />
                   )}
 
-                  {/* Nome do Span */}
+                  {/* Span name */}
                   <span style={{ fontWeight: 600, fontSize: 13 }}>{span.name}</span>
 
-                  {/* Badge de Tipo */}
+                  {/* Kind badge */}
                   <span
                     className="row"
                     style={{
@@ -150,7 +154,7 @@ export function TraceTimeline({ spans = [] }: Props) {
                 </div>
               </div>
 
-              {/* Barra Visual de Linha do Tempo (Waterfall) */}
+              {/* Waterfall bar */}
               <div
                 style={{
                   height: 4,
@@ -171,7 +175,7 @@ export function TraceTimeline({ spans = [] }: Props) {
                 />
               </div>
 
-              {/* Detalhes Expandidos (Ferramentas, Envelopes, Erros) */}
+              {/* Expanded details (tools, envelopes, errors) */}
               {isExpanded && (
                 <div
                   className="stack"
@@ -188,11 +192,11 @@ export function TraceTimeline({ spans = [] }: Props) {
                     </div>
                   )}
 
-                  {/* Chamadas de Ferramentas */}
+                  {/* Tool calls */}
                   {span.toolCalls && span.toolCalls.length > 0 && (
                     <div className="stack" style={{ gap: 6 }}>
                       <span className="eyebrow">
-                        Ferramentas Executadas ({span.toolCalls.length})
+                        {tx({ en: `Tools run (${span.toolCalls.length})`, pt: `Ferramentas executadas (${span.toolCalls.length})` })}
                       </span>
                       <div className="stack" style={{ gap: 6 }}>
                         {span.toolCalls.map((tc, idx) => (
@@ -232,10 +236,10 @@ export function TraceTimeline({ spans = [] }: Props) {
                     </div>
                   )}
 
-                  {/* Envelope de Saída */}
+                  {/* Output envelope */}
                   {span.details && Object.keys(span.details).length > 0 && (
                     <div className="stack" style={{ gap: 4 }}>
-                      <span className="eyebrow">Detalhes da Execução</span>
+                      <span className="eyebrow">{tx({ en: 'Execution details', pt: 'Detalhes da execução' })}</span>
                       <pre
                         style={{
                           margin: 0,
@@ -251,10 +255,10 @@ export function TraceTimeline({ spans = [] }: Props) {
                     </div>
                   )}
 
-                  {/* Informações de Início e Fim */}
+                  {/* Start and end */}
                   <div className="row" style={{ justifyContent: 'space-between', fontSize: 11, color: 'var(--muted)' }}>
-                    <span>Início: {new Date(span.startedAt).toLocaleTimeString()}</span>
-                    {span.finishedAt && <span>Fim: {new Date(span.finishedAt).toLocaleTimeString()}</span>}
+                    <span>{tx({ en: 'Start: ', pt: 'Início: ' })}{new Date(span.startedAt).toLocaleTimeString(locale())}</span>
+                    {span.finishedAt && <span>{tx({ en: 'End: ', pt: 'Fim: ' })}{new Date(span.finishedAt).toLocaleTimeString(locale())}</span>}
                   </div>
                 </div>
               )}

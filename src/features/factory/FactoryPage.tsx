@@ -18,6 +18,7 @@ import { StandaloneAgentTab } from './StandaloneAgentTab'
 import { FactoryTraceVisualizer } from './timeline/FactoryTraceVisualizer'
 import { isTaskRunning, WAITING_STATES } from './factoryRun'
 import { FactoryWizard, WIZARD_SEEN_KEY } from './FactoryWizard'
+import { tx } from '@/lib/i18n'
 
 function wizardSeen(): boolean {
   try {
@@ -67,21 +68,24 @@ export default function FactoryPage() {
 
   return (
     <Page
-      title="Fábrica de Software"
-      hint="Desenvolvimento com múltiplos agentes, rastreamento visual em linha do tempo, isolamento estrito via Git Worktrees e portões mecânicos de aceitação."
+      title={tx({ en: 'Software Factory', pt: 'Fábrica de Software' })}
+      hint={tx({
+        en: 'Multi-agent development with a visual timeline, strict isolation in Git worktrees and mechanical acceptance gates.',
+        pt: 'Desenvolvimento com múltiplos agentes, rastreamento visual em linha do tempo, isolamento estrito via Git Worktrees e portões mecânicos de aceitação.',
+      })}
       actions={
         <div className="row" style={{ gap: 8 }}>
-          <Link to="/dev-runbooks?file=factory%2Fworktrees-limpeza.md" className="btn btn-sm" title="Abrir Runbooks de Desenvolvimento e Fábrica">
-            <Terminal size={14} /> Runbooks da Fábrica
+          <Link to="/dev-runbooks?file=factory%2Fworktrees-limpeza.md" className="btn btn-sm" title={tx({ en: 'Open the development and factory runbooks', pt: 'Abrir Runbooks de Desenvolvimento e Fábrica' })}>
+            <Terminal size={14} /> {tx({ en: 'Factory runbooks', pt: 'Runbooks da Fábrica' })}
           </Link>
-          <button type="button" className="btn btn-sm" onClick={handleRefresh} title="Atualizar tarefas">
-            <RefreshCw size={14} /> Atualizar
+          <button type="button" className="btn btn-sm" onClick={handleRefresh} title={tx({ en: 'Refresh tasks', pt: 'Atualizar tarefas' })}>
+            <RefreshCw size={14} /> {tx({ en: 'Refresh', pt: 'Atualizar' })}
           </button>
-          <button type="button" className="btn btn-sm" onClick={() => setWizardOpen(true)} title="Passo a passo: pré-requisitos, repositório, demanda e custo">
-            <Compass size={14} /> Modo guiado
+          <button type="button" className="btn btn-sm" onClick={() => setWizardOpen(true)} title={tx({ en: 'Step by step: prerequisites, repository, request and cost', pt: 'Passo a passo: pré-requisitos, repositório, demanda e custo' })}>
+            <Compass size={14} /> {tx({ en: 'Guided mode', pt: 'Modo guiado' })}
           </button>
           <button type="button" className="btn btn-sm btn-primary" onClick={() => setModalOpen(true)}>
-            <Plus size={15} /> Nova Tarefa
+            <Plus size={15} /> {tx({ en: 'New task', pt: 'Nova Tarefa' })}
           </button>
         </div>
       }
@@ -106,19 +110,19 @@ export default function FactoryPage() {
             <div className="row" style={{ justifyContent: 'space-between', borderBottom: '1px solid var(--line)', paddingBottom: 12 }}>
               <Segmented
                 options={[
-                  { id: 'board', label: `Quadro (${tasks.length})` },
-                  { id: 'agents', label: 'Agentes Especializados' },
+                  { id: 'board', label: tx({ en: `Board (${tasks.length})`, pt: `Quadro (${tasks.length})` }) },
+                  { id: 'agents', label: tx({ en: 'Specialized agents', pt: 'Agentes Especializados' }) },
                 ]}
                 value={activeTab}
                 onChange={setActiveTab}
               />
 
               <div className="row" style={{ gap: 12, fontSize: 12, color: 'var(--muted)' }}>
-                <span>Em andamento: <b>{activeCount}</b></span>
+                <span>{tx({ en: 'Running', pt: 'Em andamento' })}: <b>{activeCount}</b></span>
                 <span>·</span>
-                <span>Aguardando você: <b style={{ color: reviewCount > 0 ? 'var(--signal)' : undefined }}>{reviewCount}</b></span>
+                <span>{tx({ en: 'Waiting for you', pt: 'Aguardando você' })}: <b style={{ color: reviewCount > 0 ? 'var(--signal)' : undefined }}>{reviewCount}</b></span>
                 <span>·</span>
-                <span>Concluídas: <b style={{ color: 'var(--ok)' }}>{doneCount}</b></span>
+                <span>{tx({ en: 'Done', pt: 'Concluídas' })}: <b style={{ color: 'var(--ok)' }}>{doneCount}</b></span>
               </div>
             </div>
 
@@ -128,13 +132,16 @@ export default function FactoryPage() {
                   loadedTasks.length === 0 ? (
                     <Empty
                       icon={Factory}
-                      title="Nenhuma tarefa na esteira"
+                      title={tx({ en: 'No task in the pipeline', pt: 'Nenhuma tarefa na esteira' })}
                     >
                       <p className="muted" style={{ maxWidth: 440, margin: '8px auto 16px' }}>
-                        Adicione uma demanda manual ou importe uma issue aberta do seu GitLab ou GitHub para iniciar a esteira com os agentes.
+                        {tx({
+                          en: 'Add a request by hand or import an open issue from your GitLab or GitHub to start the pipeline with the agents.',
+                          pt: 'Adicione uma demanda manual ou importe uma issue aberta do seu GitLab ou GitHub para iniciar a esteira com os agentes.',
+                        })}
                       </p>
                       <button type="button" className="btn btn-primary" onClick={() => setModalOpen(true)}>
-                        <Plus size={15} /> Adicionar Primeira Tarefa
+                        <Plus size={15} /> {tx({ en: 'Add the first task', pt: 'Adicionar Primeira Tarefa' })}
                       </button>
                     </Empty>
                   ) : (

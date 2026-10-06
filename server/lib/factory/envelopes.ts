@@ -15,6 +15,7 @@ import type {
   SpecializedAgentId,
   TestEnvelope,
 } from './types.ts'
+import { say } from '../i18n.ts'
 
 const FENCE = /```(?:json)?\s*([\s\S]*?)\s*```/g
 
@@ -339,10 +340,10 @@ export function computeVerdict(findings: SecurityFinding[], criteria: CriterionC
 // matching text: reviewers rephrase criteria. The Implementer cannot fix this, so it goes to the human.
 export function incompleteReview(review: ReviewEnvelope, security: ReviewEnvelope, expectedCriteria: string[] = []): string[] {
   const reasons: string[] = []
-  if (review.status === 'error') reasons.push(`O Reviewer não concluiu a revisão (sem envelope ou com erro): ${review.summary.slice(0, 300)}`)
-  if (security.status === 'error') reasons.push(`O Security não concluiu a auditoria (sem envelope ou com erro): ${security.summary.slice(0, 300)}`)
+  if (review.status === 'error') reasons.push(say({ en: `The Reviewer did not finish the review (no envelope or an error): ${review.summary.slice(0, 300)}`, pt: `O Reviewer não concluiu a revisão (sem envelope ou com erro): ${review.summary.slice(0, 300)}` }))
+  if (security.status === 'error') reasons.push(say({ en: `Security did not finish the audit (no envelope or an error): ${security.summary.slice(0, 300)}`, pt: `O Security não concluiu a auditoria (sem envelope ou com erro): ${security.summary.slice(0, 300)}` }))
   if (review.status !== 'error' && review.criteria.length < expectedCriteria.length) {
-    reasons.push(`O Reviewer avaliou ${review.criteria.length} de ${expectedCriteria.length} critérios de aceite; os demais não foram verificados.`)
+    reasons.push(say({ en: `The Reviewer checked ${review.criteria.length} of ${expectedCriteria.length} acceptance criteria; the rest were not verified.`, pt: `O Reviewer avaliou ${review.criteria.length} de ${expectedCriteria.length} critérios de aceite; os demais não foram verificados.` }))
   }
   return reasons
 }
@@ -431,7 +432,7 @@ if (import.meta.main && process.argv.includes('--selfcheck')) {
   const okEnv = parseReviewEnvelope('```json\n{"findings":[],"criteria":[{"criterion":"c1","met":true}]}\n```')
   assert.deepEqual(incompleteReview(okEnv, okEnv, ['c1']), [])
   assert.equal(incompleteReview(prose, okEnv).length, 1, 'Reviewer sem envelope torna a revisão incompleta')
-  assert.match(incompleteReview(okEnv, okEnv, ['c1', 'c2'])[0], /1 de 2 critérios/, 'critério omitido não passa calado')
+  assert.match(incompleteReview(okEnv, okEnv, ['c1', 'c2'])[0], /1 of 2 acceptance criteria/, 'critério omitido não passa calado')
 
   const merged = mergeFindings(
     [{ severity: 'medium', description: 'a', file: 'x.ts', line: 1 }, { severity: 'low', description: 'b' }],

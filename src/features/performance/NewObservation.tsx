@@ -3,10 +3,11 @@ import { useEffect, useState } from 'react'
 import { Async, Search, SkeletonRows } from '@/ui'
 import { useAsync } from '@/lib/useAsync'
 import { fetchNamespaces, fetchPods, startObservation, type Observation, type Target } from './api'
+import { tx } from '@/lib/i18n'
 
 type Props = { kubeconfigId: string; context: string; onStarted: (o: Observation) => void }
 
-// Namespace de sistema raramente é o que se quer observar: o primeiro de aplicação vem pré-selecionado.
+// A system namespace is rarely what one wants to observe: the first application one comes preselected.
 const SYSTEM = /^(kube-|cattle-|istio-|fleet-|cert-manager|ingress|default$|local|gitlab-agent|monitoring)/
 
 export function NewObservation({ kubeconfigId, context, onStarted }: Props) {
@@ -25,7 +26,7 @@ export function NewObservation({ kubeconfigId, context, onStarted }: Props) {
   }, [namespaces.data, namespace])
 
   const isSelected = (pod: string) => selected.some(t => t.pod === pod)
-  // O sidecar do Istio vem desmarcado: o que interessa é o consumo da aplicação.
+  // The Istio sidecar comes unchecked: what matters is the application's consumption.
   const togglePod = (pod: string, containers: string[]) =>
     setSelected(s => (isSelected(pod) ? s.filter(t => t.pod !== pod) : [...s, { pod, containers: containers.filter(c => c !== 'istio-proxy') }]))
   const toggleContainer = (pod: string, container: string) =>
@@ -48,7 +49,7 @@ export function NewObservation({ kubeconfigId, context, onStarted }: Props) {
   return (
     <section className="card">
       <div className="card-head" style={{ flexWrap: 'wrap' }}>
-        <div className="card-title spacer">Nova observação</div>
+        <div className="card-title spacer">{tx({ en: 'New observation', pt: 'Nova observação' })}</div>
         {namespaces.data?.limitedRbac ? (
           <input
             className="input mono"
@@ -57,19 +58,19 @@ export function NewObservation({ kubeconfigId, context, onStarted }: Props) {
             defaultValue={namespace}
             onKeyDown={e => e.key === 'Enter' && (setNamespace(e.currentTarget.value.trim()), setSelected([]))}
             onBlur={e => e.target.value.trim() !== namespace && (setNamespace(e.target.value.trim()), setSelected([]))}
-            title="O RBAC não permite listar namespaces: digite o namespace e tecle Enter"
+            title={tx({ en: 'RBAC does not allow listing namespaces: type the namespace and press Enter', pt: 'O RBAC não permite listar namespaces: digite o namespace e tecle Enter' })}
           />
         ) : (
-          <select className="select" value={namespace} onChange={e => (setNamespace(e.target.value), setSelected([]))} title="Namespace dos pods" disabled={!list.length}>
+          <select className="select" value={namespace} onChange={e => (setNamespace(e.target.value), setSelected([]))} title={tx({ en: "The pods' namespace", pt: 'Namespace dos pods' })} disabled={!list.length}>
             {list.map(n => <option key={n}>{n}</option>)}
           </select>
         )}
-        <select className="select" value={interval} onChange={e => setIntervalSeconds(Number(e.target.value))} title="Intervalo entre coletas">
-          {[15, 30, 60, 120].map(s => <option key={s} value={s}>a cada {s}s</option>)}
+        <select className="select" value={interval} onChange={e => setIntervalSeconds(Number(e.target.value))} title={tx({ en: 'Interval between collections', pt: 'Intervalo entre coletas' })}>
+          {[15, 30, 60, 120].map(s => <option key={s} value={s}>{tx({ en: 'every', pt: 'a cada' })} {s}s</option>)}
         </select>
-        <button className="btn btn-sm" onClick={pods.reload} title="Recarrega a lista de pods do namespace"><RotateCw size={13} className={pods.loading ? 'spin' : ''} /> Pods</button>
-        <button className="btn btn-primary" disabled={selected.length === 0 || starting} onClick={start} title={selected.length === 0 ? 'Selecione ao menos um pod' : `Começa a coletar ${selected.length} pod(s) a cada ${interval}s`}>
-          <Play size={14} /> {starting ? 'Iniciando…' : 'Iniciar observação'}
+        <button className="btn btn-sm" onClick={pods.reload} title={tx({ en: "Reloads the namespace's pod list", pt: 'Recarrega a lista de pods do namespace' })}><RotateCw size={13} className={pods.loading ? 'spin' : ''} /> Pods</button>
+        <button className="btn btn-primary" disabled={selected.length === 0 || starting} onClick={start} title={selected.length === 0 ? tx({ en: 'Select at least one pod', pt: 'Selecione ao menos um pod' }) : tx({ en: `Starts collecting ${selected.length} pod(s) every ${interval}s`, pt: `Começa a coletar ${selected.length} pod(s) a cada ${interval}s` })}>
+          <Play size={14} /> {starting ? tx({ en: 'Starting…', pt: 'Iniciando…' }) : tx({ en: 'Start observation', pt: 'Iniciar observação' })}
         </button>
       </div>
       {namespaces.error && <div className="card-pad"><div className="callout callout-crit">{namespaces.error}</div></div>}
@@ -77,10 +78,10 @@ export function NewObservation({ kubeconfigId, context, onStarted }: Props) {
       <div className="obs-columns">
         <div className="stack" style={{ ['--gap' as string]: '8px' }}>
           <div className="row">
-            <span className="eyebrow spacer">Disponíveis</span>
-            <Search value={query} onChange={setQuery} placeholder="filtrar pods…" width={200} />
+            <span className="eyebrow spacer">{tx({ en: 'Available', pt: 'Disponíveis' })}</span>
+            <Search value={query} onChange={setQuery} placeholder={tx({ en: 'filter pods…', pt: 'filtrar pods…' })} width={200} />
           </div>
-          <Async state={pods} isEmpty={d => d.length === 0} skeleton={<SkeletonRows rows={4} height={30} />} empty={<span className="muted">Nenhum pod em {namespace || 'nenhum namespace'}.</span>}>
+          <Async state={pods} isEmpty={d => d.length === 0} skeleton={<SkeletonRows rows={4} height={30} />} empty={<span className="muted">{tx({ en: `No pod in ${namespace || 'no namespace'}.`, pt: `Nenhum pod em ${namespace || 'nenhum namespace'}.` })}</span>}>
             {list => (
               <div className="pick-list">
                 {list.filter(p => p.name.includes(query.trim())).map(p => (
@@ -94,9 +95,9 @@ export function NewObservation({ kubeconfigId, context, onStarted }: Props) {
           </Async>
         </div>
         <div className="stack" style={{ ['--gap' as string]: '8px' }}>
-          <span className="eyebrow">Selecionados · {selected.length}</span>
+          <span className="eyebrow">{tx({ en: 'Selected', pt: 'Selecionados' })} · {selected.length}</span>
           {selected.length === 0 ? (
-            <div className="muted pick-empty">Marque pods à esquerda. O container istio-proxy vem desmarcado.</div>
+            <div className="muted pick-empty">{tx({ en: 'Check pods on the left. The istio-proxy container comes unchecked.', pt: 'Marque pods à esquerda. O container istio-proxy vem desmarcado.' })}</div>
           ) : (
             <div className="pick-list">
               {selected.map(t => (
@@ -110,9 +111,9 @@ export function NewObservation({ kubeconfigId, context, onStarted }: Props) {
                         </label>
                       ))}
                     </div>
-                    {t.containers.length === 0 && <small className="muted">nenhum marcado: coleta todos os containers</small>}
+                    {t.containers.length === 0 && <small className="muted">{tx({ en: 'none checked: collects every container', pt: 'nenhum marcado: coleta todos os containers' })}</small>}
                   </div>
-                  <button className="btn btn-ghost btn-sm btn-icon" onClick={() => togglePod(t.pod, [])} title="Tirar da seleção"><X size={13} /></button>
+                  <button className="btn btn-ghost btn-sm btn-icon" onClick={() => togglePod(t.pod, [])} title={tx({ en: 'Remove from the selection', pt: 'Tirar da seleção' })}><X size={13} /></button>
                 </div>
               ))}
             </div>

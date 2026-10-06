@@ -10,6 +10,7 @@ import { spawn } from 'node:child_process'
 import { run } from '../run.ts'
 import { jail, withSandbox } from './runner.ts'
 import { GIT_NO_HOOKS, uncommittedFiles } from './worktree.ts'
+import { say } from '../i18n.ts'
 
 export type DiffGateResult = {
   passed: boolean
@@ -47,7 +48,7 @@ export async function gateDiffNotEmpty(worktreePath: string, baseBranch = 'main'
       return {
         passed: false,
         filesChanged: [],
-        reason: 'Nenhuma alteração foi realizada nos arquivos do repositório.',
+        reason: say({ en: 'No file in the repository was changed.', pt: 'Nenhuma alteração foi realizada nos arquivos do repositório.' }),
       }
     }
 
@@ -59,7 +60,7 @@ export async function gateDiffNotEmpty(worktreePath: string, baseBranch = 'main'
     return {
       passed: false,
       filesChanged: [],
-      reason: `Falha ao inspecionar diff: ${(err as Error).message}`,
+      reason: say({ en: `Failed to inspect the diff: ${(err as Error).message}`, pt: `Falha ao inspecionar diff: ${(err as Error).message}` }),
     }
   }
 }
@@ -86,7 +87,7 @@ export function gateArtifactsExist(worktreePath: string, claimedFiles: string[],
       passed: false,
       missingFiles,
       foundFiles,
-      reason: `Arquivos esperados não foram encontrados: ${missingFiles.join(', ')}`,
+      reason: say({ en: `Expected files were not found: ${missingFiles.join(', ')}`, pt: `Arquivos esperados não foram encontrados: ${missingFiles.join(', ')}` }),
     }
   }
 
@@ -153,11 +154,11 @@ export async function gateTestsPass(
   const t0 = Date.now()
   const command = opts.command?.trim() || detectVerifyCommand(worktreePath)
   if (!command) {
-    return { passed: true, skipped: true, output: 'Nenhum comando de verificação detectado no repositório.', exitCode: 0, durationMs: 0 }
+    return { passed: true, skipped: true, output: say({ en: 'No verification command detected in the repository.', pt: 'Nenhum comando de verificação detectado no repositório.' }), exitCode: 0, durationMs: 0 }
   }
   return withSandbox([worktreePath, ...buildCacheDirs()], async sandbox => {
     if (!sandbox) {
-      const reason = 'bwrap (bubblewrap) não está instalado: a suíte não roda fora do sandbox porque executa código escrito pelo agente.'
+      const reason = say({ en: 'bwrap (bubblewrap) is not installed: the suite does not run outside the sandbox because it executes code the agent wrote.', pt: 'bwrap (bubblewrap) não está instalado: a suíte não roda fora do sandbox porque executa código escrito pelo agente.' })
       return { passed: false, skipped: true, command, output: reason, exitCode: -1, durationMs: 0, reason }
     }
     const jailed = jail({ ...sandbox, env: throwawayCaches(sandbox.tmpDir) }, worktreePath, 'sh', ['-c', command])
@@ -204,12 +205,12 @@ function spawnVerify(
 
     const timer = setTimeout(() => {
       killTree()
-      fail('Tempo limite de execução de testes excedido.', `\n[Timeout após ${Math.round(timeoutMs / 1000)}s]`)
+      fail(say({ en: 'Test run timed out.', pt: 'Tempo limite de execução de testes excedido.' }), `\n[Timeout ${Math.round(timeoutMs / 1000)}s]`)
     }, timeoutMs)
 
     const onAbort = () => {
       killTree()
-      fail('Execução de testes interrompida pelo usuário.', '\n[Interrompido pelo usuário]')
+      fail(say({ en: 'Test run stopped by the user.', pt: 'Execução de testes interrompida pelo usuário.' }), say({ en: '\n[Stopped by the user]', pt: '\n[Interrompido pelo usuário]' }))
     }
     if (signal?.aborted) onAbort()
     else signal?.addEventListener('abort', onAbort, { once: true })
@@ -226,7 +227,7 @@ function spawnVerify(
         output: output.trim(),
         exitCode,
         durationMs: Date.now() - t0,
-        reason: code === 0 ? undefined : sig ? `Testes encerrados pelo sinal ${sig}` : `Testes falharam com código ${exitCode}`,
+        reason: code === 0 ? undefined : sig ? say({ en: `Tests ended by signal ${sig}`, pt: `Testes encerrados pelo sinal ${sig}` }) : say({ en: `Tests failed with exit code ${exitCode}`, pt: `Testes falharam com código ${exitCode}` }),
       })
     })
   })

@@ -12,10 +12,11 @@ import { deleteKubeconfig, listKubeconfigs, saveKubeconfig, setEnvironment } fro
 import { kubectlJson, kubectlStream } from '../lib/k8s/kubectl.ts'
 import { multiLogArgs, parsePrefixed, selectorSuggestions, validSelector } from '../lib/k8s/multilogs.ts'
 import type { Environment } from '../lib/k8s/policy.ts'
+import { say } from '../lib/i18n.ts'
 
 export const k8sRouter = Router()
 
-// Erro de regra ou do cluster vira resposta com a mensagem; o resto sobe para o handler geral.
+// A rule or cluster error becomes a response with its message; anything else goes to the general handler.
 const handle = (fn: (req: Request) => unknown) => async (req: Request, res: Response) => {
   try {
     res.json((await fn(req)) ?? { ok: true })
@@ -34,7 +35,7 @@ k8sRouter.get('/kubeconfigs', handle(async () => {
 
 k8sRouter.post('/kubeconfigs', handle(async req => {
   const { filename, content } = req.body ?? {}
-  if (typeof filename !== 'string' || typeof content !== 'string') throw new ClusterError('envie o nome e o conteúdo do arquivo')
+  if (typeof filename !== 'string' || typeof content !== 'string') throw new ClusterError(say({ en: 'send the file name and content', pt: 'envie o nome e o conteúdo do arquivo' }))
   return { id: await saveKubeconfig(filename, content) }
 }))
 
@@ -42,7 +43,7 @@ k8sRouter.delete('/kubeconfigs/:id', handle(req => deleteKubeconfig(req.params.i
 
 k8sRouter.put('/kubeconfigs/:id/environment', handle(req => {
   const env = req.body?.environment ?? null
-  if (env !== null && !ENVS.includes(env)) throw new ClusterError('ambiente inválido: use DES, ITG, HML ou PRO')
+  if (env !== null && !ENVS.includes(env)) throw new ClusterError(say({ en: 'invalid environment: use DES, ITG, HML or PRO', pt: 'ambiente inválido: use DES, ITG, HML ou PRO' }))
   setEnvironment(req.params.id as string, env)
 }))
 
@@ -53,7 +54,7 @@ k8sRouter.get('/session', handle(async () => {
 
 k8sRouter.put('/session', handle(async req => {
   const { kubeconfigId, context } = req.body ?? {}
-  if (typeof kubeconfigId !== 'string') throw new ClusterError('informe o kubeconfig')
+  if (typeof kubeconfigId !== 'string') throw new ClusterError(say({ en: 'choose the kubeconfig', pt: 'informe o kubeconfig' }))
   const s = await connect(kubeconfigId, typeof context === 'string' ? context : undefined)
   return s && { kubeconfig: s.kubeconfig, context: s.context }
 }))
@@ -86,7 +87,7 @@ k8sRouter.post('/pods/:ns/:pod/restart', handle(req => {
   return restartWorkload(ns, pod)
 }))
 
-// Logs por SSE (GET, então serve EventSource). Fechar a conexão encerra o kubectl.
+// Logs over SSE (GET, so EventSource works). Closing the connection stops kubectl.
 k8sRouter.get('/pods/:ns/:pod/logs', async (req, res) => {
   let params
   try {
@@ -97,7 +98,7 @@ k8sRouter.get('/pods/:ns/:pod/logs', async (req, res) => {
   }
   const session = await activeSession()
   if (!session) {
-    res.status(409).json({ error: 'nenhum cluster conectado' })
+    res.status(409).json({ error: say({ en: 'no cluster connected', pt: 'nenhum cluster conectado' }) })
     return
   }
   const container = typeof req.query.container === 'string' && req.query.container ? checkName('container', req.query.container) : null
@@ -121,28 +122,28 @@ k8sRouter.get('/pods/:ns/:pod/logs', async (req, res) => {
   child.on('close', code => {
     if (buffer) sse.send({ type: 'line', text: buffer })
     const error = stderr.split('\n').filter(l => l.trim() && !l.startsWith('Warning:')).join(' ')
-    if (code !== 0 && !sse.signal.aborted) sse.send({ type: 'error', message: error || `kubectl logs saiu com código ${code}` })
+    if (code !== 0 && !sse.signal.aborted) sse.send({ type: 'error', message: error || say({ en: `kubectl logs exited with code ${code}`, pt: `kubectl logs saiu com código ${code}` }) })
     sse.send({ type: 'done' })
     sse.end()
   })
 })
 
-// Seletores sugeridos para a tela de logs: as labels de app dos pods do namespace, com quantos pods cada.
+// Selectors suggested to the logs screen: the app labels of the namespace's pods, with how many pods each.
 k8sRouter.get('/logs/selectors', handle(async req => {
   const namespace = checkName('namespace', req.query.namespace)
   const session = await activeSession()
-  if (!session) throw new ClusterError('nenhum cluster conectado', 409)
+  if (!session) throw new ClusterError(say({ en: 'no cluster connected', pt: 'nenhum cluster conectado' }), 409)
   const pods = await kubectlJson<{ items: { metadata: { labels?: Record<string, string> } }[] }>(session.target, ['get', 'pods', '-n', namespace]).catch(e => explain(e))
   return selectorSuggestions(pods.items.map(p => p.metadata.labels ?? {}))
 }))
 
-// Logs de vários pods por seletor de label, por SSE. Cada linha vem com o pod e o container de origem.
+// Logs of several pods by label selector, over SSE. Each line carries its pod and container.
 k8sRouter.get('/logs', async (req, res) => {
   let namespace: string, selector: string, container: string | null
   try {
     namespace = checkName('namespace', req.query.namespace)
     selector = String(req.query.selector ?? '').trim()
-    if (!validSelector(selector)) throw new ClusterError('seletor de label inválido (ex.: app=api ou app.kubernetes.io/name=api)')
+    if (!validSelector(selector)) throw new ClusterError(say({ en: 'invalid label selector (e.g. app=api or app.kubernetes.io/name=api)', pt: 'seletor de label inválido (ex.: app=api ou app.kubernetes.io/name=api)' }))
     container = typeof req.query.container === 'string' && req.query.container ? checkName('container', req.query.container) : null
   } catch (e) {
     res.status(400).json({ error: (e as Error).message })
@@ -150,7 +151,7 @@ k8sRouter.get('/logs', async (req, res) => {
   }
   const session = await activeSession()
   if (!session) {
-    res.status(409).json({ error: 'nenhum cluster conectado' })
+    res.status(409).json({ error: say({ en: 'no cluster connected', pt: 'nenhum cluster conectado' }) })
     return
   }
   const tail = Math.min(Math.max(Number(req.query.tail) || 100, 1), 5000)
@@ -175,13 +176,13 @@ k8sRouter.get('/logs', async (req, res) => {
   child.on('close', code => {
     if (buffer) sendLine(buffer)
     const error = stderr.split('\n').filter(l => l.trim() && !l.startsWith('Warning:')).join(' ')
-    if (code !== 0 && !sse.signal.aborted) sse.send({ type: 'error', message: error || `kubectl logs saiu com código ${code}` })
+    if (code !== 0 && !sse.signal.aborted) sse.send({ type: 'error', message: error || say({ en: `kubectl logs exited with code ${code}`, pt: `kubectl logs saiu com código ${code}` }) })
     sse.send({ type: 'done' })
     sse.end()
   })
 })
 
-// Diagnóstico com IA: logs recentes + eventos + motivos vão no prompt; o agente roda em modo leitura.
+// AI diagnosis: recent logs + events + reasons go in the prompt; the agent runs read-only.
 k8sRouter.post('/pods/:ns/:pod/diagnose', async (req, res) => {
   let params
   try {
@@ -193,7 +194,7 @@ k8sRouter.post('/pods/:ns/:pod/diagnose', async (req, res) => {
   const container = typeof req.body?.container === 'string' && req.body.container ? req.body.container : undefined
   const reasons: string[] = Array.isArray(req.body?.reasons) ? req.body.reasons.map(String).slice(0, 20) : []
   const sse = openSse(res)
-  // Pasta vazia de trabalho: o agente não precisa ler nada da máquina, tudo vai no prompt.
+  // Empty work folder: the agent needs nothing from the machine, everything is in the prompt.
   const cwd = mkdtempSync(join(tmpdir(), 'pod-diagnose-'))
   try {
     const [logs, events] = await Promise.all([recentLogs(params.ns, params.pod, container), podEvents(params.ns, params.pod).catch(() => [])])

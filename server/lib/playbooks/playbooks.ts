@@ -1,5 +1,5 @@
-// Playbooks de IA: procedimentos em Markdown cujos blocos ```prompt ou ```ai viram passos
-// executados pelos modelos de IA configurados no painel, com streaming em tempo real.
+// AI playbooks: Markdown procedures whose ```prompt or ```ai blocks become steps
+// run by the AI models set in the panel, streamed live.
 // Autoteste: node server/lib/playbooks/playbooks.ts --selfcheck
 
 import assert from 'node:assert/strict'
@@ -8,6 +8,7 @@ import { tmpdir } from 'node:os'
 import { join, relative, resolve, sep } from 'node:path'
 import { DEFAULT_PLAYBOOKS_DIR, dataFile, expandHome } from '../paths.ts'
 import { readJson, writeJson } from '../jsonFile.ts'
+import { say } from '../i18n.ts'
 
 export type Segment =
   | { type: 'text'; md: string }
@@ -51,7 +52,7 @@ export function listPlaybooks(root: string): { file: string; title: string }[] {
 
 export function playbookPath(root: string, file: string): string {
   const full = resolve(root, file)
-  if (!full.startsWith(resolve(root) + sep) || !full.endsWith('.md')) throw new Error('playbook fora da pasta configurada')
+  if (!full.startsWith(resolve(root) + sep) || !full.endsWith('.md')) throw new Error(say({ en: 'playbook outside the configured folder', pt: 'playbook fora da pasta configurada' }))
   return full
 }
 
@@ -110,7 +111,7 @@ export function fill(prompt: string, values: Record<string, string>, previousOut
   }
   return prompt.replace(VAR, (_all, name: string) => {
     const v = merged[name]
-    if (v === undefined || v === '') throw new Error(`preencha a variável ${name}`)
+    if (v === undefined || v === '') throw new Error(say({ en: `fill in the variable ${name}`, pt: `preencha a variável ${name}` }))
     return v
   })
 }
@@ -150,7 +151,7 @@ if (import.meta.main && process.argv.includes('--selfcheck')) {
   const filled1 = fill(steps[1].prompt, {}, 'resultado do passo 1')
   assert.ok(filled1.includes('resultado do passo 1'))
 
-  assert.throws(() => fill(steps[0].prompt, { projeto: 'meu-app' }), /preencha a variável contexto/)
+  assert.throws(() => fill(steps[0].prompt, { projeto: 'meu-app' }), /fill in the variable contexto/)
 
   const root = mkdtempSync(join(tmpdir(), 'playbooks-'))
   try {
@@ -158,8 +159,8 @@ if (import.meta.main && process.argv.includes('--selfcheck')) {
     writeFileSync(join(root, 'eng', 'rev.md'), md)
     writeFileSync(join(root, 'outro.txt'), 'x')
     assert.deepEqual(listPlaybooks(root), [{ file: join('eng', 'rev.md'), title: 'Revisão de Código' }])
-    assert.throws(() => playbookPath(root, '../fora.md'), /fora da pasta/)
-    assert.throws(() => playbookPath(root, 'outro.txt'), /fora da pasta/)
+    assert.throws(() => playbookPath(root, '../fora.md'), /outside the configured folder/)
+    assert.throws(() => playbookPath(root, 'outro.txt'), /outside the configured folder/)
     assert.equal(playbookPath(root, 'eng/rev.md'), join(root, 'eng', 'rev.md'))
   } finally {
     rmSync(root, { recursive: true, force: true })

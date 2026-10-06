@@ -3,20 +3,22 @@ import { inkFor, readableOn } from '@/lib/color'
 
 export type Theme = 'dark' | 'light' | 'auto'
 
+// Imported before the language is known (main.tsx, so the theme never flashes): labels are pairs
+// resolved by the screen with tx(), never tx() here.
 export const ACCENTS = [
-  { id: 'azul', label: 'Azul', hex: '#5b9dff' },
-  { id: 'lima', label: 'Lima', hex: '#c6f432' },
-  { id: 'roxo', label: 'Roxo', hex: '#a78bfa' },
-  { id: 'ciano', label: 'Ciano', hex: '#3fd4c8' },
-  { id: 'amarelo', label: 'Amarelo', hex: '#ffd23f' },
-  { id: 'laranja', label: 'Laranja', hex: '#ff9a4d' },
-  { id: 'vermelho', label: 'Vermelho', hex: '#ff6b6b' },
-  { id: 'rosa', label: 'Rosa', hex: '#ff7ac8' },
+  { id: 'azul', label: { en: 'Blue', pt: 'Azul' }, hex: '#5b9dff' },
+  { id: 'lima', label: { en: 'Lime', pt: 'Lima' }, hex: '#c6f432' },
+  { id: 'roxo', label: { en: 'Purple', pt: 'Roxo' }, hex: '#a78bfa' },
+  { id: 'ciano', label: { en: 'Cyan', pt: 'Ciano' }, hex: '#3fd4c8' },
+  { id: 'amarelo', label: { en: 'Yellow', pt: 'Amarelo' }, hex: '#ffd23f' },
+  { id: 'laranja', label: { en: 'Orange', pt: 'Laranja' }, hex: '#ff9a4d' },
+  { id: 'vermelho', label: { en: 'Red', pt: 'Vermelho' }, hex: '#ff6b6b' },
+  { id: 'rosa', label: { en: 'Pink', pt: 'Rosa' }, hex: '#ff7ac8' },
 ] as const
 
 type Prefs = { theme: Theme; accent: string }
 
-// Fundos contra os quais a cor de destaque precisa ser legível (mesmos valores de tokens.css).
+// Backgrounds the accent must be readable on (same values as tokens.css).
 const SURFACE = { dark: '#131418', light: '#ffffff' }
 const DEFAULTS: Prefs = { theme: 'dark', accent: ACCENTS[0].hex }
 
@@ -51,7 +53,7 @@ function update(patch: Partial<Prefs>) {
     localStorage.setItem('theme', next.theme)
     localStorage.setItem('accent', next.accent)
   } catch {
-    // sem storage a preferência vale só nesta aba
+    // no storage: the preference lasts for this tab only
   }
   apply(next)
   listeners.forEach(l => l(next))
@@ -62,7 +64,7 @@ export const setAccent = (accent: string) => update({ accent })
 
 apply(read())
 
-// Em "Automático", troca junto com o sistema sem precisar recarregar.
+// In "auto", follows the system without a reload.
 matchMedia('(prefers-color-scheme: light)').addEventListener('change', () => {
   if (read().theme !== 'auto') return
   apply(read())

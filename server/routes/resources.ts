@@ -9,8 +9,11 @@ import { checkName } from '../lib/k8s/cluster.ts'
 import { getKubeconfig } from '../lib/k8s/kubeconfigs.ts'
 import { kubectlJson } from '../lib/k8s/kubectl.ts'
 import type { Request, Response } from 'express'
+import { say } from '../lib/i18n.ts'
 
 export const resourcesRouter = Router()
+
+const KUBECONFIG_NOT_FOUND = () => say({ en: 'kubeconfig not found', pt: 'kubeconfig não encontrado' })
 
 async function handleGitlab(res: Response, fn: () => unknown) {
   try {
@@ -23,7 +26,7 @@ async function handleGitlab(res: Response, fn: () => unknown) {
 
 const projectIdOf = (raw: string) => {
   const id = Number(raw)
-  if (!Number.isInteger(id) || id <= 0) throw new GitlabError('id de projeto inválido', 400)
+  if (!Number.isInteger(id) || id <= 0) throw new GitlabError(say({ en: 'invalid project id', pt: 'id de projeto inválido' }), 400)
   return id
 }
 
@@ -66,7 +69,7 @@ resourcesRouter.get('/stacks/:projectId/namespace-link', handleCluster(req => ({
 resourcesRouter.put('/stacks/:projectId/namespace-link', handleCluster(async req => {
   const { kubeconfigId, context, namespace } = req.body ?? {}
   const kubeconfig = typeof kubeconfigId === 'string' ? await getKubeconfig(kubeconfigId) : null
-  if (!kubeconfig) throw new ClusterError('kubeconfig não encontrado', 404)
+  if (!kubeconfig) throw new ClusterError(KUBECONFIG_NOT_FOUND(), 404)
   setLink(projectIdOf(req.params.projectId as string), {
     kubeconfigId: kubeconfig.id,
     context: typeof context === 'string' && kubeconfig.contexts.includes(context) ? context : null,
@@ -89,7 +92,7 @@ resourcesRouter.get('/stacks/:projectId/live', handleCluster(async req => {
 // Namespaces de um kubeconfig qualquer, para escolher o vínculo sem mudar a sessão ativa do Cluster.
 resourcesRouter.get('/namespaces', handleCluster(async req => {
   const kubeconfig = typeof req.query.kubeconfigId === 'string' ? await getKubeconfig(req.query.kubeconfigId) : null
-  if (!kubeconfig) throw new ClusterError('kubeconfig não encontrado', 404)
+  if (!kubeconfig) throw new ClusterError(KUBECONFIG_NOT_FOUND(), 404)
   try {
     const list = await kubectlJson<{ items: { metadata: { name: string } }[] }>({ file: kubeconfig.file, context: kubeconfig.currentContext }, ['get', 'namespaces'])
     return { namespaces: list.items.map(n => n.metadata.name).sort(), limitedRbac: false }

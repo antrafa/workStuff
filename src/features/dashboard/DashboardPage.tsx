@@ -30,6 +30,7 @@ import { fetchServices, type Services } from '@/features/local/api'
 import type { FactoryTask } from '../../../server/lib/factory/types.ts'
 import { FactoryStatusChip } from '@/features/factory/timeline/FactoryStatusChip'
 import { isTaskRunning } from '../factory/factoryRun'
+import { locale, tx } from '@/lib/i18n'
 
 export default function DashboardPage() {
   const navigate = useNavigate()
@@ -79,7 +80,7 @@ export default function DashboardPage() {
     loadAll(true)
   }, [])
 
-  // Auto-refresh suave a cada 10 segundos
+  // Quiet auto-refresh every 10 seconds
   useEffect(() => {
     const timer = setInterval(() => {
       loadAll(true)
@@ -87,26 +88,26 @@ export default function DashboardPage() {
     return () => clearInterval(timer)
   }, [])
 
-  // Cálculos da Fábrica
+  // Factory figures
   const executingTasks = tasks.filter(isTaskRunning)
   const waitingApprovalTasks = tasks.filter(t => t.state === 'waiting_approval')
   const reviewTasks = tasks.filter(t => t.state === 'review')
   const doneTasks = tasks.filter(t => t.state === 'done')
   const activeTasks = tasks.filter(t => t.state !== 'done' && t.state !== 'canceled')
 
-  // Cálculos do Doctor
+  // Doctor figures
   const doctorFalta = doctorChecks.filter(c => c.status === 'falta').length
   const doctorAviso = doctorChecks.filter(c => c.status === 'aviso').length
   const doctorOk = doctorChecks.filter(c => c.status === 'ok').length
 
-  // Cálculos de Serviços
+  // Services figures
   const listeningCount = services?.ports?.length ?? 0
   const dockerContainers = services?.containers?.length ?? 0
 
   return (
     <Page
-      title="Início"
-      hint="Painel consolidado com a saúde do cluster Kubernetes, execuções ativas da Fábrica de Software e atalhos rápidos do ambiente de desenvolvimento."
+      title={tx({ en: 'Home', pt: 'Início' })}
+      hint={tx({ en: 'Consolidated view of the Kubernetes cluster health, active Software Factory runs and quick shortcuts for the development environment.', pt: 'Painel consolidado com a saúde do cluster Kubernetes, execuções ativas da Fábrica de Software e atalhos rápidos do ambiente de desenvolvimento.' })}
       actions={
         <div className="row" style={{ gap: 8 }}>
           <button
@@ -114,21 +115,21 @@ export default function DashboardPage() {
             className="btn btn-sm"
             onClick={() => loadAll(false)}
             disabled={refreshing}
-            title="Atualizar todos os indicadores agora"
+            title={tx({ en: 'Refresh all indicators now', pt: 'Atualizar todos os indicadores agora' })}
           >
             <RotateCw size={14} className={refreshing ? 'spin' : ''} />
-            {refreshing ? 'Atualizando...' : 'Atualizar'}
+            {refreshing ? tx({ en: 'Refreshing...', pt: 'Atualizando...' }) : tx({ en: 'Refresh', pt: 'Atualizar' })}
           </button>
           <Link to="/fabrica" className="btn btn-sm btn-primary">
-            <Plus size={14} /> Nova Tarefa na Fábrica
+            <Plus size={14} /> {tx({ en: 'New factory task', pt: 'Nova Tarefa na Fábrica' })}
           </Link>
         </div>
       }
     >
       <div className="stack" style={{ gap: 20 }}>
-        {/* 1. GRADE DE MÉTRICAS PRINCIPAIS (HERO STATS) */}
+        {/* 1. Main figures (hero stats) */}
         <div className="grid" style={{ ['--min' as string]: '220px' }}>
-          {/* Card: Fábrica de Software */}
+          {/* Card: Software Factory */}
           <Link
             to="/fabrica"
             className="stat"
@@ -136,7 +137,7 @@ export default function DashboardPage() {
           >
             <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
               <span className="eyebrow" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                <Factory size={14} style={{ color: 'var(--accent)' }} /> Fábrica de Software
+                <Factory size={14} style={{ color: 'var(--accent)' }} /> {tx({ en: 'Software Factory', pt: 'Fábrica de Software' })}
               </span>
               {executingTasks.length > 0 && (
                 <span
@@ -151,7 +152,7 @@ export default function DashboardPage() {
                   }}
                 >
                   <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#4ade80', animation: 'pulse 1.2s infinite' }} />
-                  {executingTasks.length} rodando
+                  {tx({ en: `${executingTasks.length} running`, pt: `${executingTasks.length} rodando` })}
                 </span>
               )}
             </div>
@@ -159,14 +160,14 @@ export default function DashboardPage() {
               <b style={{ color: executingTasks.length > 0 ? '#4ade80' : 'var(--ink)' }}>
                 {loadingTasks ? '...' : activeTasks.length}
               </b>
-              <small style={{ color: 'var(--muted)' }}>tarefas em andamento</small>
+              <small style={{ color: 'var(--muted)' }}>{tx({ en: 'tasks in progress', pt: 'tarefas em andamento' })}</small>
             </div>
             <div className="row" style={{ gap: 10, fontSize: 11, color: 'var(--muted)', marginTop: 4 }}>
-              <span>Aprovação: <strong style={{ color: waitingApprovalTasks.length > 0 ? 'var(--warn)' : 'inherit' }}>{waitingApprovalTasks.length}</strong></span>
+              <span>{tx({ en: 'Approval:', pt: 'Aprovação:' })} <strong style={{ color: waitingApprovalTasks.length > 0 ? 'var(--warn)' : 'inherit' }}>{waitingApprovalTasks.length}</strong></span>
               <span>•</span>
-              <span>Revisão: <strong style={{ color: reviewTasks.length > 0 ? 'var(--accent)' : 'inherit' }}>{reviewTasks.length}</strong></span>
+              <span>{tx({ en: 'Review:', pt: 'Revisão:' })} <strong style={{ color: reviewTasks.length > 0 ? 'var(--accent)' : 'inherit' }}>{reviewTasks.length}</strong></span>
               <span>•</span>
-              <span>Concluídas: {doneTasks.length}</span>
+              <span>{tx({ en: 'Done:', pt: 'Concluídas:' })} {doneTasks.length}</span>
             </div>
           </Link>
 
@@ -178,7 +179,7 @@ export default function DashboardPage() {
           >
             <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
               <span className="eyebrow" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                <Cpu size={14} style={{ color: '#5ad2dd' }} /> Cluster Kubernetes
+                <Cpu size={14} style={{ color: '#5ad2dd' }} /> {tx({ en: 'Kubernetes cluster', pt: 'Cluster Kubernetes' })}
               </span>
               {cluster.session && (
                 <EnvStamp env={cluster.session.kubeconfig.environment} />
@@ -191,26 +192,26 @@ export default function DashboardPage() {
                     {cluster.problems}
                   </b>
                   <small style={{ color: cluster.problems > 0 ? 'var(--crit)' : 'var(--muted)' }}>
-                    {cluster.problems === 1 ? 'pod com problema' : 'pods com problema'}
+                    {cluster.problems === 1 ? tx({ en: 'pod with problems', pt: 'pod com problema' }) : tx({ en: 'pods with problems', pt: 'pods com problema' })}
                   </small>
                 </>
               ) : (
                 <>
-                  <b style={{ fontSize: 20, color: 'var(--muted)' }}>Desconectado</b>
-                  <small style={{ color: 'var(--muted)' }}>selecionar cluster</small>
+                  <b style={{ fontSize: 20, color: 'var(--muted)' }}>{tx({ en: 'Disconnected', pt: 'Desconectado' })}</b>
+                  <small style={{ color: 'var(--muted)' }}>{tx({ en: 'select a cluster', pt: 'selecionar cluster' })}</small>
                 </>
               )}
             </div>
             <div className="row" style={{ gap: 6, fontSize: 11, color: 'var(--muted)', marginTop: 4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
               {cluster.session ? (
-                <span>Contexto: <strong className="mono" style={{ color: 'var(--ink)' }}>{cluster.session.context}</strong></span>
+                <span>{tx({ en: 'Context:', pt: 'Contexto:' })} <strong className="mono" style={{ color: 'var(--ink)' }}>{cluster.session.context}</strong></span>
               ) : (
-                <span>Nenhum kubeconfig ativo no momento</span>
+                <span>{tx({ en: 'No active kubeconfig right now', pt: 'Nenhum kubeconfig ativo no momento' })}</span>
               )}
             </div>
           </Link>
 
-          {/* Card: Saúde da Máquina (Doctor) */}
+          {/* Card: machine health (Doctor) */}
           <Link
             to="/maquina"
             className="stat"
@@ -218,25 +219,25 @@ export default function DashboardPage() {
           >
             <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
               <span className="eyebrow" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                <Stethoscope size={14} style={{ color: doctorFalta > 0 ? 'var(--crit)' : 'var(--ok)' }} /> Máquina &amp; Doctor
+                <Stethoscope size={14} style={{ color: doctorFalta > 0 ? 'var(--crit)' : 'var(--ok)' }} /> {tx({ en: 'Machine & Doctor', pt: 'Máquina & Doctor' })}
               </span>
               {doctorFalta === 0 && !loadingDoctor && (
-                <span className="badge badge-ok" style={{ fontSize: 10 }}>Apta</span>
+                <span className="badge badge-ok" style={{ fontSize: 10 }}>{tx({ en: 'Ready', pt: 'Apta' })}</span>
               )}
             </div>
             <div className="row" style={{ alignItems: 'baseline', gap: 8 }}>
               <b style={{ color: doctorFalta > 0 ? 'var(--crit)' : 'var(--ok)' }}>
-                {loadingDoctor ? '...' : doctorFalta > 0 ? `${doctorFalta} pendências` : `${doctorOk} itens ok`}
+                {loadingDoctor ? '...' : doctorFalta > 0 ? tx({ en: `${doctorFalta} pending`, pt: `${doctorFalta} pendências` }) : tx({ en: `${doctorOk} items ok`, pt: `${doctorOk} itens ok` })}
               </b>
             </div>
             <div className="row" style={{ gap: 10, fontSize: 11, color: 'var(--muted)', marginTop: 4 }}>
-              <span>{doctorAviso} avisos</span>
+              <span>{tx({ en: `${doctorAviso} warnings`, pt: `${doctorAviso} avisos` })}</span>
               <span>•</span>
-              <span>Ferramentas e requisitos locais</span>
+              <span>{tx({ en: 'Local tools and requirements', pt: 'Ferramentas e requisitos locais' })}</span>
             </div>
           </Link>
 
-          {/* Card: Serviços e Portas Locais */}
+          {/* Card: local services and ports */}
           <Link
             to="/servicos"
             className="stat"
@@ -244,32 +245,32 @@ export default function DashboardPage() {
           >
             <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
               <span className="eyebrow" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                <Server size={14} style={{ color: '#c084fc' }} /> Serviços Locais
+                <Server size={14} style={{ color: '#c084fc' }} /> {tx({ en: 'Local services', pt: 'Serviços Locais' })}
               </span>
               {dockerContainers > 0 && (
                 <span className="badge" style={{ fontSize: 10, background: 'rgba(90, 210, 221, 0.15)', color: '#5ad2dd' }}>
-                  {dockerContainers} containers
+                  {tx({ en: `${dockerContainers} containers`, pt: `${dockerContainers} containers` })}
                 </span>
               )}
             </div>
             <div className="row" style={{ alignItems: 'baseline', gap: 8 }}>
               <b>{loadingServices ? '...' : listeningCount}</b>
-              <small style={{ color: 'var(--muted)' }}>portas em escuta</small>
+              <small style={{ color: 'var(--muted)' }}>{tx({ en: 'listening ports', pt: 'portas em escuta' })}</small>
             </div>
             <div className="row" style={{ gap: 10, fontSize: 11, color: 'var(--muted)', marginTop: 4 }}>
-              <span>Docker: {services?.docker ? 'Ativo' : 'Inativo'}</span>
+              <span>Docker: {services?.docker ? tx({ en: 'Active', pt: 'Ativo' }) : tx({ en: 'Inactive', pt: 'Inativo' })}</span>
               <span>•</span>
-              <span>Containers e processos locais</span>
+              <span>{tx({ en: 'Local containers and processes', pt: 'Containers e processos locais' })}</span>
             </div>
           </Link>
         </div>
 
-        {/* 2. SEÇÃO DE DESTAQUE: FÁBRICA DE SOFTWARE */}
+        {/* 2. Featured section: Software Factory */}
         <div className="card">
           <div className="card-head" style={{ justifyContent: 'space-between' }}>
             <div className="row" style={{ gap: 8, alignItems: 'center' }}>
               <Factory size={16} style={{ color: 'var(--accent)' }} />
-              <span className="card-title">Fábrica de Software e Agentes Autônomos</span>
+              <span className="card-title">{tx({ en: 'Software Factory and autonomous agents', pt: 'Fábrica de Software e Agentes Autônomos' })}</span>
               {executingTasks.length > 0 && (
                 <span
                   style={{
@@ -285,13 +286,13 @@ export default function DashboardPage() {
                   }}
                 >
                   <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#4ade80', animation: 'pulse 1.2s infinite' }} />
-                  {executingTasks.length} {executingTasks.length === 1 ? 'execução ativa em background' : 'execuções ativas em background'}
+                  {executingTasks.length} {executingTasks.length === 1 ? tx({ en: 'run active in the background', pt: 'execução ativa em background' }) : tx({ en: 'runs active in the background', pt: 'execuções ativas em background' })}
                 </span>
               )}
             </div>
             <div className="row" style={{ gap: 8 }}>
               <Link to="/fabrica" className="btn btn-sm">
-                Abrir Fábrica Completa <ArrowRight size={13} />
+                {tx({ en: 'Open the full Factory', pt: 'Abrir Fábrica Completa' })} <ArrowRight size={13} />
               </Link>
             </div>
           </div>
@@ -300,13 +301,13 @@ export default function DashboardPage() {
             {tasks.length === 0 ? (
               <div style={{ textAlign: 'center', padding: '24px 16px', color: 'var(--muted)' }}>
                 <p style={{ margin: '0 0 10px', fontSize: 13.5 }}>
-                  Nenhuma demanda criada ainda na Fábrica de Software.
+                  {tx({ en: 'No demand created in the Software Factory yet.', pt: 'Nenhuma demanda criada ainda na Fábrica de Software.' })}
                 </p>
                 <p style={{ margin: '0 0 16px', fontSize: 12, color: 'var(--muted)' }}>
-                  Crie uma demanda para que o Architect planeje e o Implementer codifique em worktrees Git isoladas com validação mecânica de testes.
+                  {tx({ en: 'Create a demand so the Architect plans it and the Implementer codes it in isolated Git worktrees, with mechanical test validation.', pt: 'Crie uma demanda para que o Architect planeje e o Implementer codifique em worktrees Git isoladas com validação mecânica de testes.' })}
                 </p>
                 <Link to="/fabrica" className="btn btn-sm btn-primary">
-                  <Plus size={14} /> Iniciar Primeira Demanda
+                  <Plus size={14} /> {tx({ en: 'Start the first demand', pt: 'Iniciar Primeira Demanda' })}
                 </Link>
               </div>
             ) : (
@@ -347,7 +348,7 @@ export default function DashboardPage() {
                             {task.title}
                           </span>
                           <span className="mono" style={{ fontSize: 11, color: 'var(--muted)' }}>
-                            {task.branchName} • criado em {new Date(task.createdAt).toLocaleDateString()} às {new Date(task.createdAt).toLocaleTimeString()}
+                            {task.branchName} • {tx({ en: `created on ${new Date(task.createdAt).toLocaleDateString(locale())} at ${new Date(task.createdAt).toLocaleTimeString(locale())}`, pt: `criado em ${new Date(task.createdAt).toLocaleDateString(locale())} às ${new Date(task.createdAt).toLocaleTimeString(locale())}` })}
                           </span>
                         </div>
                       </div>
@@ -356,11 +357,11 @@ export default function DashboardPage() {
                         <FactoryStatusChip state={task.state} executing={task.executing} />
                         {task.state === 'waiting_approval' && (
                           <span className="badge badge-warn" style={{ fontSize: 11 }}>
-                            Aguardando aprovação
+                            {tx({ en: 'Waiting for approval', pt: 'Aguardando aprovação' })}
                           </span>
                         )}
                         <span className="btn btn-ghost btn-sm" style={{ padding: '0 8px', fontSize: 12 }}>
-                          Ver detalhes →
+                          {tx({ en: 'See details →', pt: 'Ver detalhes →' })}
                         </span>
                       </div>
                     </div>
@@ -371,13 +372,13 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {/* 3. GRID DE 2 COLUNAS: KUBERNETES & MÁQUINA */}
+        {/* 3. Two columns: Kubernetes and machine */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))', gap: 16 }}>
-          {/* Coluna 1: Kubernetes & Observabilidade */}
+          {/* Column 1: Kubernetes and observability */}
           <div className="card">
             <div className="card-head">
               <Cpu size={16} style={{ color: '#5ad2dd' }} />
-              <span className="card-title">Cluster &amp; Observabilidade</span>
+              <span className="card-title">{tx({ en: 'Cluster & observability', pt: 'Cluster & Observabilidade' })}</span>
             </div>
             <div className="card-pad" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
               {cluster.session ? (
@@ -389,32 +390,32 @@ export default function DashboardPage() {
                     <EnvStamp env={cluster.session.kubeconfig.environment} />
                   </div>
                   <div className="row" style={{ fontSize: 12, color: 'var(--muted)', gap: 10 }}>
-                    <span>Contexto: <b className="mono" style={{ color: 'var(--ink)' }}>{cluster.session.context}</b></span>
+                    <span>{tx({ en: 'Context:', pt: 'Contexto:' })} <b className="mono" style={{ color: 'var(--ink)' }}>{cluster.session.context}</b></span>
                     <span>•</span>
-                    <span>Contextos disponíveis: <b className="mono">{cluster.session.kubeconfig.contexts?.length ?? 1}</b></span>
+                    <span>{tx({ en: 'Available contexts:', pt: 'Contextos disponíveis:' })} <b className="mono">{cluster.session.kubeconfig.contexts?.length ?? 1}</b></span>
                   </div>
                   {cluster.problems > 0 && (
                     <div style={{ marginTop: 10, padding: '8px 10px', background: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.3)', borderRadius: 6, display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: 'var(--crit)' }}>
                       <AlertTriangle size={14} />
-                      <span>Existem <strong>{cluster.problems} pods com problema</strong> detectados neste cluster.</span>
+                      <span>{tx({ en: <>There are <strong>{cluster.problems} pods with problems</strong> detected in this cluster.</>, pt: <>Existem <strong>{cluster.problems} pods com problema</strong> detectados neste cluster.</> })}</span>
                     </div>
                   )}
                 </div>
               ) : (
                 <div style={{ padding: 16, background: 'var(--surface-2)', borderRadius: 'var(--r)', textAlign: 'center', color: 'var(--muted)', fontSize: 12 }}>
-                  Nenhum cluster conectado. Vá para a tela Cluster para carregar seu arquivo kubeconfig.
+                  {tx({ en: 'No cluster connected. Go to the Cluster screen to load your kubeconfig file.', pt: 'Nenhum cluster conectado. Vá para a tela Cluster para carregar seu arquivo kubeconfig.' })}
                 </div>
               )}
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginTop: 4 }}>
                 <Link to="/cluster" className="btn btn-sm" style={{ justifyContent: 'flex-start' }}>
-                  <Cpu size={13} /> Pods e Nós
+                  <Cpu size={13} /> {tx({ en: 'Pods and nodes', pt: 'Pods e Nós' })}
                 </Link>
                 <Link to="/logs" className="btn btn-sm" style={{ justifyContent: 'flex-start' }}>
-                  <Terminal size={13} /> Logs de Aplicação
+                  <Terminal size={13} /> {tx({ en: 'Application logs', pt: 'Logs de Aplicação' })}
                 </Link>
                 <Link to="/incidente" className="btn btn-sm" style={{ justifyContent: 'flex-start' }}>
-                  <History size={13} /> Linha do Tempo
+                  <History size={13} /> {tx({ en: 'Timeline', pt: 'Linha do Tempo' })}
                 </Link>
                 <Link to="/recursos" className="btn btn-sm" style={{ justifyContent: 'flex-start' }}>
                   <Activity size={13} /> Requests &amp; Limits
@@ -423,35 +424,35 @@ export default function DashboardPage() {
             </div>
           </div>
 
-          {/* Coluna 2: Máquina Local & Repositórios */}
+          {/* Column 2: local machine and repositories */}
           <div className="card">
             <div className="card-head">
               <Stethoscope size={16} style={{ color: 'var(--ok)' }} />
-              <span className="card-title">Ambiente de Desenvolvimento Local</span>
+              <span className="card-title">{tx({ en: 'Local development environment', pt: 'Ambiente de Desenvolvimento Local' })}</span>
             </div>
             <div className="card-pad" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
               <div style={{ padding: 12, background: 'var(--surface-2)', borderRadius: 'var(--r)', border: '1px solid var(--line)' }}>
                 <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-                  <span style={{ fontSize: 13, fontWeight: 600 }}>Diagnóstico da Máquina</span>
+                  <span style={{ fontSize: 13, fontWeight: 600 }}>{tx({ en: 'Machine diagnosis', pt: 'Diagnóstico da Máquina' })}</span>
                   {doctorFalta === 0 ? (
                     <span className="badge badge-ok" style={{ fontSize: 11, display: 'flex', alignItems: 'center', gap: 4 }}>
-                      <CheckCircle2 size={12} /> Tudo pronto
+                      <CheckCircle2 size={12} /> {tx({ en: 'All set', pt: 'Tudo pronto' })}
                     </span>
                   ) : (
                     <span className="badge badge-crit" style={{ fontSize: 11 }}>
-                      {doctorFalta} pendências
+                      {tx({ en: `${doctorFalta} pending`, pt: `${doctorFalta} pendências` })}
                     </span>
                   )}
                 </div>
                 <p style={{ margin: 0, fontSize: 12, color: 'var(--muted)', lineHeight: 1.4 }}>
                   {doctorFalta === 0
-                    ? 'Todas as dependências e ferramentas obrigatórias para trabalho estão configuradas e instaladas.'
-                    : `Existem ${doctorFalta} ferramentas ou credenciais obrigatórias pendentes para execução completa.`}
+                    ? tx({ en: 'All required dependencies and tools for work are set up and installed.', pt: 'Todas as dependências e ferramentas obrigatórias para trabalho estão configuradas e instaladas.' })
+                    : tx({ en: `There are ${doctorFalta} required tools or credentials missing for a full run.`, pt: `Existem ${doctorFalta} ferramentas ou credenciais obrigatórias pendentes para execução completa.` })}
                 </p>
                 {doctorFalta > 0 && (
                   <div style={{ marginTop: 8 }}>
                     <Link to="/maquina" className="btn btn-sm btn-danger" style={{ fontSize: 11, padding: '2px 8px' }}>
-                      Resolver pendências agora →
+                      {tx({ en: 'Fix pending items now →', pt: 'Resolver pendências agora →' })}
                     </Link>
                   </div>
                 )}
@@ -459,13 +460,13 @@ export default function DashboardPage() {
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginTop: 4 }}>
                 <Link to="/dev-runbooks" className="btn btn-sm" style={{ justifyContent: 'flex-start' }}>
-                  <Terminal size={13} /> Runbooks de Dev
+                  <Terminal size={13} /> {tx({ en: 'Dev runbooks', pt: 'Runbooks de Dev' })}
                 </Link>
                 <Link to="/repositorios" className="btn btn-sm" style={{ justifyContent: 'flex-start' }}>
-                  <GitBranch size={13} /> Repositórios
+                  <GitBranch size={13} /> {tx({ en: 'Repositories', pt: 'Repositórios' })}
                 </Link>
                 <Link to="/revisao" className="btn btn-sm" style={{ justifyContent: 'flex-start' }}>
-                  <GitPullRequest size={13} /> Revisão Pré-MR
+                  <GitPullRequest size={13} /> {tx({ en: 'Pre-MR review', pt: 'Revisão Pré-MR' })}
                 </Link>
                 <Link to="/pipelines" className="btn btn-sm" style={{ justifyContent: 'flex-start' }}>
                   <Workflow size={13} /> Pipelines CI/CD
@@ -475,11 +476,11 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {/* 4. ATALHOS RÁPIDOS DE ENGENHARIA & PRODUTIVIDADE */}
+        {/* 4. Engineering and productivity shortcuts */}
         <div className="card">
           <div className="card-head">
             <Sparkles size={16} style={{ color: '#c084fc' }} />
-            <span className="card-title">Ferramentas de Engenharia &amp; Produtividade</span>
+            <span className="card-title">{tx({ en: 'Engineering & productivity tools', pt: 'Ferramentas de Engenharia & Produtividade' })}</span>
           </div>
           <div className="card-pad">
             <div className="grid" style={{ ['--min' as string]: '200px', gap: 10 }}>
@@ -499,8 +500,8 @@ export default function DashboardPage() {
               >
                 <Terminal size={20} style={{ color: '#5ad2dd', flexShrink: 0 }} />
                 <div style={{ display: 'flex', flexDirection: 'column' }}>
-                  <span style={{ fontSize: 13, fontWeight: 600 }}>Runbooks de Dev</span>
-                  <span style={{ fontSize: 11, color: 'var(--muted)' }}>Comandos locais executáveis</span>
+                  <span style={{ fontSize: 13, fontWeight: 600 }}>{tx({ en: 'Dev runbooks', pt: 'Runbooks de Dev' })}</span>
+                  <span style={{ fontSize: 11, color: 'var(--muted)' }}>{tx({ en: 'Runnable local commands', pt: 'Comandos locais executáveis' })}</span>
                 </div>
               </Link>
 
@@ -520,8 +521,8 @@ export default function DashboardPage() {
               >
                 <Sparkles size={20} style={{ color: '#c084fc', flexShrink: 0 }} />
                 <div style={{ display: 'flex', flexDirection: 'column' }}>
-                  <span style={{ fontSize: 13, fontWeight: 600 }}>Catálogo de IA</span>
-                  <span style={{ fontSize: 11, color: 'var(--muted)' }}>Skills, prompts e regras</span>
+                  <span style={{ fontSize: 13, fontWeight: 600 }}>{tx({ en: 'AI catalog', pt: 'Catálogo de IA' })}</span>
+                  <span style={{ fontSize: 11, color: 'var(--muted)' }}>{tx({ en: 'Skills, prompts and rules', pt: 'Skills, prompts e regras' })}</span>
                 </div>
               </Link>
 
@@ -541,8 +542,8 @@ export default function DashboardPage() {
               >
                 <Wrench size={20} style={{ color: '#facc15', flexShrink: 0 }} />
                 <div style={{ display: 'flex', flexDirection: 'column' }}>
-                  <span style={{ fontSize: 13, fontWeight: 600 }}>Conversores</span>
-                  <span style={{ fontSize: 11, color: 'var(--muted)' }}>JWT, UUID, Base64 e JSON</span>
+                  <span style={{ fontSize: 13, fontWeight: 600 }}>{tx({ en: 'Converters', pt: 'Conversores' })}</span>
+                  <span style={{ fontSize: 11, color: 'var(--muted)' }}>{tx({ en: 'JWT, UUID, Base64 and JSON', pt: 'JWT, UUID, Base64 e JSON' })}</span>
                 </div>
               </Link>
 
@@ -562,8 +563,8 @@ export default function DashboardPage() {
               >
                 <Dices size={20} style={{ color: '#4ade80', flexShrink: 0 }} />
                 <div style={{ display: 'flex', flexDirection: 'column' }}>
-                  <span style={{ fontSize: 13, fontWeight: 600 }}>Gerador de Dados</span>
-                  <span style={{ fontSize: 11, color: 'var(--muted)' }}>CPF, CNPJ e dados de teste</span>
+                  <span style={{ fontSize: 13, fontWeight: 600 }}>{tx({ en: 'Data generator', pt: 'Gerador de Dados' })}</span>
+                  <span style={{ fontSize: 11, color: 'var(--muted)' }}>{tx({ en: 'CPF, CNPJ and test data', pt: 'CPF, CNPJ e dados de teste' })}</span>
                 </div>
               </Link>
 
@@ -583,8 +584,8 @@ export default function DashboardPage() {
               >
                 <ShieldAlert size={20} style={{ color: 'var(--crit)', flexShrink: 0 }} />
                 <div style={{ display: 'flex', flexDirection: 'column' }}>
-                  <span style={{ fontSize: 13, fontWeight: 600 }}>Vulnerabilidades</span>
-                  <span style={{ fontSize: 11, color: 'var(--muted)' }}>Scan de dependências e CVEs</span>
+                  <span style={{ fontSize: 13, fontWeight: 600 }}>{tx({ en: 'Vulnerabilities', pt: 'Vulnerabilidades' })}</span>
+                  <span style={{ fontSize: 11, color: 'var(--muted)' }}>{tx({ en: 'Dependency and CVE scan', pt: 'Scan de dependências e CVEs' })}</span>
                 </div>
               </Link>
 
@@ -604,8 +605,8 @@ export default function DashboardPage() {
               >
                 <BookOpen size={20} style={{ color: '#60a5fa', flexShrink: 0 }} />
                 <div style={{ display: 'flex', flexDirection: 'column' }}>
-                  <span style={{ fontSize: 13, fontWeight: 600 }}>Runbooks Kubernetes</span>
-                  <span style={{ fontSize: 11, color: 'var(--muted)' }}>Procedimentos com passos kubectl</span>
+                  <span style={{ fontSize: 13, fontWeight: 600 }}>{tx({ en: 'Kubernetes runbooks', pt: 'Runbooks Kubernetes' })}</span>
+                  <span style={{ fontSize: 11, color: 'var(--muted)' }}>{tx({ en: 'Procedures with kubectl steps', pt: 'Procedimentos com passos kubectl' })}</span>
                 </div>
               </Link>
             </div>

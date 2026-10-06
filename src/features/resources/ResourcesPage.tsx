@@ -7,12 +7,19 @@ import { useAsync } from '@/lib/useAsync'
 import { StackTable } from './StackTable'
 import { fetchClients, fetchConfig } from './api'
 import { OriginSetup } from './OriginSetup'
+import { tx } from '@/lib/i18n'
+
+const REFRESH_LIST = tx({ en: 'Refresh list', pt: 'Atualizar lista' })
 
 export default function ResourcesPage() {
   const config = useAsync(fetchConfig)
   const [editing, setEditing] = useState(false)
 
-  const header = { eyebrow: 'Kubernetes', title: 'Requests & Limits', hint: 'Memória, CPU e JVM declarados nos manifests de um grupo do GitLab, comparados com o uso real dos pods.' }
+  const header = {
+    eyebrow: 'Kubernetes',
+    title: 'Requests & Limits',
+    hint: tx({ en: "Memory, CPU and JVM declared in a GitLab group's manifests, compared with the pods' real usage.", pt: 'Memória, CPU e JVM declarados nos manifests de um grupo do GitLab, comparados com o uso real dos pods.' }),
+  }
   if (config.loading && !config.data) return <Page {...header}><SkeletonRows rows={2} height={60} /></Page>
   if (!config.data || editing) {
     return (
@@ -48,13 +55,13 @@ function Configured({ origin, onChangeOrigin, header }: ConfiguredProps) {
     setStackIndex(0)
   }
 
-  // Refazer a lista consulta todos os projetos do grupo no GitLab: leva alguns segundos.
+  // Rebuilding the list queries every project of the group on GitLab: it takes a few seconds.
   const refresh = async () => {
     setRefreshing(true)
     try {
       clients.setData(await fetchClients(true))
     } catch (e) {
-      toast(`Não atualizou a lista: ${(e as Error).message}`)
+      toast(tx({ en: `List not refreshed: ${(e as Error).message}`, pt: `Não atualizou a lista: ${(e as Error).message}` }))
     } finally {
       setRefreshing(false)
     }
@@ -65,21 +72,21 @@ function Configured({ origin, onChangeOrigin, header }: ConfiguredProps) {
       {...header}
       actions={
         <>
-          {clients.data?.fetchedAt && <span className="muted" style={{ fontSize: 12 }} title={clients.data.fetchedAt}>lista lida {relTime(clients.data.fetchedAt)}</span>}
-          <button className="btn" onClick={refresh} disabled={refreshing} title="Busca de novo os subgrupos e projetos do grupo configurado">
-            <RotateCw size={14} className={refreshing ? 'spin' : ''} /> {refreshing ? 'Buscando no GitLab…' : 'Atualizar lista'}
+          {clients.data?.fetchedAt && <span className="muted" style={{ fontSize: 12 }} title={clients.data.fetchedAt}>{tx({ en: 'list read', pt: 'lista lida' })} {relTime(clients.data.fetchedAt)}</span>}
+          <button className="btn" onClick={refresh} disabled={refreshing} title={tx({ en: 'Fetches the subgroups and projects of the configured group again', pt: 'Busca de novo os subgrupos e projetos do grupo configurado' })}>
+            <RotateCw size={14} className={refreshing ? 'spin' : ''} /> {refreshing ? tx({ en: 'Searching GitLab…', pt: 'Buscando no GitLab…' }) : REFRESH_LIST}
           </button>
         </>
       }
     >
       <div className="row res-link">
         <FolderTree size={14} />
-        <span>Origem:</span>
-        <b>{origin.label ?? 'conexão removida'}</b>
+        <span>{tx({ en: 'Source:', pt: 'Origem:' })}</span>
+        <b>{origin.label ?? tx({ en: 'connection removed', pt: 'conexão removida' })}</b>
         <span className="muted">·</span>
         <span className="mono">{origin.groupPath}</span>
         <div className="spacer" />
-        <button className="btn btn-sm" onClick={onChangeOrigin} title="Escolhe outra conexão ou outro grupo">Trocar origem</button>
+        <button className="btn btn-sm" onClick={onChangeOrigin} title={tx({ en: 'Chooses another connection or group', pt: 'Escolhe outra conexão ou outro grupo' })}>{tx({ en: 'Change source', pt: 'Trocar origem' })}</button>
       </div>
       <Async
         state={clients}
@@ -87,8 +94,11 @@ function Configured({ origin, onChangeOrigin, header }: ConfiguredProps) {
         skeleton={<SkeletonRows rows={2} height={36} />}
         empty={
           <div className="card">
-            <Empty icon={Building2} title="Nenhum projeto encontrado" action={<button className="btn btn-primary" onClick={refresh}>Atualizar lista</button>}>
-              O grupo {origin.groupPath} não tem projetos ativos em subgrupos diretos. Confira o grupo ou se o token da conexão tem acesso a ele.
+            <Empty icon={Building2} title={tx({ en: 'No project found', pt: 'Nenhum projeto encontrado' })} action={<button className="btn btn-primary" onClick={refresh}>{REFRESH_LIST}</button>}>
+              {tx({
+                en: `The group ${origin.groupPath} has no active projects in direct subgroups. Check the group, or whether the connection token can access it.`,
+                pt: `O grupo ${origin.groupPath} não tem projetos ativos em subgrupos diretos. Confira o grupo ou se o token da conexão tem acesso a ele.`,
+              })}
             </Empty>
           </div>
         }
@@ -97,12 +107,12 @@ function Configured({ origin, onChangeOrigin, header }: ConfiguredProps) {
           <>
             <div className="card card-pad stack" style={{ ['--gap' as string]: '10px' }}>
               <div className="row">
-                <span className="eyebrow">Subgrupo</span>
-                <Search value={query} onChange={setQuery} placeholder="Filtrar subgrupos…" width={220} />
+                <span className="eyebrow">{tx({ en: 'Subgroup', pt: 'Subgrupo' })}</span>
+                <Search value={query} onChange={setQuery} placeholder={tx({ en: 'Filter subgroups…', pt: 'Filtrar subgrupos…' })} width={220} />
                 <span className="mono muted" style={{ fontSize: 12 }}>{visible.length} / {list.length}</span>
               </div>
               {visible.length === 0 ? (
-                <span className="muted">Nenhum subgrupo casa com “{query}”.</span>
+                <span className="muted">{tx({ en: `No subgroup matches “${query}”.`, pt: `Nenhum subgrupo casa com “${query}”.` })}</span>
               ) : (
                 <Chips value={client?.name ?? ''} onChange={pickClient} options={visible.map(c => ({ id: c.name, label: c.name, count: c.stacks.length > 1 ? c.stacks.length : undefined }))} />
               )}

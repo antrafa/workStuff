@@ -4,8 +4,9 @@ import { Async, ConfirmModal, Markdown, Modal, SkeletonRows, useToast } from '@/
 import { relTime } from '@/lib/format'
 import { useAsync } from '@/lib/useAsync'
 import { deleteReport, fetchReport, fetchReports, generateReport, type Observation, type ReportMeta } from './api'
+import { locale, tx } from '@/lib/i18n'
 
-// datetime-local trabalha em horário local, sem fuso; o servidor compara ISO em UTC.
+// datetime-local works in local time, with no zone; the server compares ISO in UTC.
 const toLocalInput = (iso: string) => {
   const d = new Date(iso)
   return new Date(d.getTime() - d.getTimezoneOffset() * 60_000).toISOString().slice(0, 16)
@@ -26,13 +27,13 @@ export function ReportSection({ observation }: { observation: Observation }) {
 
   const generate = async () => {
     abort.current = new AbortController()
-    setRunning({ status: 'preparando os dados…', text: '' })
+    setRunning({ status: tx({ en: 'preparing the data…', pt: 'preparando os dados…' }), text: '' })
     let done: ReportMeta | null = null
     try {
       await generateReport(observation.id, { from: fromLocalInput(from), to: fromLocalInput(to), historyHours }, e => {
         if (e.type === 'status') setRunning(r => r && { ...r, status: e.message })
-        if (e.type === 'text') setRunning(r => r && { status: 'escrevendo o relatório…', text: r.text + e.text })
-        if (e.type === 'error') toast(`Relatório não gerado: ${e.message}`)
+        if (e.type === 'text') setRunning(r => r && { status: tx({ en: 'writing the report…', pt: 'escrevendo o relatório…' }), text: r.text + e.text })
+        if (e.type === 'error') toast(tx({ en: `Report not generated: ${e.message}`, pt: `Relatório não gerado: ${e.message}` }))
         if (e.type === 'done') done = e.report
       }, abort.current.signal)
     } catch (e) {
@@ -47,22 +48,22 @@ export function ReportSection({ observation }: { observation: Observation }) {
 
   return (
     <section className="card">
-      <div className="card-head"><div className="card-title">Relatório com IA</div></div>
+      <div className="card-head"><div className="card-title">{tx({ en: 'AI report', pt: 'Relatório com IA' })}</div></div>
       <div className="card-pad stack">
         <div className="row" style={{ alignItems: 'flex-end' }}>
-          <label className="field"><span>De</span><input className="input" type="datetime-local" value={from} onChange={e => setFrom(e.target.value)} /></label>
-          <label className="field"><span>Até</span><input className="input" type="datetime-local" value={to} onChange={e => setTo(e.target.value)} /></label>
+          <label className="field"><span>{tx({ en: 'From', pt: 'De' })}</span><input className="input" type="datetime-local" value={from} onChange={e => setFrom(e.target.value)} /></label>
+          <label className="field"><span>{tx({ en: 'To', pt: 'Até' })}</span><input className="input" type="datetime-local" value={to} onChange={e => setTo(e.target.value)} /></label>
           <label className="field">
-            <span>Histórico do Prometheus</span>
-            <select className="select" value={historyHours} onChange={e => setHistoryHours(Number(e.target.value))} title="Inclui horas anteriores reconstruídas do Prometheus, se o cluster permitir">
-              {[0, 6, 24, 72].map(h => <option key={h} value={h}>{h === 0 ? 'não incluir' : `incluir ${h}h`}</option>)}
+            <span>{tx({ en: 'Prometheus history', pt: 'Histórico do Prometheus' })}</span>
+            <select className="select" value={historyHours} onChange={e => setHistoryHours(Number(e.target.value))} title={tx({ en: 'Includes earlier hours rebuilt from Prometheus, if the cluster allows', pt: 'Inclui horas anteriores reconstruídas do Prometheus, se o cluster permitir' })}>
+              {[0, 6, 24, 72].map(h => <option key={h} value={h}>{h === 0 ? tx({ en: 'do not include', pt: 'não incluir' }) : tx({ en: `include ${h}h`, pt: `incluir ${h}h` })}</option>)}
             </select>
           </label>
           {running ? (
-            <button className="btn" onClick={() => abort.current?.abort()} title="Interrompe a geração"><Square size={13} /> Parar</button>
+            <button className="btn" onClick={() => abort.current?.abort()} title={tx({ en: 'Stops the generation', pt: 'Interrompe a geração' })}><Square size={13} /> {tx({ en: 'Stop', pt: 'Parar' })}</button>
           ) : (
-            <button className="btn btn-primary" onClick={generate} title="Envia os pontos agregados ao provedor de IA de Configurações e salva o relatório">
-              <Sparkles size={14} /> Gerar relatório
+            <button className="btn btn-primary" onClick={generate} title={tx({ en: 'Sends the aggregated points to the AI provider in Settings and saves the report', pt: 'Envia os pontos agregados ao provedor de IA de Configurações e salva o relatório' })}>
+              <Sparkles size={14} /> {tx({ en: 'Generate report', pt: 'Gerar relatório' })}
             </button>
           )}
         </div>
@@ -72,17 +73,17 @@ export function ReportSection({ observation }: { observation: Observation }) {
             {running.text && <div className="perf-report"><Markdown>{running.text}</Markdown></div>}
           </div>
         )}
-        <span className="eyebrow">Relatórios desta observação</span>
-        <Async state={reports} isEmpty={() => mine.length === 0} skeleton={<SkeletonRows rows={2} height={36} />} empty={<span className="muted">Nenhum relatório gerado para esta observação.</span>}>
+        <span className="eyebrow">{tx({ en: "This observation's reports", pt: 'Relatórios desta observação' })}</span>
+        <Async state={reports} isEmpty={() => mine.length === 0} skeleton={<SkeletonRows rows={2} height={36} />} empty={<span className="muted">{tx({ en: 'No report generated for this observation.', pt: 'Nenhum relatório gerado para esta observação.' })}</span>}>
           {() => (
             <div className="stack" style={{ ['--gap' as string]: '6px' }}>
               {mine.map(r => (
                 <div key={r.id} className="row report-row">
                   <FileText size={14} className="muted" />
-                  <span className="spacer">{new Date(r.from).toLocaleString('pt-BR')} → {new Date(r.to).toLocaleString('pt-BR')}{r.historyHours ? ` · +${r.historyHours}h de histórico` : ''}</span>
+                  <span className="spacer">{new Date(r.from).toLocaleString(locale())} → {new Date(r.to).toLocaleString(locale())}{r.historyHours ? tx({ en: ` · +${r.historyHours}h of history`, pt: ` · +${r.historyHours}h de histórico` }) : ''}</span>
                   <span className="muted mono" style={{ fontSize: 11.5 }}>{r.provider}/{r.model} · {relTime(r.generatedAt)}</span>
-                  <button className="btn btn-sm" onClick={() => setOpen(r)}>Abrir</button>
-                  <button className="btn btn-ghost btn-sm btn-icon" onClick={() => setDeleting(r)} title="Apagar relatório"><Trash2 size={13} /></button>
+                  <button className="btn btn-sm" onClick={() => setOpen(r)}>{tx({ en: 'Open', pt: 'Abrir' })}</button>
+                  <button className="btn btn-ghost btn-sm btn-icon" onClick={() => setDeleting(r)} title={tx({ en: 'Delete report', pt: 'Apagar relatório' })}><Trash2 size={13} /></button>
                 </div>
               ))}
             </div>
@@ -92,13 +93,16 @@ export function ReportSection({ observation }: { observation: Observation }) {
       {open && <ReportModal meta={open} onClose={() => setOpen(null)} />}
       {deleting && (
         <ConfirmModal
-          title="Apagar o relatório?"
-          confirmLabel="Apagar"
+          title={tx({ en: 'Delete the report?', pt: 'Apagar o relatório?' })}
+          confirmLabel={tx({ en: 'Delete', pt: 'Apagar' })}
           icon={Trash2}
           onClose={() => setDeleting(null)}
-          onConfirm={() => void deleteReport(deleting.id).then(() => (toast('Relatório apagado'), reports.reload()), e => toast((e as Error).message))}
+          onConfirm={() => void deleteReport(deleting.id).then(() => (toast(tx({ en: 'Report deleted', pt: 'Relatório apagado' })), reports.reload()), e => toast((e as Error).message))}
         >
-          O relatório de {new Date(deleting.generatedAt).toLocaleString('pt-BR')} é apagado. A observação e os pontos coletados continuam.
+          {tx({
+            en: `The report from ${new Date(deleting.generatedAt).toLocaleString(locale())} is deleted. The observation and the collected points stay.`,
+            pt: `O relatório de ${new Date(deleting.generatedAt).toLocaleString(locale())} é apagado. A observação e os pontos coletados continuam.`,
+          })}
         </ConfirmModal>
       )}
     </section>
@@ -108,7 +112,7 @@ export function ReportSection({ observation }: { observation: Observation }) {
 function ReportModal({ meta, onClose }: { meta: ReportMeta; onClose: () => void }) {
   const report = useAsync(() => fetchReport(meta.id), [meta.id])
   return (
-    <Modal title={`Relatório · ${meta.namespace}`} onClose={onClose} width={760}>
+    <Modal title={tx({ en: `Report · ${meta.namespace}`, pt: `Relatório · ${meta.namespace}` })} onClose={onClose} width={760}>
       <Async state={report} skeleton={<SkeletonRows rows={5} height={18} />}>
         {r => <div className="perf-report"><Markdown>{r.report}</Markdown></div>}
       </Async>

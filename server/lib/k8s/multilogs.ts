@@ -1,12 +1,12 @@
-// Logs de vários pods ao mesmo tempo, por seletor de label (estilo stern): kubectl logs -l ... --prefix.
+// Logs of several pods at once, by label selector (stern style): kubectl logs -l ... --prefix.
 // Autoteste: node server/lib/k8s/multilogs.ts --selfcheck
 
 import assert from 'node:assert/strict'
 
-// Teto do kubectl para conexões simultâneas: acima disso ele recusa. 30 pods cobrem um deployment grande.
+// kubectl's cap on concurrent connections: above it, it refuses. 30 pods cover a large deployment.
 export const MAX_PODS = 30
 
-// Seletor de label: chaves, valores, =, ==, !=, vírgula e "in (...)". Nada que vire opção do kubectl.
+// Label selector: keys, values, =, ==, !=, comma and "in (...)". Nothing that becomes a kubectl option.
 const SELECTOR = /^[A-Za-z0-9][A-Za-z0-9._/=!, ()-]{0,199}$/
 
 export function validSelector(s: string) {
@@ -25,7 +25,7 @@ export function multiLogArgs(o: MultiLogOptions): string[] {
   ]
 }
 
-// O --prefix escreve "[pod/<nome>/<container>] linha".
+// --prefix writes "[pod/<name>/<container>] line".
 export function parsePrefixed(line: string): { pod: string; container: string; text: string } | null {
   const m = line.match(/^\[pod\/([^/\]]+)\/([^\]]+)\] ?(.*)$/)
   return m ? { pod: m[1], container: m[2], text: m[3] } : null
@@ -33,7 +33,7 @@ export function parsePrefixed(line: string): { pod: string; container: string; t
 
 const APP_LABELS = ['app.kubernetes.io/name', 'app', 'k8s-app']
 
-// Um seletor por aplicação: a primeira label de app conhecida de cada pod, contada.
+// One selector per application: the first known app label of each pod, counted.
 export function selectorSuggestions(podLabels: Record<string, string>[]): { selector: string; pods: number }[] {
   const counts = new Map<string, number>()
   for (const labels of podLabels) {

@@ -7,6 +7,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { api } from '@/lib/api'
 import { streamPost } from '@/lib/stream'
 import { AGENT_ORDER, RUNNING_STATES, taskUsage, type ExecutionSpan, type FactoryTask, type FactoryTaskState, type SpecializedAgentId } from '../../../server/lib/factory/types.ts'
+import { tx } from '@/lib/i18n'
 
 export type FactoryAction = 'plan' | 'approve-plan' | 'adjust'
 
@@ -25,13 +26,13 @@ export type SessionEvent = {
 
 // Name, pipeline role and lane color of each agent, for every place that draws one.
 export const AGENT_UI: Record<SpecializedAgentId, { name: string; role: string; color: string }> = {
-  analyst: { name: 'Analyst', role: 'Especificação e critérios de aceite', color: 'var(--fx-analyst)' },
-  architect: { name: 'Architect', role: 'Planejamento arquitetural', color: 'var(--fx-architect)' },
-  implementer: { name: 'Implementer', role: 'Construção e correções', color: 'var(--fx-implementer)' },
-  tester: { name: 'Tester', role: 'Testes e cobertura', color: 'var(--fx-tester)' },
-  reviewer: { name: 'Reviewer', role: 'Revisão de código e critérios', color: 'var(--fx-reviewer)' },
-  security: { name: 'Security', role: 'Auditoria de segurança', color: 'var(--fx-security)' },
-  documenter: { name: 'Documenter', role: 'Documentação e descrição do MR', color: 'var(--fx-documenter)' },
+  analyst: { name: 'Analyst', role: tx({ en: 'Specification and acceptance criteria', pt: 'Especificação e critérios de aceite' }), color: 'var(--fx-analyst)' },
+  architect: { name: 'Architect', role: tx({ en: 'Architecture planning', pt: 'Planejamento arquitetural' }), color: 'var(--fx-architect)' },
+  implementer: { name: 'Implementer', role: tx({ en: 'Building and fixes', pt: 'Construção e correções' }), color: 'var(--fx-implementer)' },
+  tester: { name: 'Tester', role: tx({ en: 'Tests and coverage', pt: 'Testes e cobertura' }), color: 'var(--fx-tester)' },
+  reviewer: { name: 'Reviewer', role: tx({ en: 'Code and criteria review', pt: 'Revisão de código e critérios' }), color: 'var(--fx-reviewer)' },
+  security: { name: 'Security', role: tx({ en: 'Security audit', pt: 'Auditoria de segurança' }), color: 'var(--fx-security)' },
+  documenter: { name: 'Documenter', role: tx({ en: 'Docs and MR description', pt: 'Documentação e descrição do MR' }), color: 'var(--fx-documenter)' },
 }
 export { AGENT_ORDER }
 
@@ -47,22 +48,22 @@ export { taskUsage }
 // `review` waits for a person: it is a call to act (signal), not a success.
 type Tone = 'ok' | 'warn' | 'crit' | 'info' | 'signal' | 'muted'
 export const TASK_STATE: Record<FactoryTaskState, { label: string; tone: Tone }> = {
-  intake: { label: 'na entrada', tone: 'muted' },
-  planning: { label: 'planejando', tone: 'info' },
-  waiting_clarification: { label: 'aguardando respostas', tone: 'signal' },
-  waiting_approval: { label: 'aguardando aprovação', tone: 'signal' },
-  building: { label: 'construindo', tone: 'info' },
-  qa_security: { label: 'QA e segurança', tone: 'info' },
-  review: { label: 'aguardando revisão', tone: 'signal' },
-  done: { label: 'concluída', tone: 'ok' },
-  canceled: { label: 'cancelada', tone: 'muted' },
-  error: { label: 'falhou', tone: 'crit' },
+  intake: { label: tx({ en: 'in intake', pt: 'na entrada' }), tone: 'muted' },
+  planning: { label: tx({ en: 'planning', pt: 'planejando' }), tone: 'info' },
+  waiting_clarification: { label: tx({ en: 'waiting for answers', pt: 'aguardando respostas' }), tone: 'signal' },
+  waiting_approval: { label: tx({ en: 'waiting for approval', pt: 'aguardando aprovação' }), tone: 'signal' },
+  building: { label: tx({ en: 'building', pt: 'construindo' }), tone: 'info' },
+  qa_security: { label: tx({ en: 'QA and security', pt: 'QA e segurança' }), tone: 'info' },
+  review: { label: tx({ en: 'waiting for review', pt: 'aguardando revisão' }), tone: 'signal' },
+  done: { label: tx({ en: 'done', pt: 'concluída' }), tone: 'ok' },
+  canceled: { label: tx({ en: 'canceled', pt: 'cancelada' }), tone: 'muted' },
+  error: { label: tx({ en: 'failed', pt: 'falhou' }), tone: 'crit' },
 }
 
 export const SPAN_STATUS: Record<ExecutionSpan['status'], { label: string; tone: Tone }> = {
-  running: { label: 'em execução', tone: 'info' },
-  success: { label: 'sucesso', tone: 'ok' },
-  failed: { label: 'falhou', tone: 'crit' },
+  running: { label: tx({ en: 'running', pt: 'em execução' }), tone: 'info' },
+  success: { label: tx({ en: 'success', pt: 'sucesso' }), tone: 'ok' },
+  failed: { label: tx({ en: 'failed', pt: 'falhou' }), tone: 'crit' },
 }
 
 export function isTaskRunning(task: FactoryTask): boolean {
@@ -80,15 +81,15 @@ export type TaskAction =
 export const retryActionOf = (task: Pick<FactoryTask, 'plan'>): FactoryAction => (task.plan ? 'approve-plan' : 'plan')
 
 export function nextActions(task: FactoryTask, running = isTaskRunning(task)): TaskAction[] {
-  if (running) return [{ id: 'stop', label: 'Parar' }]
+  if (running) return [{ id: 'stop', label: tx({ en: 'Stop', pt: 'Parar' }) }]
   switch (task.state) {
-    case 'intake': return [{ id: 'run', label: 'Planejar', run: 'plan' }]
-    case 'waiting_clarification': return [{ id: 'open-review', label: 'Responder dúvidas' }]
-    case 'waiting_approval': return [{ id: 'open-review', label: 'Ler e aprovar o plano' }]
-    case 'review': return [{ id: 'open-review', label: 'Revisar entrega' }]
+    case 'intake': return [{ id: 'run', label: tx({ en: 'Plan', pt: 'Planejar' }), run: 'plan' }]
+    case 'waiting_clarification': return [{ id: 'open-review', label: tx({ en: 'Answer questions', pt: 'Responder dúvidas' }) }]
+    case 'waiting_approval': return [{ id: 'open-review', label: tx({ en: 'Read and approve the plan', pt: 'Ler e aprovar o plano' }) }]
+    case 'review': return [{ id: 'open-review', label: tx({ en: 'Review delivery', pt: 'Revisar entrega' }) }]
     // With a plan the retry rebuilds it; without one it plans again
-    case 'error': return [{ id: 'run', label: 'Tentar de novo', run: retryActionOf(task) }, { id: 'open-review', label: 'Detalhes' }]
-    default: return [{ id: 'open-review', label: 'Detalhes' }]
+    case 'error': return [{ id: 'run', label: tx({ en: 'Try again', pt: 'Tentar de novo' }), run: retryActionOf(task) }, { id: 'open-review', label: tx({ en: 'Details', pt: 'Detalhes' }) }]
+    default: return [{ id: 'open-review', label: tx({ en: 'Details', pt: 'Detalhes' }) }]
   }
 }
 

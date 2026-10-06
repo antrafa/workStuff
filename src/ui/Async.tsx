@@ -1,5 +1,6 @@
 import { AlertTriangle, RotateCw } from 'lucide-react'
 import type { ReactNode } from 'react'
+import { tx } from '@/lib/i18n'
 
 type Props<T> = {
   state: { data: T | null; error: string | null; loading: boolean; reload: () => void }
@@ -9,14 +10,14 @@ type Props<T> = {
   children: (data: T) => ReactNode
 }
 
-// Estado padrão de carregando / erro / vazio para qualquer dado assíncrono.
+// Default loading / error / empty state for any async data.
 export function Async<T>({ state, isEmpty, empty, skeleton, children }: Props<T>) {
   const failure = state.error && (
     <div className="callout callout-crit">
       <AlertTriangle size={16} />
       <div className="spacer">{state.error}</div>
       <button className="btn btn-sm" onClick={state.reload}>
-        <RotateCw size={13} /> Tentar de novo
+        <RotateCw size={13} /> {tx({ en: 'Try again', pt: 'Tentar de novo' })}
       </button>
     </div>
   )

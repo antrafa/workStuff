@@ -5,6 +5,7 @@
 
 import assert from 'node:assert/strict'
 import type { RequestHandler } from 'express'
+import { say } from './i18n.ts'
 
 const LOCAL_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]'])
 
@@ -23,7 +24,7 @@ export function isLocalRequest(host: string | undefined, origin: string | undefi
 
 export const localOriginOnly: RequestHandler = (req, res, next) => {
   if (isLocalRequest(req.headers.host, req.headers.origin)) return next()
-  res.status(403).json({ error: 'requisição recusada: o painel só aceita chamadas do próprio localhost' })
+  res.status(403).json({ error: say({ en: 'request refused: the panel only accepts calls from its own localhost', pt: 'requisição recusada: o painel só aceita chamadas do próprio localhost' }) })
 }
 
 if (import.meta.main && process.argv.includes('--selfcheck')) {

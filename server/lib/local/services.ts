@@ -7,6 +7,7 @@ import { readFileSync, realpathSync } from 'node:fs'
 import { basename } from 'node:path'
 import { PLATFORM, type Os } from '../platform.ts'
 import { run, which } from '../run.ts'
+import { say } from '../i18n.ts'
 
 export type Port = { address: string; port: number; pid: number | null; process: string | null }
 
@@ -96,14 +97,14 @@ export const ACTIONS = ['start', 'stop', 'restart'] as const
 export type Action = (typeof ACTIONS)[number]
 
 export function checkAction(a: unknown): Action {
-  if (!ACTIONS.includes(a as Action)) throw new Error('ação inválida: use start, stop ou restart')
+  if (!ACTIONS.includes(a as Action)) throw new Error(say({ en: 'invalid action: use start, stop or restart', pt: 'ação inválida: use start, stop ou restart' }))
   return a as Action
 }
 
 // O id vem da tela, mas só vale se estiver na listagem atual: nada de nome arbitrário no docker.
 export async function containerAction(id: string, action: Action) {
   const found = (await listContainers()).find(c => c.id === id)
-  if (!found) throw new Error('container não encontrado na listagem atual; atualize a tela')
+  if (!found) throw new Error(say({ en: 'container not found in the current list; refresh the screen', pt: 'container não encontrado na listagem atual; atualize a tela' }))
   await run('docker', [action, found.id], 120_000)
   return found
 }
@@ -111,7 +112,7 @@ export async function containerAction(id: string, action: Action) {
 // Projeto compose: os arquivos de configuração saem do "compose ls", não do pedido.
 export async function composeAction(name: string, action: Action) {
   const found = (await listCompose()).find(p => p.name === name)
-  if (!found) throw new Error('projeto compose não encontrado na listagem atual; atualize a tela')
+  if (!found) throw new Error(say({ en: 'compose project not found in the current list; refresh the screen', pt: 'projeto compose não encontrado na listagem atual; atualize a tela' }))
   const files = found.configFiles.split(',').filter(Boolean).flatMap(f => ['-f', f])
   const verb = action === 'start' ? ['up', '-d'] : [action]
   await run('docker', ['compose', '-p', found.name, ...files, ...verb], 300_000)
@@ -153,16 +154,16 @@ export function isPanelProcess(pid: number | null, os: Os = PLATFORM.os): boolea
 
 // O PID só vale se estiver na listagem de portas agora: nada de matar processo arbitrário.
 export async function killPortOwner(pid: number, force: boolean, os: Os = PLATFORM.os) {
-  if (!Number.isInteger(pid) || pid <= 1) throw new Error('PID inválido')
-  if (isPanelProcess(pid, os)) throw new Error('este processo é do próprio painel; encerrá-lo derrubaria esta tela')
+  if (!Number.isInteger(pid) || pid <= 1) throw new Error(say({ en: 'invalid PID', pt: 'PID inválido' }))
+  if (isPanelProcess(pid, os)) throw new Error(say({ en: 'this process belongs to the panel itself; stopping it would take this screen down', pt: 'este processo é do próprio painel; encerrá-lo derrubaria esta tela' }))
   const port = (await listPorts(os)).find(p => p.pid === pid)
-  if (!port) throw new Error('nenhuma porta em escuta pertence a esse PID agora; atualize a tela')
+  if (!port) throw new Error(say({ en: 'no listening port belongs to that PID now; refresh the screen', pt: 'nenhuma porta em escuta pertence a esse PID agora; atualize a tela' }))
   const [bin, ...args] = killCommand(os, pid, force)
   try {
     await run(bin, args, 15_000)
   } catch (e) {
     const msg = (e as Error).message
-    if (/not permitted|EPERM|Access is denied|Acesso negado/i.test(msg)) throw new Error('sem permissão: o processo é de outro usuário (root ou serviço do sistema)')
+    if (/not permitted|EPERM|Access is denied|Acesso negado/i.test(msg)) throw new Error(say({ en: 'no permission: the process belongs to another user (root or a system service)', pt: 'sem permissão: o processo é de outro usuário (root ou serviço do sistema)' }))
     throw e
   }
   // TERM é um pedido: o processo pode demorar ou ignorar. Espera um pouco e diz o que aconteceu.
@@ -205,22 +206,22 @@ export async function listVolumes(): Promise<Volume[]> {
 // Remoção sem -f: o Docker recusa o que está em uso, e essa recusa é a trava que queremos.
 export async function removeContainer(id: string) {
   const found = (await listContainers()).find(c => c.id === id)
-  if (!found) throw new Error('container não encontrado na listagem atual; atualize a tela')
-  if (found.state === 'running') throw new Error('o container está rodando; pare antes de apagar')
+  if (!found) throw new Error(say({ en: 'container not found in the current list; refresh the screen', pt: 'container não encontrado na listagem atual; atualize a tela' }))
+  if (found.state === 'running') throw new Error(say({ en: 'the container is running; stop it before deleting', pt: 'o container está rodando; pare antes de apagar' }))
   await run('docker', ['rm', found.id], 60_000)
   return found.name
 }
 
 export async function removeImage(id: string) {
   const found = (await listImages(await listContainers())).find(i => i.id === id)
-  if (!found) throw new Error('imagem não encontrada na listagem atual; atualize a tela')
+  if (!found) throw new Error(say({ en: 'image not found in the current list; refresh the screen', pt: 'imagem não encontrada na listagem atual; atualize a tela' }))
   await run('docker', ['image', 'rm', found.id], 120_000)
   return found.tag && found.tag !== '<none>' ? `${found.repository}:${found.tag}` : found.id
 }
 
 export async function removeVolume(name: string) {
   const found = (await listVolumes()).find(v => v.name === name)
-  if (!found) throw new Error('volume não encontrado na listagem atual; atualize a tela')
+  if (!found) throw new Error(say({ en: 'volume not found in the current list; refresh the screen', pt: 'volume não encontrado na listagem atual; atualize a tela' }))
   await run('docker', ['volume', 'rm', found.name], 60_000)
   return found.name
 }
@@ -230,11 +231,11 @@ if (import.meta.main && process.argv.includes('--selfcheck')) {
   assert.deepEqual(killCommand('darwin', 1234, true), ['kill', '-KILL', '1234'])
   assert.deepEqual(killCommand('win32', 1234, false), ['taskkill', '/PID', '1234'])
   assert.deepEqual(killCommand('win32', 1234, true), ['taskkill', '/PID', '1234', '/F'])
-  await assert.rejects(killPortOwner(process.pid, false), /próprio painel/)
+  await assert.rejects(killPortOwner(process.pid, false), /panel itself/)
   assert.equal(isPanelProcess(process.pid), true)
   assert.equal(isPanelProcess(null), false)
-  await assert.rejects(killPortOwner(1, false), /PID inválido/)
-  await assert.rejects(killPortOwner(999999999, false), /nenhuma porta/)
+  await assert.rejects(killPortOwner(1, false), /invalid PID/)
+  await assert.rejects(killPortOwner(999999999, false), /no listening port/)
   const imgs = parseImages('{"ID":"sha256abc","Repository":"ollama/ollama","Tag":"latest","Size":"3GB","CreatedSince":"2 weeks ago"}\n{"ID":"def456","Repository":"<none>","Tag":"<none>","Size":"1GB","CreatedSince":"1 month ago"}',
     [{ id: 'x', name: 'ollama', image: 'ollama/ollama', state: 'running', status: '', ports: '', project: null }])
   assert.deepEqual(imgs.map(i => i.inUse), [true, false], 'imagem sem tag na referência do container ainda conta como em uso')
@@ -262,8 +263,8 @@ if (import.meta.main && process.argv.includes('--selfcheck')) {
   assert.equal(describeCmdline('/usr/share/code/code --standard-schemes=vscode-webview --enable-sandbox'), 'code', 'cmdline num texto só, separado por espaço')
   assert.equal(describeCmdline(''), null)
   assert.equal(checkAction('stop'), 'stop')
-  assert.throws(() => checkAction('rm'), /ação inválida/)
-  assert.throws(() => checkAction('--rm'), /ação inválida/)
+  assert.throws(() => checkAction('rm'), /invalid action/)
+  assert.throws(() => checkAction('--rm'), /invalid action/)
 
   const live = await listPorts()
   assert.ok(live.length > 0, 'esta máquina tem alguma porta em escuta')

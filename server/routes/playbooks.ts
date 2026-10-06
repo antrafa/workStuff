@@ -7,6 +7,7 @@ import { openSse } from '../lib/sse.ts'
 import { readSettings } from '../lib/settingsStore.ts'
 import { runAi } from '../lib/ai/runner.ts'
 import { DEFAULT_ROOT, fill, listPlaybooks, parsePlaybook, playbookPath, readRoot, saveRoot } from '../lib/playbooks/playbooks.ts'
+import { say } from '../lib/i18n.ts'
 
 export const playbooksRouter = Router()
 
@@ -20,7 +21,7 @@ const handle = (fn: (req: Request) => unknown) => async (req: Request, res: Resp
 
 function requireRoot() {
   const root = readRoot()
-  if (!root) throw new Error('escolha a pasta dos playbooks')
+  if (!root) throw new Error(say({ en: 'choose the playbooks folder', pt: 'escolha a pasta dos playbooks' }))
   return root
 }
 
@@ -42,13 +43,13 @@ playbooksRouter.put('/root', handle(req => {
     return { ok: true, root: tildify(DEFAULT_ROOT), isDefault: true }
   }
   const root = expandHome(raw)
-  if (!statSync(root, { throwIfNoEntry: false })?.isDirectory()) throw new Error(`pasta não encontrada: ${root}`)
+  if (!statSync(root, { throwIfNoEntry: false })?.isDirectory()) throw new Error(say({ en: `folder not found: ${root}`, pt: `pasta não encontrada: ${root}` }))
   saveRoot(root)
   return { ok: true, root: tildify(root), isDefault: resolve(root) === resolve(DEFAULT_ROOT) }
 }))
 
-playbooksRouter.post('/pick-folder', handle(async () => ({ path: await pickFolder('Pasta dos playbooks de IA') })))
-playbooksRouter.post('/pick-project', handle(async () => ({ path: await pickFolder('Pasta do projeto para o playbook') })))
+playbooksRouter.post('/pick-folder', handle(async () => ({ path: await pickFolder(say({ en: 'AI playbooks folder', pt: 'Pasta dos playbooks de IA' })) })))
+playbooksRouter.post('/pick-project', handle(async () => ({ path: await pickFolder(say({ en: 'Project folder for the playbook', pt: 'Pasta do projeto para o playbook' })) })))
 
 playbooksRouter.post('/doc', handle(req => {
   const root = requireRoot()
@@ -92,7 +93,7 @@ playbooksRouter.post('/run', async (req, res) => {
   }
 
   if (!seg || seg.type !== 'step') {
-    res.status(400).json({ error: 'passo não encontrado; o arquivo pode ter mudado' })
+    res.status(400).json({ error: say({ en: 'step not found; the file may have changed', pt: 'passo não encontrado; o arquivo pode ter mudado' }) })
     return
   }
 
@@ -136,7 +137,7 @@ playbooksRouter.post('/run', async (req, res) => {
     })
 
     if (result.stopped) {
-      sse.send({ type: 'error', message: 'execução cancelada' })
+      sse.send({ type: 'error', message: say({ en: 'run cancelled', pt: 'execução cancelada' }) })
     } else {
       sse.send({ type: 'done', ok: true, durationMs: Date.now() - t0, text: result.text })
     }

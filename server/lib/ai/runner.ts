@@ -7,6 +7,7 @@ import { readSettings } from '../settingsStore.ts'
 import type { ProviderId } from '../aiProviders.ts'
 import { buildArgs, type RunOptions } from './args.ts'
 import { createParser, type AiEvent } from './events.ts'
+import { say } from '../i18n.ts'
 
 export type RunRequest = Omit<RunOptions, 'model' | 'effort'> & {
   signal?: AbortSignal
@@ -53,8 +54,8 @@ export function spawnCli(provider: ProviderId, model: string, { bin, args }: { b
     }
     const watchdog = setInterval(() => {
       const quiet = Date.now() - lastOutput
-      if (quiet > stallMs) kill(new Error(`${bin} ficou ${Math.round(quiet / 1000)}s sem responder e foi encerrado`))
-      if (Date.now() - t0 > timeoutMs) kill(new Error(`${bin} passou do limite de ${Math.round(timeoutMs / 60_000)} min e foi encerrado`))
+      if (quiet > stallMs) kill(new Error(say({ en: `${bin} was silent for ${Math.round(quiet / 1000)}s and was stopped`, pt: `${bin} ficou ${Math.round(quiet / 1000)}s sem responder e foi encerrado` })))
+      if (Date.now() - t0 > timeoutMs) kill(new Error(say({ en: `${bin} went past the ${Math.round(timeoutMs / 60_000)} min limit and was stopped`, pt: `${bin} passou do limite de ${Math.round(timeoutMs / 60_000)} min e foi encerrado` })))
     }, 2000)
     const onAbort = () => ((stopped = true), kill(null))
     req.signal?.addEventListener('abort', onAbort, { once: true })
@@ -83,7 +84,7 @@ export function spawnCli(provider: ProviderId, model: string, { bin, args }: { b
     child.on('error', err => {
       clearInterval(watchdog)
       const notFound = (err as NodeJS.ErrnoException).code === 'ENOENT'
-      reject(new Error(notFound ? `o CLI "${bin}" não está instalado ou não está no PATH` : `falha ao iniciar ${bin}: ${err.message}`))
+      reject(new Error(notFound ? say({ en: `the "${bin}" CLI is not installed or not on PATH`, pt: `o CLI "${bin}" não está instalado ou não está no PATH` }) : say({ en: `failed to start ${bin}: ${err.message}`, pt: `falha ao iniciar ${bin}: ${err.message}` })))
     })
 
     child.on('close', code => {
@@ -97,12 +98,16 @@ export function spawnCli(provider: ProviderId, model: string, { bin, args }: { b
       const isErrorCode = !stopped && code !== 0
 
       if (isFailedResult || isErrorCode) {
-        const errorDetail = (result?.type === 'result' && !result.ok ? result.text : '') || stderr.trim().split('\n').slice(-3).join(' ') || text || `saiu com código ${code}`
+        const errorDetail = (result?.type === 'result' && !result.ok ? result.text : '') || stderr.trim().split('\n').slice(-3).join(' ') || text || say({ en: `exited with code ${code}`, pt: `saiu com código ${code}` })
         const isAuth = /authenticate|oauth|expired|unauthorized|401|api_key/i.test(errorDetail)
+        const loginCommand = provider === 'claude' ? 'claude login' : provider === 'codex' ? 'codex login' : 'agy'
         const hint = isAuth
-          ? ` Falha de autenticação do provedor "${provider}". Execute "${provider === 'claude' ? 'claude login' : provider === 'codex' ? 'codex login' : 'agy'}" no terminal para renovar o acesso ou troque de provedor em Configurações.`
+          ? say({
+            en: ` Authentication failed for provider "${provider}". Run "${loginCommand}" in the terminal to renew access, or switch providers in Settings.`,
+            pt: ` Falha de autenticação do provedor "${provider}". Execute "${loginCommand}" no terminal para renovar o acesso ou troque de provedor em Configurações.`,
+          })
           : ''
-        return reject(new Error(`${bin} falhou: ${errorDetail}.${hint}`))
+        return reject(new Error(say({ en: `${bin} failed: ${errorDetail}.${hint}`, pt: `${bin} falhou: ${errorDetail}.${hint}` })))
       }
 
       resolve({ text, provider, model, durationMs: Date.now() - t0, stopped, sessionId: parser.sessionId(), usage: parser.usage() })

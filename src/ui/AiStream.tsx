@@ -4,6 +4,7 @@ import { Link } from 'react-router'
 import { CopyButton } from './CopyButton'
 import { Markdown } from './Markdown'
 import { SkeletonRows } from './Async'
+import { tx } from '@/lib/i18n'
 
 // Eventos que toda rota de IA manda por SSE; cada tela pode mandar um evento próprio de contexto,
 // que vira a linha de progresso por describe().
@@ -34,8 +35,8 @@ export function AiStream<E extends AiStreamEvent>({ start, initial, describe }: 
         const custom = describe?.(e)
         if (custom) setInfo(custom)
         if (e.type === 'text' && e.text) setText(t => t + e.text)
-        if (e.type === 'error') ((failed = true), setInfo(e.message ?? 'a IA falhou'))
-        if (e.type === 'done') setInfo(`${e.provider} · ${e.model || 'modelo padrão'} · ${Math.round((e.durationMs ?? 0) / 1000)}s${e.stopped ? ' · parado por você' : ''}`)
+        if (e.type === 'error') ((failed = true), setInfo(e.message ?? tx({ en: 'the AI failed', pt: 'a IA falhou' })))
+        if (e.type === 'done') setInfo(`${e.provider} · ${e.model || tx({ en: 'default model', pt: 'modelo padrão' })} · ${Math.round((e.durationMs ?? 0) / 1000)}s${e.stopped ? tx({ en: ' · stopped by you', pt: ' · parado por você' }) : ''}`)
       }, abort.current.signal)
     } catch (e) {
       failed = true
@@ -55,18 +56,21 @@ export function AiStream<E extends AiStreamEvent>({ start, initial, describe }: 
         <span className="muted mono" style={{ fontSize: 12 }}>{info}</span>
         <div className="spacer" />
         {phase === 'running' ? (
-          <button className="btn btn-sm" onClick={() => abort.current?.abort()} title="Encerra o agente; o que já chegou fica na tela"><Square size={12} /> Parar</button>
+          <button className="btn btn-sm" onClick={() => abort.current?.abort()} title={tx({ en: 'Stops the agent; what already arrived stays on screen', pt: 'Encerra o agente; o que já chegou fica na tela' })}><Square size={12} /> {tx({ en: 'Stop', pt: 'Parar' })}</button>
         ) : (
           <>
-            {text && <CopyButton value={text} label="Copiar" />}
-            <button className="btn btn-sm" onClick={run}><Sparkles size={13} /> Refazer</button>
+            {text && <CopyButton value={text} label={tx({ en: 'Copy', pt: 'Copiar' })} />}
+            <button className="btn btn-sm" onClick={run}><Sparkles size={13} /> {tx({ en: 'Run again', pt: 'Refazer' })}</button>
           </>
         )}
       </div>
       {phase === 'error' && <div className="callout callout-crit">{info}</div>}
       {text ? <Markdown>{text}</Markdown> : phase === 'running' && <SkeletonRows rows={4} height={18} />}
       <p className="muted" style={{ fontSize: 12 }}>
-        Provedor de IA definido em <Link to="/configuracoes/ia">Configurações</Link>. O agente só lê; nada é executado.
+        {tx({
+          en: <>AI provider set in <Link to="/configuracoes/ia">Settings</Link>. The agent only reads; nothing is run.</>,
+          pt: <>Provedor de IA definido em <Link to="/configuracoes/ia">Configurações</Link>. O agente só lê; nada é executado.</>,
+        })}
       </p>
     </div>
   )

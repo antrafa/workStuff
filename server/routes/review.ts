@@ -5,12 +5,13 @@ import { tildify } from '../lib/paths.ts'
 import { openSse } from '../lib/sse.ts'
 import { resolveProject } from '../lib/analysis/store.ts'
 import { branchDiff, repoInfo } from '../lib/review/git.ts'
+import { say } from '../lib/i18n.ts'
 
 export const reviewRouter = Router()
 
 reviewRouter.post('/pick-folder', async (_req, res) => {
   try {
-    res.json({ path: await pickFolder('Repositório para revisar') })
+    res.json({ path: await pickFolder(say({ en: 'Repository to review', pt: 'Repositório para revisar' })) })
   } catch (e) {
     res.status(400).json({ error: (e as Error).message })
   }
@@ -33,7 +34,7 @@ reviewRouter.post('/run', async (req, res) => {
     path = resolveProject(req.body?.path)
     current = (await repoInfo(path)).current
     diff = await branchDiff(path, String(req.body?.base ?? ''), req.body?.includeWorking === true)
-    if (!diff.files) throw new Error(`nada para revisar: ${current} não tem diferença contra ${diff.base}`)
+    if (!diff.files) throw new Error(say({ en: `nothing to review: ${current} has no difference against ${diff.base}`, pt: `nada para revisar: ${current} não tem diferença contra ${diff.base}` }))
   } catch (e) {
     res.status(400).json({ error: (e as Error).message })
     return

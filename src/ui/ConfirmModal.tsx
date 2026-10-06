@@ -3,6 +3,7 @@ import { useState, type ReactNode } from 'react'
 import { CopyButton } from './CopyButton'
 import { EnvStamp } from './EnvStamp'
 import { Modal } from './Modal'
+import { tx } from '@/lib/i18n'
 
 type Props = {
   title: string
@@ -30,14 +31,14 @@ export function ConfirmModal({ title, confirmLabel, icon: Icon, onConfirm, onClo
   const blocked = typeToConfirm !== undefined && typed !== typeToConfirm
   return (
     <Modal
-      title={<ConfirmHead env={env} action={action ?? 'confirmar'} />}
+      title={<ConfirmHead env={env} action={action ?? tx({ en: 'confirm', pt: 'confirmar' })} />}
       width={560}
       onClose={onClose}
       footer={
         <>
-          <span className="muted confirm-keys">Esc cancela · Enter não confirma</span>
+          <span className="muted confirm-keys">{tx({ en: 'Esc cancels · Enter does not confirm', pt: 'Esc cancela · Enter não confirma' })}</span>
           <div className="spacer" />
-          <button className="btn" onClick={onClose}>Cancelar</button>
+          <button className="btn" onClick={onClose}>{tx({ en: 'Cancel', pt: 'Cancelar' })}</button>
           <button className="btn btn-danger-solid" disabled={blocked} onClick={() => (onConfirm(), onClose())}>
             <Icon size={14} /> {confirmLabel}
           </button>
@@ -46,14 +47,14 @@ export function ConfirmModal({ title, confirmLabel, icon: Icon, onConfirm, onClo
     >
       <h2 className="confirm-title display">{title}</h2>
       <dl className="confirm-grid">
-        {command && <Section label="Comando"><Command value={command} /></Section>}
-        {effects && effects.length > 0 && <Section label="Efeito"><Bullets items={effects} /></Section>}
-        {losses && losses.length > 0 && <Section label="Perde"><Bullets items={losses} /></Section>}
+        {command && <Section label={tx({ en: 'Command', pt: 'Comando' })}><Command value={command} /></Section>}
+        {effects && effects.length > 0 && <Section label={tx({ en: 'Effect', pt: 'Efeito' })}><Bullets items={effects} /></Section>}
+        {losses && losses.length > 0 && <Section label={tx({ en: 'You lose', pt: 'Perde' })}><Bullets items={losses} /></Section>}
       </dl>
       {children}
       {typeToConfirm !== undefined && (
         <label className="field confirm-type">
-          <span>Digite <code className="inline">{typeToConfirm}</code> para confirmar</span>
+          <span>{tx({ en: <>Type <code className="inline">{typeToConfirm}</code> to confirm</>, pt: <>Digite <code className="inline">{typeToConfirm}</code> para confirmar</> })}</span>
           <input className="input mono" value={typed} onChange={e => setTyped(e.target.value)} autoFocus spellCheck={false} />
         </label>
       )}
@@ -69,15 +70,15 @@ export function LockedActionModal({ title, env, reason, command, canDo, onClose 
     <Modal
       title={
         <span className="row locked-head">
-          <EnvStamp env={env} /> <Lock size={13} /> <b>somente leitura · nada será executado</b>
+          <EnvStamp env={env} /> <Lock size={13} /> <b>{tx({ en: 'read-only · nothing will run', pt: 'somente leitura · nada será executado' })}</b>
         </span>
       }
       width={560}
       onClose={onClose}
       footer={
         <>
-          {command && <CopyButton value={command} label="Copiar comando" />}
-          <button className="btn" onClick={onClose}>Fechar</button>
+          {command && <CopyButton value={command} label={tx({ en: 'Copy command', pt: 'Copiar comando' })} />}
+          <button className="btn" onClick={onClose}>{tx({ en: 'Close', pt: 'Fechar' })}</button>
         </>
       }
     >
@@ -85,8 +86,8 @@ export function LockedActionModal({ title, env, reason, command, canDo, onClose 
       <h2 className="confirm-title display">{title}</h2>
       <p className="confirm-reason">{reason}</p>
       <dl className="confirm-grid">
-        {command && <Section label="Seria rodado"><pre className="code locked-code">{command}</pre></Section>}
-        {canDo && canDo.length > 0 && <Section label="Pode aqui"><Bullets items={canDo} /></Section>}
+        {command && <Section label={tx({ en: 'Would run', pt: 'Seria rodado' })}><pre className="code locked-code">{command}</pre></Section>}
+        {canDo && canDo.length > 0 && <Section label={tx({ en: 'You can do here', pt: 'Pode aqui' })}><Bullets items={canDo} /></Section>}
       </dl>
     </Modal>
   )

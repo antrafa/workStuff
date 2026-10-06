@@ -1,4 +1,5 @@
 import { dataFile } from './paths.ts'
+import { say } from './i18n.ts'
 import { readJson, writeJson } from './jsonFile.ts'
 import { run, runHelp, which } from './run.ts'
 import { parseAgyModels, parseClaudeHelp, parseCodexCatalog, type Model } from './aiModels.ts'
@@ -63,8 +64,10 @@ async function readModels(id: ProviderId, path: string, force: boolean): Promise
   try {
     entry = { models: await PROVIDERS[id].listModels(path), fetchedAt: new Date().toISOString() }
   } catch (e) {
-    // Falha na leitura não apaga a lista anterior: mostra o erro e mantém o que já se sabia.
-    entry = { models: cached?.models ?? [], fetchedAt: cached?.fetchedAt ?? new Date().toISOString(), error: `${PROVIDERS[id].source.command} falhou: ${(e as Error).message}` }
+    // A failed read keeps the previous list: it shows the error and keeps what was already known.
+    const failed = (e as Error).message
+    const command = PROVIDERS[id].source.command
+    entry = { models: cached?.models ?? [], fetchedAt: cached?.fetchedAt ?? new Date().toISOString(), error: say({ en: `${command} failed: ${failed}`, pt: `${command} falhou: ${failed}` }) }
   }
   writeJson(CACHE_FILE, { ...readJson(CACHE_FILE, {}), [id]: entry })
   return entry

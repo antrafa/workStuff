@@ -4,6 +4,7 @@ import { call, send, type Conn } from '../repos/providers.ts'
 import { RepoError } from '../repos/sources.ts'
 import { normalizePath } from '../repos/layout.ts'
 import { gitlabStatus, githubStatus, secondsBetween, type Job, type Pipeline } from './normalize.ts'
+import { say } from '../i18n.ts'
 
 type GlPipeline = { id: number; iid: number; status: string; source: string; ref: string; sha: string; web_url: string; created_at: string; updated_at: string }
 type GlJob = { id: number; name: string; stage: string; status: string; allow_failure: boolean; web_url: string; duration: number | null }
@@ -22,13 +23,13 @@ const glProject = (fullPath: string) => `/projects/${encodeURIComponent(normaliz
 
 function ghRepo(fullPath: string) {
   const parts = normalizePath(fullPath).split('/')
-  if (parts.length !== 2) throw new RepoError('no GitHub o projeto é dono/repositório')
+  if (parts.length !== 2) throw new RepoError(say({ en: 'on GitHub the project is owner/repository', pt: 'no GitHub o projeto é dono/repositório' }))
   return `/repos/${parts.map(encodeURIComponent).join('/')}`
 }
 
 // Os ids chegam pela URL: só números, para não virarem caminho de API arbitrário.
 function numericId(id: string) {
-  if (!/^\d{1,20}$/.test(id)) throw new RepoError('identificador inválido')
+  if (!/^\d{1,20}$/.test(id)) throw new RepoError(say({ en: 'invalid identifier', pt: 'identificador inválido' }))
   return id
 }
 

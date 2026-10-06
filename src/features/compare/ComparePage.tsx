@@ -5,6 +5,7 @@ import { Empty, Page, Search, Segmented, SkeletonRows } from '@/ui'
 import { api } from '@/lib/api'
 import { useAsync } from '@/lib/useAsync'
 import { fetchKubeconfigs, type Kubeconfig } from '@/features/cluster/api'
+import { tx } from '@/lib/i18n'
 
 type Side = { kubeconfigId: string; context: string; namespace: string }
 type State = 'igual' | 'diferente' | 'só em A' | 'só em B'
@@ -13,6 +14,7 @@ type SideInfo = { label: string; count: number; forbidden: string[] }
 type Result = { a: SideInfo; b: SideInfo; workloads: WorkloadDiff[] }
 
 const STORAGE = 'compare-sides'
+const MISSING = tx({ en: 'missing', pt: 'ausente' })
 const empty: Side = { kubeconfigId: '', context: '', namespace: '' }
 
 function readSides(): [Side, Side] {
@@ -20,12 +22,19 @@ function readSides(): [Side, Side] {
     const saved = JSON.parse(localStorage.getItem(STORAGE) ?? 'null')
     if (Array.isArray(saved) && saved.length === 2) return saved as [Side, Side]
   } catch {
-    // sem storage os lados começam vazios
+    // no storage: both sides start empty
   }
   return [empty, empty]
 }
 
 const STATE_BADGE: Record<State, string> = { diferente: 'badge-warn', 'só em A': 'badge-info', 'só em B': 'badge-info', igual: 'badge-ok' }
+// The server's ids are Portuguese words; what the screen shows follows the language
+const STATE_LABEL: Record<State, string> = {
+  diferente: tx({ en: 'different', pt: 'diferente' }),
+  'só em A': tx({ en: 'only in A', pt: 'só em A' }),
+  'só em B': tx({ en: 'only in B', pt: 'só em B' }),
+  igual: tx({ en: 'same', pt: 'igual' }),
+}
 
 export default function ComparePage() {
   const kubeconfigs = useAsync(fetchKubeconfigs)
@@ -38,7 +47,7 @@ export default function ComparePage() {
     try {
       localStorage.setItem(STORAGE, JSON.stringify(sides))
     } catch {
-      // sem storage os lados não são lembrados
+      // no storage: the sides are not remembered
     }
   }, [sides])
 
@@ -60,19 +69,22 @@ export default function ComparePage() {
 
   return (
     <Page
-      title="Comparar ambientes"
-      hint="Diferenças de imagem, réplicas, recursos, variáveis e probes entre os Deployments, StatefulSets e CronJobs de dois namespaces, em clusters iguais ou diferentes. Só leitura."
+      title={tx({ en: 'Compare environments', pt: 'Comparar ambientes' })}
+      hint={tx({
+        en: 'Differences in image, replicas, resources, variables and probes between the Deployments, StatefulSets and CronJobs of two namespaces, on the same or different clusters. Read-only.',
+        pt: 'Diferenças de imagem, réplicas, recursos, variáveis e probes entre os Deployments, StatefulSets e CronJobs de dois namespaces, em clusters iguais ou diferentes. Só leitura.',
+      })}
     >
       <section className="card card-pad">
         <div className="cmp-sides">
           <SidePicker label="A" side={sides[0]} items={items} onChange={s => setSide(0, s)} />
-          <button className="btn btn-ghost btn-icon" title="Trocar os lados" onClick={() => setSides([sides[1], sides[0]])}><ArrowLeftRight size={15} /></button>
+          <button className="btn btn-ghost btn-icon" title={tx({ en: 'Swap the sides', pt: 'Trocar os lados' })} onClick={() => setSides([sides[1], sides[0]])}><ArrowLeftRight size={15} /></button>
           <SidePicker label="B" side={sides[1]} items={items} onChange={s => setSide(1, s)} />
         </div>
         <div className="row" style={{ marginTop: 12 }}>
-          <span className="muted" style={{ fontSize: 12 }}>Variáveis com nome de senha, token ou chave aparecem mascaradas; Secret nunca é lido.</span>
+          <span className="muted" style={{ fontSize: 12 }}>{tx({ en: 'Variables named like a password, token or key show masked; a Secret is never read.', pt: 'Variáveis com nome de senha, token ou chave aparecem mascaradas; Secret nunca é lido.' })}</span>
           <div className="spacer" />
-          <button className="btn btn-primary" disabled={!ready || running} onClick={run}><GitCompare size={14} /> {running ? 'Comparando…' : 'Comparar'}</button>
+          <button className="btn btn-primary" disabled={!ready || running} onClick={run}><GitCompare size={14} /> {running ? tx({ en: 'Comparing…', pt: 'Comparando…' }) : tx({ en: 'Compare', pt: 'Comparar' })}</button>
         </div>
         {error && <div className="callout callout-crit" style={{ fontSize: 12.5, marginTop: 12 }}>{error}</div>}
       </section>
@@ -87,12 +99,12 @@ function SidePicker({ label, side, items, onChange }: { label: string; side: Sid
   const kc = items.find(k => k.id === side.kubeconfigId)
   return (
     <div className="stack" style={{ ['--gap' as string]: '8px' }}>
-      <div className="eyebrow">Lado {label}</div>
+      <div className="eyebrow">{tx({ en: `Side ${label}`, pt: `Lado ${label}` })}</div>
       <select className="select" value={side.kubeconfigId} onChange={e => {
         const next = items.find(k => k.id === e.target.value)
         onChange({ ...side, kubeconfigId: e.target.value, context: next?.currentContext ?? '' })
       }}>
-        <option value="">escolha o kubeconfig</option>
+        <option value="">{tx({ en: 'choose the kubeconfig', pt: 'escolha o kubeconfig' })}</option>
         {items.map(k => <option key={k.id} value={k.id}>{k.id}{k.environment ? ` (${k.environment})` : ''}</option>)}
       </select>
       {kc && kc.contexts.length > 1 && (
@@ -119,25 +131,25 @@ function Diffs({ result }: { result: Result }) {
   return (
     <>
       {blocked.map(([label, s]) => (
-        <div key={label} className="callout callout-warn" style={{ fontSize: 12.5 }}>Lado {label}: sem permissão para listar {s.forbidden.join(', ')}; esses tipos ficaram fora da comparação.</div>
+        <div key={label} className="callout callout-warn" style={{ fontSize: 12.5 }}>{tx({ en: `Side ${label}: no permission to list ${s.forbidden.join(', ')}; those kinds were left out of the comparison.`, pt: `Lado ${label}: sem permissão para listar ${s.forbidden.join(', ')}; esses tipos ficaram fora da comparação.` })}</div>
       ))}
       <div className="grid" style={{ ['--min' as string]: '150px' }}>
         {(['diferente', 'só em A', 'só em B', 'igual'] as State[]).map(s => (
-          <div key={s} className="stat"><span className="eyebrow">{s}</span><b>{count(s)}</b><small>workloads</small></div>
+          <div key={s} className="stat"><span className="eyebrow">{STATE_LABEL[s]}</span><b>{count(s)}</b><small>workloads</small></div>
         ))}
       </div>
       <section className="card">
         <div className="card-head" style={{ flexWrap: 'wrap' }}>
-          <Segmented<Filter> value={filter} onChange={setFilter} options={[{ id: 'mudou', label: `Com diferença (${changed.length})` }, { id: 'todos', label: `Todos (${result.workloads.length})` }]} />
+          <Segmented<Filter> value={filter} onChange={setFilter} options={[{ id: 'mudou', label: tx({ en: `With differences (${changed.length})`, pt: `Com diferença (${changed.length})` }) }, { id: 'todos', label: tx({ en: `All (${result.workloads.length})`, pt: `Todos (${result.workloads.length})` }) }]} />
           <div className="spacer" />
-          <Search value={query} onChange={setQuery} placeholder="Filtrar por nome" />
+          <Search value={query} onChange={setQuery} placeholder={tx({ en: 'Filter by name', pt: 'Filtrar por nome' })} />
         </div>
         {rows.length === 0 ? (
-          <Empty icon={GitCompare} title="Nenhuma diferença">Os dois lados têm os mesmos workloads com a mesma configuração.</Empty>
+          <Empty icon={GitCompare} title={tx({ en: 'No differences', pt: 'Nenhuma diferença' })}>{tx({ en: 'Both sides have the same workloads with the same configuration.', pt: 'Os dois lados têm os mesmos workloads com a mesma configuração.' })}</Empty>
         ) : (
           <div className="table-wrap">
             <table className="table">
-              <thead><tr><th>Workload</th><th>Estado</th><th>Diferenças</th></tr></thead>
+              <thead><tr><th>Workload</th><th>{tx({ en: 'State', pt: 'Estado' })}</th><th>{tx({ en: 'Differences', pt: 'Diferenças' })}</th></tr></thead>
               <tbody>
                 {rows.map(w => {
                   const key = `${w.kind}/${w.name}`
@@ -152,20 +164,20 @@ function Diffs({ result }: { result: Result }) {
                           </div>
                           <div className="muted" style={{ fontSize: 11.5 }}>{w.kind}</div>
                         </td>
-                        <td><span className={`badge ${STATE_BADGE[w.state]}`}>{w.state}</span></td>
+                        <td><span className={`badge ${STATE_BADGE[w.state]}`}>{STATE_LABEL[w.state]}</span></td>
                         <td className="muted" style={{ fontSize: 12.5 }}>{w.diffs.length ? w.diffs.slice(0, 4).map(d => d.field.split('.').slice(-1)[0]).join(', ') + (w.diffs.length > 4 ? ` +${w.diffs.length - 4}` : '') : '—'}</td>
                       </tr>
                       {expanded && (
                         <tr className="cmp-detail">
                           <td colSpan={3}>
                             <table className="table cmp-fields">
-                              <thead><tr><th>Campo</th><th title={result.a.label}>A</th><th title={result.b.label}>B</th></tr></thead>
+                              <thead><tr><th>{tx({ en: 'Field', pt: 'Campo' })}</th><th title={result.a.label}>A</th><th title={result.b.label}>B</th></tr></thead>
                               <tbody>
                                 {w.diffs.map(d => (
                                   <tr key={d.field}>
                                     <td className="mono">{d.field}</td>
-                                    <td className="mono">{d.a ?? <span className="muted">ausente</span>}</td>
-                                    <td className="mono">{d.b ?? <span className="muted">ausente</span>}</td>
+                                    <td className="mono">{d.a ?? <span className="muted">{MISSING}</span>}</td>
+                                    <td className="mono">{d.b ?? <span className="muted">{MISSING}</span>}</td>
                                   </tr>
                                 ))}
                               </tbody>

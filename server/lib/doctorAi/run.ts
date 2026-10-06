@@ -15,6 +15,7 @@ import { spawnCli, type RunResult } from '../ai/runner.ts'
 import type { AiEvent } from '../ai/events.ts'
 import type { Environment } from '../k8s/policy.ts'
 import { decide } from './command.ts'
+import { say } from '../i18n.ts'
 
 const exec = promisify(execFile)
 // Linhas de log interno do kubectl (klog, ex.: E0930 12:00:00.000 memcache.go) escondem a mensagem que importa.
@@ -79,7 +80,7 @@ export function doctorArgs(scope: Scope, prompt: string, settingsFile: string, r
 
 export async function runDoctor(scope: Scope, prompt: string, resume: string | null, onEvent: (e: AiEvent) => void, signal: AbortSignal): Promise<RunResult> {
   const { provider, model } = readSettings()
-  if (provider !== 'claude') throw new Error('o Cluster Doctor só roda com Claude Code, o único CLI com trava de comando nativa; troque o provedor em Configurações')
+  if (provider !== 'claude') throw new Error(say({ en: 'Cluster Doctor only runs on Claude Code, the only CLI with a native command lock; change the provider in Settings', pt: 'o Cluster Doctor só roda com Claude Code, o único CLI com trava de comando nativa; troque o provedor em Configurações' }))
   const tmp = await scopedKubeconfig(scope)
   try {
     return await spawnCli('claude', model, doctorArgs(scope, prompt, tmp.settings, resume), {
@@ -90,10 +91,10 @@ export async function runDoctor(scope: Scope, prompt: string, resume: string | n
   }
 }
 
-// Escrita confirmada pelo usuário: revalida a linha, roda sem shell, contra o kubeconfig restrito.
+// A write the user confirmed: re-validates the line, runs without a shell, against the restricted kubeconfig.
 export async function executeApproved(scope: Scope, line: string) {
   const d = decide(line)
-  if (!d.ok || d.action === 'read') throw new Error(`comando recusado na revalidação: ${d.ok ? 'não é escrita' : d.reason}`)
+  if (!d.ok || d.action === 'read') throw new Error(say({ en: 'command refused on re-validation: ', pt: 'comando recusado na revalidação: ' }) + (d.ok ? say({ en: 'not a write', pt: 'não é escrita' }) : d.reason))
   const tmp = await scopedKubeconfig(scope)
   try {
     const { stdout, stderr } = await exec('kubectl', ['--kubeconfig', tmp.kubeconfig, '--request-timeout=30s', ...d.args], { timeout: 60_000 })

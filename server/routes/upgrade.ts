@@ -8,6 +8,7 @@ import { listKubeconfigs } from '../lib/k8s/kubeconfigs.ts'
 import { kubeconfigCertificates } from '../lib/upgrade/certs.ts'
 import { clusterReport, ingressCertificates } from '../lib/upgrade/cluster.ts'
 import { scanManifests } from '../lib/upgrade/deprecations.ts'
+import { say } from '../lib/i18n.ts'
 
 export const upgradeRouter = Router()
 
@@ -22,7 +23,7 @@ const handle = (fn: (req: Request) => unknown) => async (req: Request, res: Resp
 // Versão de destino vem da tela: só "1.NN".
 function targetOf(v: unknown): string | null {
   if (v === undefined || v === '') return null
-  if (typeof v !== 'string' || !/^1\.\d{1,2}$/.test(v)) throw new Error('versão de destino inválida: use o formato 1.30')
+  if (typeof v !== 'string' || !/^1\.\d{1,2}$/.test(v)) throw new Error(say({ en: 'invalid target version: use the format 1.30', pt: 'versão de destino inválida: use o formato 1.30' }))
   return v
 }
 
@@ -31,11 +32,11 @@ const namespaceOf = (v: unknown) => (typeof v === 'string' && v ? checkName('nam
 upgradeRouter.get('/cluster', handle(req => clusterReport(targetOf(req.query.target), namespaceOf(req.query.namespace))))
 upgradeRouter.get('/certificates', handle(req => ingressCertificates(namespaceOf(req.query.namespace))))
 
-upgradeRouter.post('/pick-folder', handle(async () => ({ path: await pickFolder('Repositório com os manifests') })))
+upgradeRouter.post('/pick-folder', handle(async () => ({ path: await pickFolder(say({ en: 'Repository with the manifests', pt: 'Repositório com os manifests' })) })))
 upgradeRouter.post('/manifests', handle(req => {
   const path = resolveProject(req.body?.path)
   const target = targetOf(req.body?.target)
-  if (!target) throw new Error('informe a versão de destino')
+  if (!target) throw new Error(say({ en: 'enter the target version', pt: 'informe a versão de destino' }))
   return { path: tildify(path), target, ...scanManifests(path, target) }
 }))
 

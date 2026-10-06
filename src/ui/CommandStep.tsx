@@ -1,6 +1,7 @@
 import './code.css'
 import { Lock, Play, Zap } from 'lucide-react'
 import { CopyButton } from './CopyButton'
+import { tx } from '@/lib/i18n'
 
 export type CommandResult = { ok: boolean; output: string }
 
@@ -24,12 +25,12 @@ export function CommandStep({ command, kind, reason, result, disabled, onRun }: 
         <div className="cmd-step-actions">
           <span className="cmd-kind" title={reason}>
             {kind === 'blocked' && <Lock size={10} />}
-            {kind === 'read' ? 'leitura' : kind === 'write' ? 'escrita' : 'bloqueado'}
+            {kind === 'read' ? tx({ en: 'read', pt: 'leitura' }) : kind === 'write' ? tx({ en: 'write', pt: 'escrita' }) : tx({ en: 'blocked', pt: 'bloqueado' })}
           </span>
           <CopyButton value={command} />
           {kind !== 'blocked' && (
             <button className={`btn btn-sm ${kind === 'write' ? 'btn-danger' : 'btn-primary'}`} disabled={disabled || result === 'running'} onClick={onRun}>
-              {kind === 'write' ? <><Zap size={12} /> Executar</> : <><Play size={12} /> Rodar</>}
+              {kind === 'write' ? <><Zap size={12} /> {tx({ en: 'Execute', pt: 'Executar' })}</> : <><Play size={12} /> {tx({ en: 'Run', pt: 'Rodar' })}</>}
             </button>
           )}
         </div>
@@ -37,7 +38,7 @@ export function CommandStep({ command, kind, reason, result, disabled, onRun }: 
       {kind === 'blocked' && reason && <div className="cmd-note">{reason}</div>}
       {result === 'running' && <div className="cmd-note">executando…</div>}
       {result && result !== 'running' && (
-        <pre className={`cmd-out ${result.ok ? 'is-ok' : 'is-fail'}`}>{result.output || '(executado, sem saída)'}</pre>
+        <pre className={`cmd-out ${result.ok ? 'is-ok' : 'is-fail'}`}>{result.output || tx({ en: '(ran, no output)', pt: '(executado, sem saída)' })}</pre>
       )}
     </div>
   )

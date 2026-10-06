@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Segmented } from '@/ui'
 import { Output, attempt } from './Converters'
 import { MAX_DIFF_LINES, digest, formatJson, lineDiff, regexMatches, toYaml, yamlToJson } from './text'
+import { tx } from '@/lib/i18n'
 
 type JsonMode = 'formatar' | 'compactar' | 'yaml' | 'de-yaml'
 
@@ -17,8 +18,15 @@ export function JsonTool() {
   })
   return (
     <div className="stack" style={{ ['--gap' as string]: '8px' }}>
-      <Segmented<JsonMode> value={mode} onChange={setMode} options={[{ id: 'formatar', label: 'Formatar' }, { id: 'compactar', label: 'Compactar' }, { id: 'yaml', label: 'Para YAML' }, { id: 'de-yaml', label: 'De YAML' }]} />
-      <textarea className="textarea mono" rows={5} value={input} placeholder={mode === 'de-yaml' ? 'cole o YAML (aceita vários documentos com ---)' : '{"cole": "o JSON"}'} onChange={e => setInput(e.target.value)} />
+      <Segmented<JsonMode> value={mode} onChange={setMode} options={[
+        { id: 'formatar', label: tx({ en: 'Format', pt: 'Formatar' }) },
+        { id: 'compactar', label: tx({ en: 'Minify', pt: 'Compactar' }) },
+        { id: 'yaml', label: tx({ en: 'To YAML', pt: 'Para YAML' }) },
+        { id: 'de-yaml', label: tx({ en: 'From YAML', pt: 'De YAML' }) },
+      ]} />
+      <textarea className="textarea mono" rows={5} value={input} placeholder={mode === 'de-yaml'
+        ? tx({ en: 'paste the YAML (several documents with --- accepted)', pt: 'cole o YAML (aceita vários documentos com ---)' })
+        : tx({ en: '{"paste": "the JSON"}', pt: '{"cole": "o JSON"}' })} onChange={e => setInput(e.target.value)} />
       <Output value={result.value} error={result.error} />
     </div>
   )
@@ -32,13 +40,18 @@ export function DiffTool() {
   return (
     <div className="stack" style={{ ['--gap' as string]: '8px' }}>
       <div className="tool-two">
-        <textarea className="textarea mono" rows={5} value={left} placeholder="antes" onChange={e => setLeft(e.target.value)} />
-        <textarea className="textarea mono" rows={5} value={right} placeholder="depois" onChange={e => setRight(e.target.value)} />
+        <textarea className="textarea mono" rows={5} value={left} placeholder={tx({ en: 'before', pt: 'antes' })} onChange={e => setLeft(e.target.value)} />
+        <textarea className="textarea mono" rows={5} value={right} placeholder={tx({ en: 'after', pt: 'depois' })} onChange={e => setRight(e.target.value)} />
       </div>
       {result.error && <small className="tool-error">{result.error}</small>}
       {result.value && (
         <>
-          <small className="muted">{changes ? `${changes} linha(s) diferente(s)` : 'Os dois textos são iguais.'} Até {MAX_DIFF_LINES} linhas de cada lado.</small>
+          <small className="muted">
+            {changes
+              ? tx({ en: `${changes} different line(s).`, pt: `${changes} linha(s) diferente(s)` })
+              : tx({ en: 'The two texts are the same.', pt: 'Os dois textos são iguais.' })}{' '}
+            {tx({ en: `Up to ${MAX_DIFF_LINES} lines on each side.`, pt: `Até ${MAX_DIFF_LINES} linhas de cada lado.` })}
+          </small>
           {changes > 0 && (
             <pre className="code tool-diff">
               {result.value.map((d, i) => (
@@ -65,15 +78,15 @@ export function RegexTool() {
         <span className="mono muted">/</span>
         <input className="input mono" style={{ width: 70 }} value={flags} onChange={e => setFlags(e.target.value.replace(/[^gimsuy]/g, ''))} title="Flags: g, i, m, s, u, y" />
       </div>
-      <textarea className="textarea mono" rows={4} value={input} placeholder="texto para testar" onChange={e => setInput(e.target.value)} />
-      {result.error && <small className="tool-error">Expressão inválida: {result.error}</small>}
+      <textarea className="textarea mono" rows={4} value={input} placeholder={tx({ en: 'text to test', pt: 'texto para testar' })} onChange={e => setInput(e.target.value)} />
+      {result.error && <small className="tool-error">{tx({ en: 'Invalid expression: ', pt: 'Expressão inválida: ' })}{result.error}</small>}
       {result.value && (
-        result.value.length === 0 ? <small className="muted">Nenhuma correspondência.</small> : (
+        result.value.length === 0 ? <small className="muted">{tx({ en: 'No match.', pt: 'Nenhuma correspondência.' })}</small> : (
           <div className="uuid-list">
-            <small className="muted">{result.value.length} correspondência(s)</small>
+            <small className="muted">{tx({ en: `${result.value.length} match(es)`, pt: `${result.value.length} correspondência(s)` })}</small>
             {result.value.map((m, i) => (
               <div key={i} className="mono">
-                <span className="muted">@{m.index}</span> <b>{m.text || '(vazio)'}</b>
+                <span className="muted">@{m.index}</span> <b>{m.text || tx({ en: '(empty)', pt: '(vazio)' })}</b>
                 {m.groups.length > 0 && <span className="muted"> · {m.groups.map((g, j) => `$${j + 1}=${g}`).join(' · ')}</span>}
               </div>
             ))}
@@ -100,14 +113,14 @@ export function HashTool() {
   const rows = useMemo(() => ALGORITHMS.filter(a => hashes[a]), [hashes])
   return (
     <div className="stack" style={{ ['--gap' as string]: '8px' }}>
-      <textarea className="textarea" rows={3} value={input} placeholder="texto (UTF-8)" onChange={e => setInput(e.target.value)} />
+      <textarea className="textarea" rows={3} value={input} placeholder={tx({ en: 'text (UTF-8)', pt: 'texto (UTF-8)' })} onChange={e => setInput(e.target.value)} />
       {rows.map(a => (
         <div key={a} className="stack" style={{ ['--gap' as string]: '2px' }}>
           <span className="eyebrow">{a}</span>
           <Output value={hashes[a]} error={null} />
         </div>
       ))}
-      {input && <small className="muted">MD5 não está no Web Crypto do navegador e por isso não aparece.</small>}
+      {input && <small className="muted">{tx({ en: "MD5 is not in the browser's Web Crypto, so it does not show.", pt: 'MD5 não está no Web Crypto do navegador e por isso não aparece.' })}</small>}
     </div>
   )
 }

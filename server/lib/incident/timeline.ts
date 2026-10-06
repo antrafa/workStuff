@@ -1,10 +1,11 @@
-// Linha do tempo de um incidente num namespace: eventos, restarts, rollouts e linhas de erro do log
-// anterior dos pods que reiniciaram, numa ordem só. Só leitura.
+// An incident timeline for a namespace: events, restarts, rollouts and error lines from the previous
+// log of the pods that restarted, in a single order. Read-only.
 // Autoteste: node server/lib/incident/timeline.ts --selfcheck
 
 import assert from 'node:assert/strict'
 import { mapLimit } from '../concurrency.ts'
 import { kubectl, kubectlJson, type Target } from '../k8s/kubectl.ts'
+import { say } from '../i18n.ts'
 
 export type Entry = {
   at: string
@@ -63,8 +64,15 @@ export function fromPods(pods: PodJson[], since: Date): Entry[] {
     return [{
       at: t.finishedAt, source: 'restart' as const, severity: (oom || (t.exitCode ?? 0) !== 0 ? 'crítico' : 'aviso') as Entry['severity'],
       object: `Pod/${p.metadata.name}`,
-      title: `${c.name} terminou: ${t.reason ?? 'sem motivo'} (código ${t.exitCode ?? '?'})`,
-      detail: `${c.restartCount} restart(s) no total${oom ? '; memória acima do limit' : ''}`,
+      // The container name comes first in both languages: buildTimeline reads it back from the title
+      title: say({
+        en: `${c.name} terminated: ${t.reason ?? 'no reason'} (code ${t.exitCode ?? '?'})`,
+        pt: `${c.name} terminou: ${t.reason ?? 'sem motivo'} (código ${t.exitCode ?? '?'})`,
+      }),
+      detail: say({
+        en: `${c.restartCount} restart(s) in total${oom ? '; memory above the limit' : ''}`,
+        pt: `${c.restartCount} restart(s) no total${oom ? '; memória acima do limit' : ''}`,
+      }),
     }]
   }))
 }
@@ -76,7 +84,7 @@ export function fromReplicaSets(sets: ReplicaSetJson[], since: Date): Entry[] {
     const owner = rs.metadata.ownerReferences?.find(o => o.kind === 'Deployment')?.name ?? rs.metadata.name
     const revision = rs.metadata.annotations?.['deployment.kubernetes.io/revision'] ?? '?'
     const images = rs.spec.template.spec.containers.map(c => `${c.name}=${c.image.split('/').pop()}`).join(', ')
-    return [{ at: rs.metadata.creationTimestamp, source: 'rollout' as const, severity: 'info' as const, object: `Deployment/${owner}`, title: `rollout para a revisão ${revision}`, detail: images }]
+    return [{ at: rs.metadata.creationTimestamp, source: 'rollout' as const, severity: 'info' as const, object: `Deployment/${owner}`, title: say({ en: `rollout to revision ${revision}`, pt: `rollout para a revisão ${revision}` }), detail: images }]
   })
 }
 
@@ -90,7 +98,7 @@ export function errorLines(pod: string, container: string, log: string, since: D
     .map(l => l.match(/^(\S+Z) (.*)$/))
     .filter((m): m is RegExpMatchArray => Boolean(m) && ERROR_LINE.test(m![2]) && new Date(m![1]) >= since)
     .slice(-max)
-    .map(m => ({ at: m[1], source: 'log' as const, severity: 'crítico' as const, object: `Pod/${pod}`, title: `erro no log de ${container}`, detail: m[2].slice(0, 400) }))
+    .map(m => ({ at: m[1], source: 'log' as const, severity: 'crítico' as const, object: `Pod/${pod}`, title: say({ en: `error in the ${container} log`, pt: `erro no log de ${container}` }), detail: m[2].slice(0, 400) }))
 }
 
 const MAX_LOG_PODS = 6
@@ -107,7 +115,7 @@ export async function buildTimeline(t: Target, namespace: string, hours: number)
     }
   }
   const [events, pods, sets] = await Promise.all([
-    tolerant('eventos', async () => (await kubectlJson<{ items: EventJson[] }>(t, ['get', 'events', '-n', namespace], 60_000)).items),
+    tolerant(say({ en: 'events', pt: 'eventos' }), async () => (await kubectlJson<{ items: EventJson[] }>(t, ['get', 'events', '-n', namespace], 60_000)).items),
     tolerant('pods', async () => (await kubectlJson<{ items: PodJson[] }>(t, ['get', 'pods', '-n', namespace], 60_000)).items),
     tolerant('replicasets', async () => (await kubectlJson<{ items: ReplicaSetJson[] }>(t, ['get', 'replicasets', '-n', namespace], 60_000)).items),
   ])
@@ -115,16 +123,20 @@ export async function buildTimeline(t: Target, namespace: string, hours: number)
   // Log anterior só dos pods que reiniciaram na janela, e no máximo seis: cada um é uma chamada.
   const restartedPods = [...new Map(restarts.map(r => [r.object, r])).values()]
   const targets = restartedPods.slice(0, MAX_LOG_PODS)
-  if (restartedPods.length > targets.length) notes.push(`log anterior lido de ${MAX_LOG_PODS} dos ${restartedPods.length} pods que reiniciaram`)
+  if (restartedPods.length > targets.length) {
+    notes.push(say({ en: `previous log read from ${MAX_LOG_PODS} of the ${restartedPods.length} pods that restarted`, pt: `log anterior lido de ${MAX_LOG_PODS} dos ${restartedPods.length} pods que reiniciaram` }))
+  }
   const logs = await mapLimit(targets, 3, async r => {
     const pod = r.object.slice(4)
     const container = r.title.split(' ')[0]
     // Falha ao ler o log entra nas notas: o post-mortem precisa saber que esse dado faltou.
     const log = await kubectl(t, ['logs', pod, '-n', namespace, '-c', container, '--previous', '--timestamps', '--tail=400'], 30_000)
-      .catch(e => (notes.push(`log anterior de ${pod}: ${(e as Error).message.split('\n')[0].slice(0, 120)}`), ''))
+      .catch(e => (notes.push(`${say({ en: `previous log of ${pod}`, pt: `log anterior de ${pod}` })}: ${(e as Error).message.split('\n')[0].slice(0, 120)}`), ''))
     return errorLines(pod, container, log, since)
   })
-  if (events.length && !fromEvents(events, since).length) notes.push('o cluster guarda eventos por pouco tempo (em geral 1 h): eventos mais antigos já sumiram')
+  if (events.length && !fromEvents(events, since).length) {
+    notes.push(say({ en: 'the cluster keeps events only briefly (usually 1 h): older events are already gone', pt: 'o cluster guarda eventos por pouco tempo (em geral 1 h): eventos mais antigos já sumiram' }))
+  }
   const entries = [...fromEvents(events, since), ...restarts, ...fromReplicaSets(sets, since), ...logs.flat()]
     .sort((a, b) => a.at.localeCompare(b.at))
   return { entries, since: since.toISOString(), notes }
@@ -145,13 +157,15 @@ if (import.meta.main && process.argv.includes('--selfcheck')) {
 
   const restarts = fromPods([{ metadata: { name: 'api-1' }, status: { containerStatuses: [{ name: 'app', restartCount: 3, lastState: { terminated: { reason: 'OOMKilled', exitCode: 137, finishedAt: '2026-10-01T10:04:00Z' } } }] } }], since)
   assert.equal(restarts[0].severity, 'crítico')
-  assert.match(restarts[0].title, /^app terminou: OOMKilled \(código 137\)/)
+  // Language-independent: say() follows the language set in Configurações
+  assert.match(restarts[0].title, /^app \S+: OOMKilled \(\S+ 137\)/)
 
   const rollouts = fromReplicaSets([{
     metadata: { name: 'api-7d9f', creationTimestamp: '2026-10-01T10:00:30Z', annotations: { 'deployment.kubernetes.io/revision': '14' }, ownerReferences: [{ kind: 'Deployment', name: 'api' }] },
     spec: { template: { spec: { containers: [{ name: 'app', image: 'registry.x/time/api:2.3.1' }] } } },
   }], since)
-  assert.deepEqual([rollouts[0].object, rollouts[0].title, rollouts[0].detail], ['Deployment/api', 'rollout para a revisão 14', 'app=api:2.3.1'])
+  assert.deepEqual([rollouts[0].object, rollouts[0].detail], ['Deployment/api', 'app=api:2.3.1'])
+  assert.match(rollouts[0].title, /^rollout .* 14$/)
 
   const log = [
     '2026-10-01T09:59:00.000000000Z ERROR antes da janela',

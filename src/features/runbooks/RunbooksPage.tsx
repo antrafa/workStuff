@@ -5,6 +5,7 @@ import { Link } from 'react-router'
 import { Async, CommandStep, ConfirmModal, Empty, Markdown, Modal, Page, SkeletonRows } from '@/ui'
 import { api } from '@/lib/api'
 import { useAsync } from '@/lib/useAsync'
+import { tx } from '@/lib/i18n'
 
 type Check = { kind: 'read'; args: string[] } | { kind: 'write'; args: string[]; action: string } | { kind: 'blocked'; reason: string }
 type Segment = { type: 'text'; md: string } | { type: 'step'; id: number; line: string; vars: string[]; check: Check }
@@ -50,18 +51,24 @@ export default function RunbooksPage() {
   return (
     <Page
       title="Runbooks"
-      hint="Procedimentos em Markdown com passos kubectl. Leitura roda direto; escrita mostra o comando e espera a sua confirmação, com as mesmas travas do Cluster Doctor. Tudo fica registrado."
+      hint={tx({
+        en: 'Markdown procedures with kubectl steps. Reads run right away; writes show the command and wait for your confirmation, with the same guards as Cluster Doctor. Everything is logged.',
+        pt: 'Procedimentos em Markdown com passos kubectl. Leitura roda direto; escrita mostra o comando e espera a sua confirmação, com as mesmas travas do Cluster Doctor. Tudo fica registrado.',
+      })}
     >
       <Async state={list} skeleton={<SkeletonRows rows={2} height={40} />}>
         {d => !d.root ? (
           <div className="card card-pad stack">
-            <Empty icon={BookOpen} title="Escolha a pasta dos runbooks">
-              Cada arquivo .md é um runbook; cada linha dentro de um bloco ```bash é um passo. Use {'{{namespace}}'} para valores que mudam a cada uso.
+            <Empty icon={BookOpen} title={tx({ en: 'Choose the runbooks folder', pt: 'Escolha a pasta dos runbooks' })}>
+              {tx({
+                en: 'Each .md file is a runbook; each line inside a ```bash block is a step. Use {{namespace}} for values that change on each use.',
+                pt: 'Cada arquivo .md é um runbook; cada linha dentro de um bloco ```bash é um passo. Use {{namespace}} para valores que mudam a cada uso.',
+              })}
             </Empty>
             <form className="row" onSubmit={e => (e.preventDefault(), setRoot(rootInput))}>
               <input className="input mono spacer" value={rootInput} onChange={e => setRootInput(e.target.value)} placeholder="~/runbooks" />
-              <button type="button" className="btn" onClick={pick}><FolderOpen size={14} /> Escolher</button>
-              <button className="btn btn-primary" disabled={!rootInput.trim()}>Usar esta pasta</button>
+              <button type="button" className="btn" onClick={pick}><FolderOpen size={14} /> {tx({ en: 'Choose', pt: 'Escolher' })}</button>
+              <button className="btn btn-primary" disabled={!rootInput.trim()}>{tx({ en: 'Use this folder', pt: 'Usar esta pasta' })}</button>
             </form>
             {error && <div className="callout callout-crit" style={{ fontSize: 12.5 }}>{error}</div>}
           </div>
@@ -72,31 +79,31 @@ export default function RunbooksPage() {
                 <div className="card-title spacer mono" style={{ minWidth: 0 }} title={d.root}>
                   <div className="row" style={{ alignItems: 'center', gap: 6, flexWrap: 'nowrap' }}>
                     <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {d.isDefault ? 'Runbooks do projeto' : d.root}
+                      {d.isDefault ? tx({ en: 'Project runbooks', pt: 'Runbooks do projeto' }) : d.root}
                     </span>
-                    {d.isDefault && <span className="badge badge-info" style={{ fontSize: 10, flexShrink: 0 }}>projeto</span>}
+                    {d.isDefault && <span className="badge badge-info" style={{ fontSize: 10, flexShrink: 0 }}>{tx({ en: 'project', pt: 'projeto' })}</span>}
                   </div>
                 </div>
                 <button className="btn btn-ghost btn-sm" onClick={() => (setRootInput(d.root ?? ''), setModalOpen(true))}>
-                  Trocar
+                  {tx({ en: 'Change', pt: 'Trocar' })}
                 </button>
               </div>
-              {d.runbooks.length === 0 ? <p className="muted card-pad" style={{ fontSize: 12.5 }}>Nenhum .md nesta pasta.</p> : d.runbooks.map(r => (
+              {d.runbooks.length === 0 ? <p className="muted card-pad" style={{ fontSize: 12.5 }}>{tx({ en: 'No .md in this folder.', pt: 'Nenhum .md nesta pasta.' })}</p> : d.runbooks.map(r => (
                 <button key={r.file} className={`rb-item${r.file === file ? ' rb-active' : ''}`} onClick={() => setFile(r.file)}>
                   <div>{r.title}</div><div className="muted mono" style={{ fontSize: 11 }}>{r.file}</div>
                 </button>
               ))}
             </aside>
-            {file ? <RunbookDoc key={file} file={file} /> : <div className="card"><Empty icon={BookOpen} title="Escolha um runbook" /></div>}
+            {file ? <RunbookDoc key={file} file={file} /> : <div className="card"><Empty icon={BookOpen} title={tx({ en: 'Choose a runbook', pt: 'Escolha um runbook' })} /></div>}
           </div>
         )}
       </Async>
 
       {modalOpen && list.data && (
-        <Modal title="Pasta dos runbooks" onClose={() => setModalOpen(false)} width={520}>
+        <Modal title={tx({ en: 'Runbooks folder', pt: 'Pasta dos runbooks' })} onClose={() => setModalOpen(false)} width={520}>
           <div className="stack">
             <p className="muted" style={{ fontSize: 13 }}>
-              Você pode carregar runbooks a partir de qualquer pasta no computador ou usar os runbooks incluídos no projeto.
+              {tx({ en: 'You can load runbooks from any folder on the computer or use the runbooks included in the project.', pt: 'Você pode carregar runbooks a partir de qualquer pasta no computador ou usar os runbooks incluídos no projeto.' })}
             </p>
             <form className="row" onSubmit={e => (e.preventDefault(), setRoot(rootInput))}>
               <input
@@ -106,16 +113,16 @@ export default function RunbooksPage() {
                 placeholder="~/runbooks"
               />
               <button type="button" className="btn" onClick={pick}>
-                <FolderOpen size={14} /> Escolher…
+                <FolderOpen size={14} /> {tx({ en: 'Choose…', pt: 'Escolher…' })}
               </button>
               <button className="btn btn-primary" disabled={!rootInput.trim() || rootInput === list.data.root}>
-                Usar pasta
+                {tx({ en: 'Use folder', pt: 'Usar pasta' })}
               </button>
             </form>
             {!list.data.isDefault && (
               <div style={{ paddingTop: 10, borderTop: '1px solid var(--line)' }}>
                 <button type="button" className="btn btn-ghost btn-sm" onClick={() => setRoot('default')}>
-                  <RotateCcw size={13} /> Voltar para runbooks do projeto
+                  <RotateCcw size={13} /> {tx({ en: 'Back to the project runbooks', pt: 'Voltar para runbooks do projeto' })}
                 </button>
               </div>
             )}
@@ -134,7 +141,7 @@ function RunbookDoc({ file }: { file: string }) {
   const [results, setResults] = useState<Record<number, Result | 'running'>>({})
   const [confirming, setConfirming] = useState<Extract<Segment, { type: 'step' }> | null>(null)
 
-  // A classificação depende dos valores: reclassifica (no servidor) a cada mudança, com uma pausa curta.
+  // The classification depends on the values: reclassified (on the server) on each change, after a short pause.
   useEffect(() => {
     const t = setTimeout(() => {
       api.post<Doc>('/runbooks/doc', { file, values }).then(setDoc).catch(e => setError((e as Error).message))
@@ -160,11 +167,14 @@ function RunbookDoc({ file }: { file: string }) {
   return (
     <div className="stack" style={{ minWidth: 0 }}>
       {!doc.session ? (
-        <div className="callout callout-warn" style={{ fontSize: 12.5 }}>Nenhum cluster conectado: os passos rodam no cluster da <Link to="/cluster">tela Cluster</Link>.</div>
+        <div className="callout callout-warn" style={{ fontSize: 12.5 }}>{tx({
+          en: <>No cluster connected: the steps run on the cluster of the <Link to="/cluster">Cluster screen</Link>.</>,
+          pt: <>Nenhum cluster conectado: os passos rodam no cluster da <Link to="/cluster">tela Cluster</Link>.</>,
+        })}</div>
       ) : (
         <div className="row muted" style={{ fontSize: 12.5 }}>
-          Roda em <span className="mono">{doc.session.context}</span>
-          <span className={`badge ${doc.session.environment === 'PRO' || !doc.session.environment ? 'badge-crit' : 'badge-info'}`}>{doc.session.environment ?? 'sem classificação (vale como PRO)'}</span>
+          {tx({ en: 'Runs on', pt: 'Roda em' })} <span className="mono">{doc.session.context}</span>
+          <span className={`badge ${doc.session.environment === 'PRO' || !doc.session.environment ? 'badge-crit' : 'badge-info'}`}>{doc.session.environment ?? tx({ en: 'unclassified (counts as PRO)', pt: 'sem classificação (vale como PRO)' })}</span>
         </div>
       )}
       {vars.length > 0 && (
@@ -191,10 +201,13 @@ function RunbookDoc({ file }: { file: string }) {
         ))}
       </section>
       {confirming && confirming.check.kind === 'write' && (
-        <ConfirmModal title="Executar passo de escrita" confirmLabel="Executar" icon={Zap} onConfirm={() => run(confirming, true)} onClose={() => setConfirming(null)}>
-          <p>Vai rodar em <b className="mono">{doc.session?.context}</b> ({doc.session?.environment}):</p>
+        <ConfirmModal title={tx({ en: 'Run write step', pt: 'Executar passo de escrita' })} confirmLabel={tx({ en: 'Execute', pt: 'Executar' })} icon={Zap} onConfirm={() => run(confirming, true)} onClose={() => setConfirming(null)}>
+          <p>{tx({
+            en: <>Will run on <b className="mono">{doc.session?.context}</b> ({doc.session?.environment}):</>,
+            pt: <>Vai rodar em <b className="mono">{doc.session?.context}</b> ({doc.session?.environment}):</>,
+          })}</p>
           <pre className="code" style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>kubectl {confirming.check.args.join(' ')}</pre>
-          <p className="muted" style={{ fontSize: 12.5 }}>A execução fica registrada em ~/.workstuff/runbook-audit.log.</p>
+          <p className="muted" style={{ fontSize: 12.5 }}>{tx({ en: 'The run is logged in ~/.workstuff/runbook-audit.log.', pt: 'A execução fica registrada em ~/.workstuff/runbook-audit.log.' })}</p>
         </ConfirmModal>
       )}
     </div>

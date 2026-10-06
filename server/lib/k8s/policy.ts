@@ -1,21 +1,22 @@
-// Política de escrita no cluster por ambiente.
-// Ambiente desconhecido vale como PRO: na dúvida, somente leitura.
+// Cluster write policy per environment.
+// An unknown environment counts as PRO: when in doubt, read-only.
 // Autoteste: node server/lib/k8s/policy.ts --selfcheck
 import assert from 'node:assert/strict'
+import { say } from '../i18n.ts'
 
 export type Environment = 'DES' | 'ITG' | 'HML' | 'PRO'
 export type Mutation = 'restart' | 'edit' | 'delete' | 'node'
 
-// Toda escrita permitida ainda passa pela confirmação do usuário; aqui se decide se ela pode existir.
+// Every allowed write still goes through the user's confirmation; this decides whether it may exist at all.
 export function authorizeMutation(env: Environment | null, action: Mutation): { allowed: true } | { allowed: false; reason: string } {
-  if (env === 'PRO') return { allowed: false, reason: 'PRO é somente leitura: nenhuma ação de escrita é executada pelo painel' }
-  if (env === null) return { allowed: false, reason: 'ambiente não classificado vale como PRO (somente leitura); classifique o kubeconfig como DES, ITG ou HML' }
-  if (action === 'node') return { allowed: false, reason: 'cordon, drain e taint de node não são executados pelo painel em nenhum ambiente' }
-  if (env === 'DES' && action === 'delete') return { allowed: false, reason: 'DES nunca apaga recurso pelo painel; prefira rollout restart' }
+  if (env === 'PRO') return { allowed: false, reason: say({ en: 'PRO is read-only: the panel runs no write action', pt: 'PRO é somente leitura: nenhuma ação de escrita é executada pelo painel' }) }
+  if (env === null) return { allowed: false, reason: say({ en: 'an unclassified environment counts as PRO (read-only); classify the kubeconfig as DES, ITG or HML', pt: 'ambiente não classificado vale como PRO (somente leitura); classifique o kubeconfig como DES, ITG ou HML' }) }
+  if (action === 'node') return { allowed: false, reason: say({ en: 'node cordon, drain and taint are never run by the panel, in any environment', pt: 'cordon, drain e taint de node não são executados pelo painel em nenhum ambiente' }) }
+  if (env === 'DES' && action === 'delete') return { allowed: false, reason: say({ en: 'DES never deletes a resource through the panel; prefer rollout restart', pt: 'DES nunca apaga recurso pelo painel; prefira rollout restart' }) }
   return { allowed: true }
 }
 
-// Classificação automática pelo nome do arquivo/contexto; a primeira que casa vence, PRO primeiro.
+// Automatic classification by file/context name; the first match wins, PRO first.
 const PATTERNS: [Environment, RegExp][] = [
   ['PRO', /(^|[^a-z])(pro|prod|production|prd|producao)([^a-z]|$)/i],
   ['HML', /(^|[^a-z])(hml|homolog|homologacao|staging|stg)([^a-z]|$)/i],

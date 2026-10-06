@@ -6,6 +6,7 @@ import { spawn } from 'node:child_process'
 import { join } from 'node:path'
 import { AGENT_HOME } from '../paths.ts'
 import { readJson } from '../jsonFile.ts'
+import { say } from '../i18n.ts'
 
 export type SkillHit = { id: string; source: string; skillId: string; name: string; installs: number; installed: boolean }
 
@@ -25,11 +26,11 @@ const SKILL_ID = /^[A-Za-z0-9._][A-Za-z0-9._ :-]{0,99}$/
 export function validateInstall(b: Record<string, unknown>): { source: string; skillId: string; agents: CliAgent[] } {
   const source = typeof b.source === 'string' ? b.source.trim() : ''
   const skillId = typeof b.skillId === 'string' ? b.skillId.trim() : ''
-  if (!SOURCE.test(source)) throw new Error('origem inválida: use dono/repositório')
-  if (!SKILL_ID.test(skillId)) throw new Error('nome de skill inválido')
+  if (!SOURCE.test(source)) throw new Error(say({ en: 'invalid source: use owner/repository', pt: 'origem inválida: use dono/repositório' }))
+  if (!SKILL_ID.test(skillId)) throw new Error(say({ en: 'invalid skill name', pt: 'nome de skill inválido' }))
   const agents = Array.isArray(b.agents) ? [...new Set(b.agents)] : []
-  if (!agents.length) throw new Error('escolha ao menos um agente')
-  if (!agents.every(a => CLI_AGENTS.includes(a as CliAgent))) throw new Error('agente desconhecido')
+  if (!agents.length) throw new Error(say({ en: 'choose at least one agent', pt: 'escolha ao menos um agente' }))
+  if (!agents.every(a => CLI_AGENTS.includes(a as CliAgent))) throw new Error(say({ en: 'unknown agent', pt: 'agente desconhecido' }))
   return { source, skillId, agents: agents as CliAgent[] }
 }
 
@@ -45,16 +46,16 @@ const cache = new Map<string, { at: number; hits: Omit<SkillHit, 'installed'>[] 
 
 export async function search(q: string): Promise<SkillHit[]> {
   const query = q.trim()
-  if (query.length < 2) throw new Error('digite ao menos 2 letras')
+  if (query.length < 2) throw new Error(say({ en: 'type at least 2 letters', pt: 'digite ao menos 2 letras' }))
   let hit = cache.get(query)
   if (!hit || Date.now() - hit.at > 10 * 60_000) {
     let res: Response
     try {
       res = await fetch(`${SEARCH}?q=${encodeURIComponent(query)}`, { signal: AbortSignal.timeout(15_000) })
     } catch (e) {
-      throw new Error((e as Error).name === 'TimeoutError' ? 'o skills.sh não respondeu em 15s' : `não consegui falar com o skills.sh: ${(e as Error).message}`)
+      throw new Error((e as Error).name === 'TimeoutError' ? say({ en: 'skills.sh did not answer in 15s', pt: 'o skills.sh não respondeu em 15s' }) : say({ en: `could not reach skills.sh: ${(e as Error).message}`, pt: `não consegui falar com o skills.sh: ${(e as Error).message}` }))
     }
-    if (!res.ok) throw new Error(`o skills.sh respondeu ${res.status}`)
+    if (!res.ok) throw new Error(say({ en: `skills.sh answered ${res.status}`, pt: `o skills.sh respondeu ${res.status}` }))
     const data = (await res.json()) as { skills?: Omit<SkillHit, 'installed'>[] }
     hit = { at: Date.now(), hits: data.skills ?? [] }
     cache.set(query, hit)

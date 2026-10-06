@@ -6,6 +6,7 @@ import { Async, Empty, Modal, Page, SkeletonRows } from '@/ui'
 import { api } from '@/lib/api'
 import { useAsync } from '@/lib/useAsync'
 import { DevRunbookDoc } from './DevRunbookDoc'
+import { tx } from '@/lib/i18n'
 
 type DevRunbookItem = { file: string; title: string }
 type DevRunbooksResponse = {
@@ -74,11 +75,11 @@ export default function DevRunbooksPage() {
       return a.localeCompare(b)
     })
     const labels: Record<string, string> = {
-      factory: 'Fábrica de Software',
+      factory: tx({ en: 'Software Factory', pt: 'Fábrica de Software' }),
       git: 'Git & Branches',
       containers: 'Containers & Docker',
-      ambiente: 'Ambiente Local',
-      outros: 'Outros Procedimentos',
+      ambiente: tx({ en: 'Local environment', pt: 'Ambiente Local' }),
+      outros: tx({ en: 'Other procedures', pt: 'Outros Procedimentos' }),
     }
     return keys.map(k => ({
       key: k,
@@ -95,19 +96,19 @@ export default function DevRunbooksPage() {
 
   return (
     <Page
-      title="Runbooks de Dev"
-      hint="Comandos e rotinas locais de desenvolvimento para o dia a dia (Git, Docker, npm/pnpm). Leitura roda direto; comandos com modificação exibem o comando exato e pedem confirmação."
+      title={tx({ en: 'Dev runbooks', pt: 'Runbooks de Dev' })}
+      hint={tx({ en: 'Local development commands and routines for every day (Git, Docker, npm/pnpm). Reads run directly; commands that change something show the exact command and ask for confirmation.', pt: 'Comandos e rotinas locais de desenvolvimento para o dia a dia (Git, Docker, npm/pnpm). Leitura roda direto; comandos com modificação exibem o comando exato e pedem confirmação.' })}
     >
       <Async state={list} skeleton={<SkeletonRows rows={2} height={40} />}>
         {d => !d.root ? (
           <div className="card card-pad stack">
-            <Empty icon={Terminal} title="Escolha a pasta dos runbooks de dev">
-              Cada arquivo .md é um runbook; linhas de comandos bash/sh viram passos executados com segurança na máquina local.
+            <Empty icon={Terminal} title={tx({ en: 'Choose the dev runbooks folder', pt: 'Escolha a pasta dos runbooks de dev' })}>
+              {tx({ en: 'Each .md file is a runbook; bash/sh command lines become steps run safely on this machine.', pt: 'Cada arquivo .md é um runbook; linhas de comandos bash/sh viram passos executados com segurança na máquina local.' })}
             </Empty>
             <form className="row" onSubmit={e => (e.preventDefault(), setRoot(rootInput))}>
               <input className="input mono spacer" value={rootInput} onChange={e => setRootInput(e.target.value)} placeholder="~/dev-runbooks" />
-              <button type="button" className="btn" onClick={pick}><FolderOpen size={14} /> Escolher</button>
-              <button className="btn btn-primary" disabled={!rootInput.trim()}>Usar esta pasta</button>
+              <button type="button" className="btn" onClick={pick}><FolderOpen size={14} /> {tx({ en: 'Choose', pt: 'Escolher' })}</button>
+              <button className="btn btn-primary" disabled={!rootInput.trim()}>{tx({ en: 'Use this folder', pt: 'Usar esta pasta' })}</button>
             </form>
             {error && <div className="callout callout-crit" style={{ fontSize: 12.5 }}>{error}</div>}
           </div>
@@ -118,23 +119,23 @@ export default function DevRunbooksPage() {
                 <div className="card-title spacer mono" style={{ minWidth: 0 }} title={d.root}>
                   <div className="row" style={{ alignItems: 'center', gap: 6, flexWrap: 'nowrap' }}>
                     <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {d.isDefault ? 'Runbooks do projeto' : d.root}
+                      {d.isDefault ? tx({ en: 'Project runbooks', pt: 'Runbooks do projeto' }) : d.root}
                     </span>
-                    {d.isDefault && <span className="badge badge-info" style={{ fontSize: 10, flexShrink: 0 }}>projeto</span>}
+                    {d.isDefault && <span className="badge badge-info" style={{ fontSize: 10, flexShrink: 0 }}>{tx({ en: 'project', pt: 'projeto' })}</span>}
                   </div>
                 </div>
                 <button className="btn btn-ghost btn-sm" onClick={() => (setRootInput(d.root ?? ''), setModalOpen(true))}>
-                  Trocar
+                  {tx({ en: 'Change', pt: 'Trocar' })}
                 </button>
               </div>
               {d.runbooks.length === 0 ? (
-                <p className="muted card-pad" style={{ fontSize: 12.5 }}>Nenhum .md nesta pasta.</p>
+                <p className="muted card-pad" style={{ fontSize: 12.5 }}>{tx({ en: 'No .md in this folder.', pt: 'Nenhum .md nesta pasta.' })}</p>
               ) : (
                 grouped.map(g => (
                   <div key={g.key}>
                     <div className={`drb-group-header${g.isFactory ? ' drb-group-factory' : ''}`}>
                       <span>{g.label} ({g.items.length})</span>
-                      {g.isFactory && <span className="badge badge-info" style={{ fontSize: 9 }}>esteira</span>}
+                      {g.isFactory && <span className="badge badge-info" style={{ fontSize: 9 }}>{tx({ en: 'pipeline', pt: 'esteira' })}</span>}
                     </div>
                     {g.items.map(r => (
                       <button
@@ -151,16 +152,16 @@ export default function DevRunbooksPage() {
                 ))
               )}
             </aside>
-            {file ? <DevRunbookDoc key={file} file={file} /> : <div className="card"><Empty icon={BookOpen} title="Escolha um runbook de dev" /></div>}
+            {file ? <DevRunbookDoc key={file} file={file} /> : <div className="card"><Empty icon={BookOpen} title={tx({ en: 'Choose a dev runbook', pt: 'Escolha um runbook de dev' })} /></div>}
           </div>
         )}
       </Async>
 
       {modalOpen && list.data && (
-        <Modal title="Pasta dos runbooks de dev" onClose={() => setModalOpen(false)} width={520}>
+        <Modal title={tx({ en: 'Dev runbooks folder', pt: 'Pasta dos runbooks de dev' })} onClose={() => setModalOpen(false)} width={520}>
           <div className="stack">
             <p className="muted" style={{ fontSize: 13 }}>
-              Você pode carregar runbooks a partir de qualquer pasta no computador ou usar os runbooks de desenvolvimento incluídos no projeto.
+              {tx({ en: 'You can load runbooks from any folder on the computer, or use the development runbooks that ship with the project.', pt: 'Você pode carregar runbooks a partir de qualquer pasta no computador ou usar os runbooks de desenvolvimento incluídos no projeto.' })}
             </p>
             <form className="row" onSubmit={e => (e.preventDefault(), setRoot(rootInput))}>
               <input
@@ -170,16 +171,16 @@ export default function DevRunbooksPage() {
                 placeholder="~/dev-runbooks"
               />
               <button type="button" className="btn" onClick={pick}>
-                <FolderOpen size={14} /> Escolher…
+                <FolderOpen size={14} /> {tx({ en: 'Choose…', pt: 'Escolher…' })}
               </button>
               <button className="btn btn-primary" disabled={!rootInput.trim() || rootInput === list.data.root}>
-                Usar pasta
+                {tx({ en: 'Use folder', pt: 'Usar pasta' })}
               </button>
             </form>
             {!list.data.isDefault && (
               <div style={{ paddingTop: 10, borderTop: '1px solid var(--line)' }}>
                 <button type="button" className="btn btn-ghost btn-sm" onClick={() => setRoot('default')}>
-                  <RotateCcw size={13} /> Voltar para runbooks do projeto
+                  <RotateCcw size={13} /> {tx({ en: 'Back to the project runbooks', pt: 'Voltar para runbooks do projeto' })}
                 </button>
               </div>
             )}
