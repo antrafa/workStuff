@@ -3,9 +3,9 @@
 // HTTP concerns (SSE, state guards) stay in server/routes/factory.ts.
 
 import { defaultFactoryStore as store } from './store.ts'
-import { commitWorktree, createWorktree, discardFiles, getWorktreeDiff, uncommittedFiles } from './worktree.ts'
+import { commitWorktree, createWorktree, discardFiles, getWorktreeDiff, headOf, resetWorktree, uncommittedFiles } from './worktree.ts'
 import { runFactoryAgent } from './runner.ts'
-import { gateArtifactsExist, gateDiffNotEmpty, gateTestsPass, nonDocFiles, type TestsGateResult } from './gates.ts'
+import { docsCiting, gateArtifactsExist, gateDiffNotEmpty, gateTestsPass, nonDocFiles, type TestsGateResult } from './gates.ts'
 import { ExecutionCancelledError, throwIfCancelled } from './executions.ts'
 import {
   computeVerdict,
@@ -19,6 +19,7 @@ import {
   formatSecurityPrompt,
   formatSpecPrompt,
   formatTestPrompt,
+  incompleteReview,
   mergeFindings,
   parseBuildEnvelope,
   parseDocsEnvelope,
@@ -52,8 +53,11 @@ async function startPhase(task: FactoryTask, patch: Partial<FactoryTask>): Promi
 }
 
 async function saveState(task: FactoryTask, patch: Partial<FactoryTask>): Promise<FactoryTask> {
-  // Re-read so spans and tool calls recorded meanwhile are kept
-  const next = { ...(await reload(task)), ...patch, updatedAt: now() }
+  // Re-read so spans and tool calls recorded meanwhile are kept. A task deleted meanwhile stays
+  // deleted: saving the in-memory copy would bring it back.
+  const fresh = await store.getTask(task.id)
+  if (!fresh) throw new ExecutionCancelledError()
+  const next = { ...fresh, ...patch, updatedAt: now() }
   await store.saveTask(next)
   return next
 }
@@ -206,15 +210,23 @@ type ReviewOutcome = { review: ReviewEnvelope; security: ReviewEnvelope; finding
 
 // Reviewer and Security run in parallel. allSettled: when one fails, the other
 // is still awaited, so nothing keeps writing after the run is marked failed.
-async function reviewSquad(ctx: ExecContext, task: FactoryTask, worktreePath: string, round: number, previous: SecurityFinding[], spec?: SpecEnvelope) {
+// Each reviewer re-checks only its own earlier findings: handed the merged list, Security repeated
+// the Reviewer's. `keptSecurity` is the clean audit of an earlier round, reused instead of a rerun.
+async function reviewSquad(
+  ctx: ExecContext, task: FactoryTask, worktreePath: string, round: number,
+  previous: SecurityFinding[], tests: TestsGateResult, spec?: SpecEnvelope, keptSecurity?: ReviewEnvelope,
+) {
   const { diff } = await getWorktreeDiff(worktreePath, task.baseBranch)
   const suffix = round > 0 ? ` (rodada ${round + 1})` : ''
-  ctx.send({ type: 'status', message: `Reviewer e Security: revisando o diff em paralelo${suffix}...` })
+  const own = (agentId: SpecializedAgentId) => previous.filter(f => f.agentId === agentId)
+  ctx.send({ type: 'status', message: keptSecurity ? `Reviewer: revisando a correção${suffix}...` : `Reviewer e Security: revisando o diff em paralelo${suffix}...` })
   const settled = await Promise.allSettled([
     agentStep(ctx, task, 'reviewer', { name: `Revisão de código${suffix}`, phase: 'qa_security' },
-      { prompt: formatReviewPrompt(task, diff, spec, previous), cwd: worktreePath }, t => parseReviewEnvelope(t, 'reviewer')),
-    agentStep(ctx, task, 'security', { name: `Auditoria de segurança${suffix}`, phase: 'qa_security' },
-      { prompt: formatSecurityPrompt(task, diff, previous), cwd: worktreePath }, t => parseReviewEnvelope(t, 'security')),
+      { prompt: formatReviewPrompt(task, diff, spec, own('reviewer'), tests), cwd: worktreePath }, t => parseReviewEnvelope(t, 'reviewer')),
+    keptSecurity
+      ? Promise.resolve({ envelope: keptSecurity })
+      : agentStep(ctx, task, 'security', { name: `Auditoria de segurança${suffix}`, phase: 'qa_security' },
+        { prompt: formatSecurityPrompt(task, diff, own('security')), cwd: worktreePath }, t => parseReviewEnvelope(t, 'security')),
   ])
   const rejected = settled.find(s => s.status === 'rejected')
   if (rejected) throw rejected.reason
@@ -222,17 +234,34 @@ async function reviewSquad(ctx: ExecContext, task: FactoryTask, worktreePath: st
   return { review, security }
 }
 
-async function reviewAndFix(ctx: ExecContext, task: FactoryTask, worktreePath: string, spec?: SpecEnvelope, plan?: PlanEnvelope): Promise<ReviewOutcome> {
+// A review the code cannot trust becomes a blocking finding for the human, never a pass.
+const incompleteFinding = (description: string): SecurityFinding => ({ severity: 'high', confidence: 100, description })
+
+async function reviewAndFix(ctx: ExecContext, task: FactoryTask, worktreePath: string, tests: TestsGateResult, spec?: SpecEnvelope, plan?: PlanEnvelope): Promise<ReviewOutcome> {
   let previous: SecurityFinding[] = []
-  let tests: TestsGateResult | undefined
+  let latestTests = tests
+  // ponytail: a fix for a Reviewer finding is not re-audited when Security found nothing; rerun it
+  // when the fix touches what it audits (spawn, auth, dependencies) if that ever bites.
+  let cleanSecurity: ReviewEnvelope | undefined
   for (let round = 0; ; round++) {
-    const { review, security } = await reviewSquad(ctx, task, worktreePath, round, previous, spec)
+    const { review, security } = await reviewSquad(ctx, task, worktreePath, round, previous, latestTests, spec, cleanSecurity)
+    cleanSecurity = security.status === 'ok' && security.findings.length === 0 ? security : undefined
     const findings = mergeFindings(review.findings, security.findings)
+    const outcome = (passed: boolean, extra: SecurityFinding[] = []) =>
+      ({ review, security, findings: [...extra, ...findings], passed, fixRounds: round, tests: round > 0 ? latestTests : undefined })
+
+    const incomplete = incompleteReview(review, security, spec?.acceptanceCriteria)
+    if (incomplete.length) return outcome(false, incomplete.map(incompleteFinding))
     const verdict = computeVerdict(findings, review.criteria)
-    if (verdict.passed || round >= MAX_FIX_ROUNDS) return { review, security, findings, passed: verdict.passed, fixRounds: round, tests }
+    if (verdict.passed || round >= MAX_FIX_ROUNDS) return outcome(verdict.passed)
 
     const fixed = await implementWithGates(ctx, task, worktreePath, formatFixFindingsPrompt(task, verdict.blocking, verdict.unmet, plan), `Correção dos achados da revisão (rodada ${round + 1})`, plan)
-    tests = fixed.tests
+    // The diff gate compares with the base, so a fix that changed nothing still passes it; reviewing
+    // the same code again would only buy the same findings.
+    if ((await uncommittedFiles(worktreePath)).length === 0) {
+      return outcome(false, [incompleteFinding(`A correção automática da rodada ${round + 1} não alterou nenhum arquivo; os achados abaixo continuam para você decidir.`)])
+    }
+    latestTests = fixed.tests
     await commit(ctx, worktreePath, `fix: corrige achados da revisão automática (rodada ${round + 1})`)
     previous = findings
   }
@@ -240,9 +269,14 @@ async function reviewAndFix(ctx: ExecContext, task: FactoryTask, worktreePath: s
 
 // ── Documenter ───────────────────────────────────────────────────────────────
 
+// Skipped when no documentation names a changed file: in the one real task it changed nothing and
+// cost 7%. The MR description then falls back to the Reviewer's draft.
 async function document(ctx: ExecContext, task: FactoryTask, worktreePath: string, review: ReviewEnvelope, spec?: SpecEnvelope) {
-  ctx.send({ type: 'status', message: 'Documenter: atualizando a documentação afetada e a descrição do MR...' })
   const { stat } = await getWorktreeDiff(worktreePath, task.baseBranch)
+  const citing = await codeStep(ctx, 'code', { name: 'Documentação que cita os arquivos alterados', phase: 'qa_security' },
+    () => docsCiting(worktreePath, stat.files), undefined, docs => ({ docs }))
+  if (citing.length === 0) return undefined
+  ctx.send({ type: 'status', message: 'Documenter: atualizando a documentação afetada e a descrição do MR...' })
   const { envelope: docs } = await agentStep(ctx, task, 'documenter', { name: 'Documentação e descrição do MR', phase: 'qa_security' },
     { prompt: formatDocsPrompt(task, stat.files, review, spec), cwd: worktreePath }, parseDocsEnvelope)
 
@@ -302,7 +336,7 @@ export async function buildTask(ctx: ExecContext, task: FactoryTask): Promise<Fa
     tests = await runTests(ctx, current, worktreePath, 'Portão: verificação com os testes novos')
   }
 
-  const outcome = await reviewAndFix(ctx, current, worktreePath, spec, plan)
+  const outcome = await reviewAndFix(ctx, current, worktreePath, tests, spec, plan)
   tests = outcome.tests ?? tests
   const docs = await document(ctx, current, worktreePath, outcome.review, spec)
 
@@ -310,8 +344,20 @@ export async function buildTask(ctx: ExecContext, task: FactoryTask): Promise<Fa
 }
 
 // The developer's feedback goes through the same gates and the same review squad as the first build.
+// A failed or stopped adjust puts the worktree back where the last review left it: the task returns
+// to 'review' showing that review, and a merge must not carry commits nobody reviewed.
 export async function adjustTask(ctx: ExecContext, task: FactoryTask, feedback: string): Promise<FactoryTask> {
   const worktreePath = task.worktreePath!
+  const reviewedHead = await headOf(worktreePath)
+  try {
+    return await adjustReviewedWork(ctx, task, worktreePath, feedback)
+  } catch (e) {
+    await resetWorktree(worktreePath, reviewedHead)
+    throw e
+  }
+}
+
+async function adjustReviewedWork(ctx: ExecContext, task: FactoryTask, worktreePath: string, feedback: string): Promise<FactoryTask> {
   await startPhase(task, { state: 'building' })
   const spec = task.handoffs?.spec
   const plan = task.handoffs?.plan
@@ -319,7 +365,7 @@ export async function adjustTask(ctx: ExecContext, task: FactoryTask, feedback: 
   await commit(ctx, worktreePath, built.build.commitMessage || `fix: ajuste conforme revisão de "${task.title.slice(0, 40)}"`)
 
   const current = await saveState(task, { state: 'qa_security' })
-  const outcome = await reviewAndFix(ctx, current, worktreePath, spec, plan)
+  const outcome = await reviewAndFix(ctx, current, worktreePath, built.tests, spec, plan)
   const tests = outcome.tests ?? built.tests
   const summary = tests.passed ? `Verificação passou após o ajuste "${feedback.slice(0, 120)}".` : `Verificação falhou após o ajuste "${feedback.slice(0, 120)}".`
   return finishReview(current, worktreePath, outcome, tests, summary, { ...current.handoffs, build: built.build })
@@ -347,6 +393,7 @@ async function finishReview(
       testsRan: tests.command,
     },
     securityReport: { passed: outcome.passed, findings: outcome.findings, criteria: outcome.review.criteria, summary, fixRounds: outcome.fixRounds },
+    reviewedHead: await headOf(worktreePath),
     handoffs: { ...handoffs, review: outcome.review, security: outcome.security },
   })
 }

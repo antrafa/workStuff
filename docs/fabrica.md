@@ -44,7 +44,7 @@ Você pede: *"Mover Máquina e Perfil de equipe para o topo da seção Ferrament
 8. O **Documenter** atualiza a documentação afetada e escreve a descrição do MR.
 9. A tarefa chega em **aguardando revisão**. Você vê o diff, o relatório de QA, os achados e os critérios, pede ajuste se precisar, e escolhe **Criar MR/PR** ou **Merge Local**.
 
-Durante tudo isso, a linha do tempo mostra cada fase ao vivo; clicar numa fase abre um modal com o que ela produziu.
+Durante tudo isso, o cartão da tarefa no Quadro mostra qual agente está trabalhando e em quê; clicar nele abre o trace, com a atividade ao vivo dos agentes e as raias por agente. Clicar numa fase abre um modal com o que ela produziu.
 
 ## 2. Princípios
 
@@ -78,8 +78,8 @@ Durante tudo isso, a linha do tempo mostra cada fase ao vivo; clicar numa fase a
 | **Implementer** | Construção, correções, ajustes | escrita | worktree, no sandbox | `BuildEnvelope`: arquivos alterados, mensagem de commit, resumo, ou bloqueio | Portões |
 | **Tester** | Depois do primeiro commit | escrita | worktree, no sandbox | `TestEnvelope`: testes executados, cobertura, parecer | Portão de verificação |
 | **Reviewer** | Revisão, em paralelo com Security | leitura | worktree | `ReviewEnvelope`: achados, checagem de cada critério, rascunho do MR | Veredito em código |
-| **Security** | Revisão, em paralelo com Reviewer | leitura | worktree | `ReviewEnvelope`: achados de segurança | Veredito em código |
-| **Documenter** | Depois da revisão | escrita | worktree, no sandbox | `DocsEnvelope`: documentação alterada, descrição final do MR | Portão "só documentação" |
+| **Security** | Revisão, em paralelo com Reviewer; nas rodadas de correção, só se teve achados | leitura | worktree | `ReviewEnvelope`: achados de segurança | Veredito em código |
+| **Documenter** | Depois da revisão, se alguma documentação cita os arquivos alterados | escrita | worktree, no sandbox | `DocsEnvelope`: documentação alterada, descrição final do MR | Portão "só documentação" |
 
 Cada agente recebe o que precisa dos anteriores: os critérios do Analyst chegam ao Architect, ao Implementer, ao Tester e ao Reviewer; os cenários de teste do Architect chegam ao Tester; os achados da rodada anterior chegam aos revisores da rodada seguinte.
 
@@ -88,7 +88,7 @@ Cada agente recebe o que precisa dos anteriores: os critérios do Analyst chegam
 | Provedor | Leitura | Escrita |
 |---|---|---|
 | Claude Code | `--tools Read Grep Glob`, `--strict-mcp-config` | `Read Edit Write Glob Grep Bash` com `--dangerously-skip-permissions`, **sempre dentro do bwrap** |
-| Codex | `-s read-only` | `-s workspace-write` (sandbox do próprio Codex, escrita só dentro de `-C`) |
+| Codex | `-s read-only` | `--dangerously-bypass-approvals-and-sandbox`, **sempre dentro do bwrap** (o sandbox do próprio Codex não sobe dentro dele) |
 | Antigravity | `--mode plan`, dentro do bwrap sem pasta gravável | `--mode accept-edits`, dentro do bwrap com a worktree gravável |
 
 Os mesmos agentes podem ser chamados avulsos na aba **Agentes Especializados**. Nesse caso rodam sempre em modo leitura, no seu próprio checkout.
@@ -151,17 +151,19 @@ O código da esteira está em `server/lib/factory/pipeline.ts`. As rotas (`serve
 
 ### 5.4 Revisão em dupla (`reviewAndFix`)
 
-1. **Reviewer** e **Security** recebem o diff completo contra a base (até 80.000 caracteres) e rodam ao mesmo tempo. Se um falhar, a esteira espera o outro terminar antes de marcar a falha, para nada continuar escrevendo depois.
+1. **Reviewer** e **Security** recebem o diff completo contra a base (até 80.000 caracteres; acima disso o prompt avisa que o diff foi cortado) e rodam ao mesmo tempo. O Reviewer recebe também o comando, o código de saída e o final da saída da última verificação: ele só lê, então é esse resultado que comprova um critério como "o fluxo continua funcionando". Se um falhar, a esteira espera o outro terminar antes de marcar a falha, para nada continuar escrevendo depois.
 2. Os achados são fundidos: o mais grave primeiro, e o mesmo `arquivo:linha` apontado pelos dois fica uma vez só.
 3. O **veredito** é calculado em código ([seção 9](#9-o-veredito-da-revisão)).
-4. Com bloqueio, o Implementer recebe os achados bloqueantes e os critérios não atendidos e corrige, passando pelos mesmos portões. Commit `fix: corrige achados da revisão automática (rodada N)`. A rodada seguinte recebe os achados anteriores e confere se foram resolvidos.
+4. Com bloqueio, o Implementer recebe os achados bloqueantes e os critérios não atendidos e corrige, passando pelos mesmos portões. Commit `fix: corrige achados da revisão automática (rodada N)`. Na rodada seguinte, cada revisor recebe só os próprios achados anteriores e confere se foram resolvidos. O Security só roda de novo se tiver tido achados: uma auditoria limpa vale para a correção de um achado do Reviewer.
 5. Até **2 rodadas** automáticas. Depois disso, o que sobrou vai para você.
+6. Uma correção que não altera nenhum arquivo encerra as rodadas na hora: revisar o mesmo código de novo só traria os mesmos achados. A tarefa vai para você com um achado que diz isso.
 
 ### 5.5 Documentação
 
-1. O **Documenter** recebe a demanda, a especificação, os arquivos alterados e o rascunho do Reviewer.
-2. O portão "só documentação" descarta qualquer alteração fora de documentação (`.md`, `.mdx`, `.rst`, `.adoc`, `.txt`, `docs/`, `README*`, `CHANGELOG*`, `CONTRIBUTING*`): arquivos rastreados voltam para o último commit e arquivos novos são apagados.
-3. Commit `docs: ...` do que sobrou.
+1. Antes, a esteira procura documentação versionada que cite pelo caminho algum arquivo alterado (`docsCiting`). Sem nenhuma, o Documenter não roda e a descrição do MR é o rascunho do Reviewer.
+2. O **Documenter** recebe a demanda, a especificação, os arquivos alterados e o rascunho do Reviewer.
+3. O portão "só documentação" descarta qualquer alteração fora de documentação (`.md`, `.mdx`, `.rst`, `.adoc`, `.txt`, `docs/`, `README*`, `CHANGELOG*`, `CONTRIBUTING*`): arquivos rastreados voltam para o último commit e arquivos novos são apagados.
+4. Commit `docs: ...` do que sobrou.
 
 ### 5.6 Revisão humana
 
@@ -177,7 +179,7 @@ Ao concluir (MR ou merge), a worktree é removida; no merge local a branch tamb�
 
 ### 5.7 Ajuste (`adjustTask`)
 
-O pedido de ajuste passa pelo mesmo caminho da construção: Implementer com laço de correção, commit, e a revisão em dupla com as rodadas automáticas. Uma falha durante o ajuste devolve a tarefa para `review`, porque o trabalho já commitado continua intacto.
+O pedido de ajuste passa pelo mesmo caminho da construção: Implementer com laço de correção, commit, e a revisão em dupla com as rodadas automáticas. Um ajuste que falha ou é parado volta a worktree ao commit da última revisão (`resetWorktree`) e devolve a tarefa para `review`: a revisão na tela continua valendo para o código que está lá, e um merge não leva commit que ninguém revisou. O ajuste só pode ser pedido a partir de `review`.
 
 ### 5.8 Branch base
 
@@ -197,6 +199,7 @@ stateDiagram-v2
   building --> qa_security
   qa_security --> review
   review --> building: ajuste
+  building --> review: ajuste falhou ou parado (volta ao commit revisado)
   review --> done: MR ou merge local
   planning --> error
   building --> error
@@ -218,9 +221,9 @@ stateDiagram-v2
 | `done` | concluída | MR aberto ou merge feito. |
 | `error` | falhou | A execução falhou; a mensagem fica em `task.error`. |
 
-**Parar uma execução** volta ao último ponto de decisão humana (`stateAfterCancel`): planejamento volta para `intake`, construção para `waiting_approval`, ajuste para `review`. Fechar a aba ou o console **não** para nada: só o botão Parar para.
+**Parar uma execução** volta ao último ponto de decisão humana (`stateAfterCancel`): planejamento volta para `intake` (ou para `waiting_approval`, se já havia um plano: um replanejamento parado mantém o plano anterior), construção para `waiting_approval`, ajuste para `review`. Parar encerra também os processos que o agente iniciou (`npm test`, um build): o jail tem o próprio espaço de processos (`--unshare-pid`). Fechar a aba ou o console **não** para nada: só o botão Parar para.
 
-**Servidor reiniciado no meio:** a execução vive na memória do processo. Ao listar as tarefas, uma tarefa num estado de execução sem execução viva é movida para `error`, com a mensagem de que o servidor reiniciou, e os spans abertos são fechados como falha (`reconcileTask`).
+**Servidor reiniciado no meio:** a execução vive na memória do processo. Ao listar as tarefas, uma tarefa num estado de execução sem execução viva é reconciliada (`reconcileTask`): os spans abertos são fechados como falha e ela vai para `error`, com a mensagem de que o servidor reiniciou. A exceção é a tarefa que já tinha passado por uma revisão (um ajuste estava rodando): a worktree volta ao commit dessa revisão (`reviewedHead`) e a tarefa volta para `review`, porque "tentar de novo" a partir de `error` refaria a construção do zero e jogaria fora o trabalho revisado.
 
 **Tentar de novo** a partir de `error`: com plano, reconstrói a worktree do zero e refaz a construção; sem plano, refaz o planejamento.
 
@@ -238,6 +241,7 @@ stateDiagram-v2
 | Arquivo no repositório | Comando |
 |---|---|
 | `package.json` com `test` real | `npm test` |
+| `package.json` sem teste, com `check` | `npm run check` |
 | `package.json` sem teste, com `typecheck` | `npm run typecheck` |
 | `package.json` sem teste, com `build` | `npm run build` |
 | `pom.xml` | `mvn -q test` |
@@ -296,6 +300,13 @@ A régua de severidade é avaliada por consequência real e não por regra quebr
 
 Cada revisor lista no máximo 12 achados, do mais grave ao menos grave, e é instruído a não decidir a aprovação.
 
+**Revisão incompleta bloqueia** (`incompleteReview`). Antes do veredito, a esteira confere se a revisão aconteceu de fato:
+
+- Reviewer ou Security sem envelope JSON, ou com `status: "error"`;
+- Reviewer que avaliou menos critérios do que a especificação tem (a contagem, não o texto: revisores reescrevem os critérios).
+
+Em qualquer desses casos a revisão não passa e não há rodada automática, porque o Implementer não tem o que corrigir: a tarefa vai para você com um achado `high` explicando o motivo.
+
 ## 10. Segurança e isolamento
 
 ```mermaid
@@ -318,13 +329,16 @@ flowchart LR
 
 - **Worktree, nunca o seu checkout.** Toda escrita da Fábrica acontece em `~/.workstuff/worktrees`. O seu repositório só muda no merge local, que você pede.
 - **Jail `bwrap`.** O disco inteiro é montado somente leitura (`--ro-bind / /`). Ficam graváveis apenas as pastas necessárias:
-  - Agentes Claude com escrita: a worktree, `~/.claude`, `~/.claude.json` e um tmp próprio.
+  - Agentes Claude e Codex com escrita: a worktree, um tmp e uma pasta de configuração própria ao lado da worktree (`<worktree>.agent-home/claude` via `CLAUDE_CONFIG_DIR`, `<worktree>.agent-home/codex` via `CODEX_HOME`), nunca o `~/.claude` ou o `~/.codex` reais: um hook, servidor MCP ou arquivo de instrução plantado ali rodaria fora do jail na execução seguinte. Do Claude entra só o token de acesso, sem o refresh token, para uma renovação dentro do jail não deslogar o seu CLI; do Codex, `auth.json` e `config.toml`. A pasta persiste entre as execuções da tarefa (o `--resume` depende dela) e é apagada com a worktree.
   - Antigravity: a worktree (só em escrita), `~/.gemini` e um tmp. O Antigravity grava em disco mesmo em modo plano, então nunca roda fora do jail.
-  - Verificação do projeto: a worktree, um tmp e os caches de build (`~/.m2`, `~/.npm`, `~/.gradle`, `~/.cache/go-build`, `~/go/pkg/mod`, `~/.cache/pip`).
+  - Verificação do projeto: a worktree, um tmp e só as pastas de cache do Maven e do Gradle (`~/.m2/repository`, `~/.m2/wrapper`, as subpastas de `~/.gradle` menos `init.d`). `settings.xml`, `init.d` e `gradle.properties` ficam somente leitura, porque executam código no seu próximo build. npm, Go e pip usam um cache descartável no tmp do jail.
+- **`.git` da worktree somente leitura.** O arquivo `.git` diz ao git onde está o repositório, e a esteira roda git na worktree fora do jail; ele é montado somente leitura em todo jail.
+- **Hooks do git desligados.** Todo git da esteira roda com `core.hooksPath=/dev/null`: um hook do repositório (husky, lint-staged) leria scripts e configurações da worktree, que o agente escreveu.
 - **Verificação no jail.** A suíte de testes executa código que o agente escreveu. Rodar fora do jail anularia o isolamento do agente, então sem `bwrap` a verificação não roda e o QA aparece reprovado.
 - **`.git` somente leitura para os agentes.** Os commits são feitos pela esteira, em código.
 - **Nada vai ao remoto sem você.** O push só acontece em "Criar MR/PR".
-- **Validação na fronteira.** Provedor, modelo, modelos por agente e teto são validados ao criar ou editar a tarefa, porque viram argumentos de linha de comando.
+- **Validação na fronteira.** Provedor, modelo, modelos por agente, teto e branch base são validados ao criar ou editar a tarefa, porque viram argumentos de linha de comando.
+- **Só o localhost chama a API.** Uma requisição cujo `Host` ou `Origin` não seja `localhost`, `127.0.0.1` ou `[::1]` recebe 403 (`server/lib/localOrigin.ts`): sem isso, uma página aberta no navegador dispararia ações da Fábrica.
 - **Processos sem shell**, com uma exceção: o comando de verificação roda como `sh -c`, dentro do jail, porque é o seu comando.
 
 ## 11. Modelos, custo e teto
@@ -362,7 +376,7 @@ Prefixo `/api/factory`, em `server/routes/factory.ts`. As ações longas respond
 | `POST /tasks` | Cria uma tarefa: título, descrição, repositório, base, provedor, modelo, modelos por agente, teto, comando de verificação, issue de origem. |
 | `GET /tasks/:id` | Uma tarefa. |
 | `PATCH /tasks/:id` | Edita título, descrição, provedor, modelo, modelos por agente, teto, comando de verificação. |
-| `DELETE /tasks/:id` | Para a execução, remove worktree e branch, apaga a tarefa e a sessão. |
+| `DELETE /tasks/:id` | Para a execução, remove worktree e branch, apaga a tarefa e a sessão. Responde 409 se a execução não parar em 5 s, para ela não regravar a tarefa apagada. |
 | `GET /tasks/:id/session` | A sessão completa. |
 | `GET /tasks/:id/events` | Stream SSE da sessão: tudo o que já foi gravado, depois o que for chegando. |
 | `POST /tasks/:id/plan` | Planejamento (SSE). Aceita `answers` às dúvidas do Analyst. |
@@ -371,7 +385,7 @@ Prefixo `/api/factory`, em `server/routes/factory.ts`. As ações longas respond
 | `POST /tasks/:id/cancel` | Para a execução em andamento. |
 | `GET /tasks/:id/diff` | Diff e estatísticas da worktree. |
 | `POST /tasks/:id/open-editor` | Abre a worktree no editor. |
-| `POST /tasks/:id/finish` | `mode: "mr"` (push e MR/PR) ou `"local_merge"`. |
+| `POST /tasks/:id/finish` | `mode: "mr"` (push e MR/PR) ou `"local_merge"`; outro valor responde 400. Registrado como execução: um segundo clique recebe 409 em vez de fazer um segundo merge. |
 | `POST /agents/run` | Executa um agente avulso, em modo leitura (SSE). |
 | `GET /preflight` | Para o modo guiado: `bwrap`, CLIs instalados, configurações e, com `repoPath`, branch, base, pendências e comando de verificação detectado. |
 | `GET /issues` | Issues abertas das conexões de Repositórios (até 30 por conexão). |
@@ -386,16 +400,16 @@ Tudo em `src/features/factory/`.
 
 | Tela ou peça | Arquivo | O que mostra |
 |---|---|---|
-| Página | `FactoryPage.tsx` | Abas Linha do Tempo, Quadro Kanban e Agentes Especializados; contadores; botões Modo guiado e Nova Tarefa. |
-| Linha do tempo (lista) | `timeline/FactoryTimelineGrid.tsx`, `FactoryTimelineCard.tsx` | Um cartão por tarefa, com uma raia por agente. |
-| Trace da tarefa | `timeline/FactoryTraceVisualizer.tsx` | Raias por ator (Engenheiro, Workspace, cada agente, Portões), blocos posicionados no tempo, ações da tarefa. |
+| Página | `FactoryPage.tsx` | Abas Quadro e Agentes Especializados; contadores (em andamento, aguardando você, concluídas); botões Modo guiado e Nova Tarefa. |
+| Quadro Kanban | `FactoryBoard.tsx` | Colunas por fase. Cada cartão mostra o andamento de cada agente, a etapa de agora (quem, qual, há quanto tempo, quantas ferramentas), o custo e as ações do estado. Clicar abre o trace. |
+| Ações por estado | `TaskActions.tsx`, `nextActions` em `factoryRun.ts` | A única regra de "o que fazer agora" em cada estado, usada pelo cartão e pelo trace. Aprovar o plano e responder dúvidas sempre abrem a gaveta, que mostra o que está sendo aprovado. |
+| Trace da tarefa | `timeline/FactoryTraceVisualizer.tsx` | A atividade dos agentes ao vivo (`ActivityFeed.tsx`: o que cada agente escreve e cada ferramenta que chama, com a saída) e, abaixo, as raias por ator posicionadas no tempo. |
 | Detalhe da fase | `timeline/PhaseDetailModal.tsx` | Modal ao clicar num bloco: o resultado daquela fase, a saída do agente ao vivo e cada ferramenta chamada. |
-| Quadro Kanban | `FactoryBoard.tsx`, `FactoryLiveConsole.tsx` | Colunas por fase, ações rápidas e console ao vivo. |
-| Gaveta da tarefa | `TaskReviewDrawer.tsx` | Dúvidas do Analyst, critérios e plano (editável), diff, QA, revisão e segurança, trace, ajuste, MR ou merge. |
-| Nova tarefa | `NewTaskModal.tsx` | Criação direta: manual ou por issue, com todas as opções. |
+| Gaveta da tarefa | `TaskReviewDrawer.tsx` | Dúvidas do Analyst, critérios e plano (editável), diff, QA, revisão e segurança, ajuste, MR ou merge, descarte (com `ConfirmModal`). |
+| Nova tarefa | `NewTaskModal.tsx` | Criação direta: manual ou por issue, com todas as opções; avisa quando falta o `bwrap`. |
 | Modo guiado | `FactoryWizard.tsx` | Seis passos: como funciona, pré-requisitos, repositório, demanda, agentes e custo, revisar. Abre sozinho na primeira visita sem tarefas. |
 | Agentes avulsos | `StandaloneAgentTab.tsx` | Um agente, um prompt, um repositório, em modo leitura, com runbooks relacionados. |
-| Estado compartilhado | `factoryRun.ts` | Rótulos de estado, cores e nomes dos agentes, início de ações, acompanhamento ao vivo (`useLiveTask`), custo. |
+| Estado compartilhado | `factoryRun.ts` | Rótulos de estado, cores e nomes dos agentes, ações por estado (`nextActions`), início de ações, acompanhamento ao vivo (`useLiveTask`), custo. |
 
 ## 16. Mapa do código
 
@@ -450,8 +464,9 @@ O selfcheck de `agents.ts` falha se um agente da ordem ficar sem definição, e 
 - **Teto de custo**: conferido entre execuções, não no meio; sem efeito para provedores que não informam custo.
 - **Revisão de rodada 2 em diante** recebe o diff completo, não só o que mudou desde a rodada anterior.
 - **`tasks.json` é reescrito a cada evento de span**: suficiente para um usuário; com muitas tarefas paralelas, trocar por banco.
-- **MR/PR** depende de uma conexão em Repositórios que corresponda ao projeto.
-- **`bwrap` só existe no Linux**: no macOS e no Windows, Claude com escrita e Antigravity não rodam, e a verificação não executa.
+- **MR/PR** depende de uma conexão em Repositórios com o mesmo host do `origin` do projeto e cujo grupo base contenha o projeto (`sourceForRemote`).
+- **`bwrap` só existe no Linux**: no macOS e no Windows, agentes com escrita e Antigravity não rodam, e a verificação não executa.
+- **O que o jail ainda não fecha**: a rede fica aberta e a home fica legível (um agente manipulado pode ler um token e enviá-lo); um jar dos caches compartilhados do Maven e do Gradle pode ser trocado; o Antigravity grava no `~/.gemini` real.
 
 ## 20. Solução de problemas
 
@@ -460,7 +475,7 @@ O selfcheck de `agents.ts` falha se um agente da ordem ficar sem definição, e 
 | Falha no commit com `paths are ignored ... node_modules` | Versão antiga do servidor (corrigido em `0b7f7d0`): com `node_modules` sem barra no `.gitignore`, o link era recusado. | Reinicie o `npm run dev` se ele não recarregou sozinho e use "Tentar novamente". |
 | A correção foi enviada, mas o erro continua igual | O `node --watch` não reiniciou o servidor. | Pare o `npm run dev` com Ctrl+C e suba de novo. |
 | QA reprovado com "bwrap (bubblewrap) não está instalado" | Sem `bwrap`, a verificação não roda fora do sandbox. | Instale o pacote `bubblewrap` (a tela Máquina mostra o comando). |
-| "o agente com escrita só roda dentro do bwrap" | Claude com escrita sem `bwrap`. | Instale o `bubblewrap` ou use Codex. |
+| "o agente com escrita só roda dentro do bwrap" / "o Codex com escrita só roda dentro do bwrap" | Agente com escrita sem `bwrap`. | Instale o `bubblewrap` (a tela Máquina mostra o comando). |
 | Verificação passa em 0 s | Nenhum comando detectado. | Informe o comando de verificação da tarefa. |
 | "Teto de custo atingido" | O gasto somado chegou ao teto. | Aumente o teto na gaveta e tente de novo. |
 | Tarefa em "falhou" com "o servidor foi reiniciado" | O servidor caiu ou recarregou no meio da execução. | "Tentar novamente". |

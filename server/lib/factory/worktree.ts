@@ -10,7 +10,14 @@ import { DATA_DIR } from '../paths.ts'
 import { run } from '../run.ts'
 import type { DiffStat } from './types.ts'
 
-const git = (dir: string, args: string[], timeoutMs = 30_000) => run('git', ['-C', dir, ...args], timeoutMs)
+// Hooks off for every git call the pipeline makes outside the jail: a repo hook (husky, lint-staged)
+// resolves its scripts and configs from the worktree, which the agent wrote.
+export const GIT_NO_HOOKS = ['-c', 'core.hooksPath=/dev/null']
+const git = (dir: string, args: string[], timeoutMs = 30_000) => run('git', [...GIT_NO_HOOKS, '-C', dir, ...args], timeoutMs)
+
+// Config home of the jailed agent CLIs for one worktree (see prepareAgentHome in runner.ts).
+// Next to the worktree, not inside it, so it never reaches a commit.
+export const agentHomeOf = (worktreePath: string) => `${worktreePath}.agent-home`
 
 // Symlinked from the user's repo so builds and tests start fast in the worktree.
 const DEP_DIRS = ['node_modules', '.venv', 'venv']
@@ -106,6 +113,7 @@ export async function removeWorktree(
   if (existsSync(worktreePath)) {
     rmSync(worktreePath, { recursive: true, force: true })
   }
+  rmSync(agentHomeOf(worktreePath), { recursive: true, force: true })
 
   try {
     await git(repoPath, ['worktree', 'prune'])
@@ -180,6 +188,15 @@ export async function commitWorktree(
   }
   await git(worktreePath, ['commit', '-m', message])
   return (await git(worktreePath, ['rev-parse', 'HEAD'])).trim()
+}
+
+export const headOf = async (worktreePath: string) => (await git(worktreePath, ['rev-parse', 'HEAD'])).trim()
+
+// Back to a known commit, dropping later commits and uncommitted files. Only for the factory's own
+// worktree, never the user's checkout. The dependency symlinks are untracked, so they are kept explicitly.
+export async function resetWorktree(worktreePath: string, sha: string): Promise<void> {
+  await git(worktreePath, ['reset', '--hard', '-q', sha])
+  await git(worktreePath, ['clean', '-fdq', ...DEP_DIRS.flatMap(d => ['-e', d])])
 }
 
 // Files changed since the last commit, dependency symlinks left out.
@@ -286,6 +303,16 @@ if (import.meta.main && process.argv.includes('--selfcheck')) {
     assert.deepEqual(await uncommittedFiles(worktreePath), ['NOTES.md'], 'só a documentação sobrevive')
     rmSync(join(worktreePath, 'NOTES.md'))
 
+    // Ajuste que falhou volta ao commit revisado: commit novo e arquivo solto somem, o symlink fica
+    const reviewed = await headOf(worktreePath)
+    writeFileSync(join(worktreePath, 'app.ts'), 'ajuste\n')
+    await commitWorktree(worktreePath, 'fix: ajuste')
+    writeFileSync(join(worktreePath, 'solto.ts'), 'x\n')
+    await resetWorktree(worktreePath, reviewed)
+    assert.equal(await headOf(worktreePath), reviewed, 'commit do ajuste descartado')
+    assert.deepEqual(await uncommittedFiles(worktreePath), [], 'arquivo solto descartado')
+    assert.ok(existsSync(join(worktreePath, 'node_modules', 'fake-pkg', 'index.js')), 'symlink de dependências preservado')
+
     // Verificação de diff
     const { diff, stat } = await getWorktreeDiff(worktreePath, 'main')
     assert.ok(diff.includes('hello world'), 'diff contem adicoes')
@@ -293,9 +320,21 @@ if (import.meta.main && process.argv.includes('--selfcheck')) {
     assert.equal(stat.insertions, 1)
     assert.deepEqual(stat.files, ['app.ts'], 'symlink de node_modules fora do commit')
 
+    // Hook do repositório não roda no commit da esteira: ele viria de arquivos que o agente escreveu
+    const marker = join(tmp, 'hook-ran')
+    mkdirSync(join(worktreePath, '.hooks'))
+    writeFileSync(join(worktreePath, '.hooks', 'pre-commit'), `#!/bin/sh\ntouch ${marker}\n`, { mode: 0o755 })
+    sh('config', 'core.hooksPath', '.hooks')
+    writeFileSync(join(worktreePath, 'hooked.ts'), 'x\n')
+    await commitWorktree(worktreePath, 'feat: hooked')
+    assert.ok(!existsSync(marker), 'hook do repositório desligado no commit')
+    sh('config', '--unset', 'core.hooksPath')
+
     // Remoção da worktree e garantia de que o node_modules original NÃO foi apagado
+    mkdirSync(agentHomeOf(worktreePath))
     await removeWorktree(repoDir, worktreePath, branchName)
     assert.ok(!existsSync(worktreePath), 'worktree removida')
+    assert.ok(!existsSync(agentHomeOf(worktreePath)), 'config do agente removida junto')
     assert.ok(existsSync(join(repoDir, 'node_modules', 'fake-pkg', 'index.js')), 'node_modules original permanece intacto no repositorio pai')
 
     // Regressão: `.gitignore` com `node_modules` sem barra ignora o symlink, e um pathspec que o cite faz o git recusar o add

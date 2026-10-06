@@ -3,11 +3,13 @@
 import { Router, type Response } from 'express'
 import { openInEditor, pickFolder } from '../lib/desktop.ts'
 import { openSse } from '../lib/sse.ts'
-import { repoInfo } from '../lib/review/git.ts'
+import { originUrl, repoInfo, validRef } from '../lib/review/git.ts'
+import { sourceForRemote } from '../lib/repos/remote.ts'
 import { which } from '../lib/run.ts'
 import { detectVerifyCommand } from '../lib/factory/gates.ts'
 import { defaultFactoryStore } from '../lib/factory/store.ts'
-import { getWorktreeDiff, removeWorktree, mergeWorktreeLocal, pushWorktreeBranch, targetBranchOf } from '../lib/factory/worktree.ts'
+import { existsSync } from 'node:fs'
+import { getWorktreeDiff, removeWorktree, mergeWorktreeLocal, pushWorktreeBranch, resetWorktree, targetBranchOf } from '../lib/factory/worktree.ts'
 import { SPECIALIZED_AGENTS } from '../lib/factory/agents.ts'
 import { runFactoryAgent } from '../lib/factory/runner.ts'
 import { adjustTask, buildTask, planTask, type ExecContext } from '../lib/factory/pipeline.ts'
@@ -72,7 +74,7 @@ async function runExecution(
         ...current,
         // A failed adjust goes back to review: the committed work is intact, and from 'error'
         // the UI offers "retry", which calls approve-plan and rebuilds the worktree from scratch.
-        state: cancelled || kind === 'adjust' ? stateAfterCancel(kind) : 'error',
+        state: cancelled || kind === 'adjust' ? stateAfterCancel(kind, current) : 'error',
         error: cancelled ? undefined : msg,
         updatedAt: new Date().toISOString(),
       })
@@ -95,17 +97,38 @@ function refuseState(res: Response, task: FactoryTask, allowed: FactoryTaskState
 }
 
 // A task stuck in a running state with no live execution (server restarted,
-// node --watch reload, crash) is moved to 'error' so the user can retry.
+// node --watch reload, crash) is moved to 'error' so the user can retry. One that had been
+// reviewed (an adjust was running) goes back to that review instead: "retry" from 'error'
+// rebuilds the worktree from scratch and would throw the reviewed work away.
 async function reconcileTask(task: FactoryTask): Promise<FactoryTask> {
   const executing = isExecuting(task.id)
-  if (!executing && RUNNING_STATES.includes(task.state)) {
-    const msg = 'Execução interrompida: o servidor foi reiniciado durante o processamento. Tente novamente.'
-    await defaultFactoryStore.failRunningSpans(task.id, msg)
-    const fixed: FactoryTask = { ...task, state: 'error', error: msg, updatedAt: new Date().toISOString() }
-    await defaultFactoryStore.saveTask(fixed)
-    return { ...((await defaultFactoryStore.getTask(task.id)) ?? fixed), executing: false }
+  if (executing || !RUNNING_STATES.includes(task.state)) return { ...task, executing }
+
+  await defaultFactoryStore.failRunningSpans(task.id, 'Execução interrompida: o servidor foi reiniciado.')
+  // Re-read: building from `task` would put back the spans just closed
+  const fresh = (await defaultFactoryStore.getTask(task.id)) ?? task
+  const backToReview = await restoreReviewedWork(fresh)
+  const fixed: FactoryTask = {
+    ...fresh,
+    state: backToReview ? 'review' : 'error',
+    error: backToReview
+      ? 'O servidor foi reiniciado durante o ajuste: a worktree voltou ao ponto da última revisão. Peça o ajuste de novo.'
+      : 'Execução interrompida: o servidor foi reiniciado durante o processamento. Tente novamente.',
+    updatedAt: new Date().toISOString(),
   }
-  return { ...task, executing }
+  await defaultFactoryStore.saveTask(fixed)
+  return { ...fixed, executing: false }
+}
+
+async function restoreReviewedWork(task: FactoryTask): Promise<boolean> {
+  if (!task.reviewedHead || !task.worktreePath || !existsSync(task.worktreePath)) return false
+  try {
+    await resetWorktree(task.worktreePath, task.reviewedHead)
+    return true
+  } catch (e) {
+    console.error(`[factory] não foi possível voltar ${task.id} à última revisão:`, e)
+    return false
+  }
 }
 
 // Provider and model become CLI arguments later: validate them here, at the boundary.
@@ -254,6 +277,11 @@ factoryRouter.post('/tasks', async (req, res) => {
     }
     const info = await repoInfo(b.source.repoPath).catch(() => null)
     const baseBranch = b.baseBranch || info?.defaultBase || info?.current || 'main'
+    // The base branch reaches git as a bare argument: a leading '-' would be read as an option
+    if (!validRef(baseBranch)) {
+      res.status(400).json({ error: `branch base inválida: ${baseBranch}` })
+      return
+    }
     const id = `fac-${Date.now()}`
 
     const task: FactoryTask = {
@@ -263,7 +291,8 @@ factoryRouter.post('/tasks', async (req, res) => {
       source: {
         type: b.source.type || 'manual',
         repoPath: b.source.repoPath,
-        remoteUrl: b.source.remoteUrl,
+        // Finds the Repositórios connection when the MR is opened
+        remoteUrl: b.source.remoteUrl || (await originUrl(b.source.repoPath)),
         issueIid: b.source.issueIid ? Number(b.source.issueIid) : undefined,
         issueUrl: b.source.issueUrl,
       },
@@ -444,7 +473,8 @@ factoryRouter.post('/tasks/:id/adjust', async (req, res) => {
     res.status(404).json({ error: 'tarefa ou worktree nao encontrada' })
     return
   }
-  if (refuseState(res, task, ['review', 'error'], 'pedir ajuste')) return
+  // Not from 'error': a build that died midway has no review to adjust, and a failed adjust lands in 'review'
+  if (refuseState(res, task, ['review'], 'pedir ajuste')) return
   const feedback = String(req.body?.feedback ?? '').trim()
   if (!feedback) {
     res.status(400).json({ error: 'feedback e obrigatorio' })
@@ -496,129 +526,142 @@ factoryRouter.post('/tasks/:id/finish', async (req, res) => {
       return
     }
     if (refuseState(res, task, ['review'], 'finalizar')) return
-
     const mode = req.body?.mode || 'local_merge'
-    let prUrl = task.prUrl
-    let warning: string | undefined
-
-    if (mode === 'local_merge') {
-      await mergeWorktreeLocal(task.source.repoPath, task.branchName, task.baseBranch)
-    } else if (mode === 'mr') {
-      // 1. Envia a branch para o repositório remoto via git push
-      if (task.worktreePath) {
-        try {
-          await pushWorktreeBranch(task.worktreePath, task.branchName)
-        } catch (pushErr) {
-          throw new Error(`Falha ao enviar branch para o servidor remoto: ${(pushErr as Error).message}`)
-        }
-      }
-
-      // 2. Busca conexão Git ativa para tentar criar o Pull/Merge Request oficial
-      const sources = listSources()
-      const src = sources.find(s => {
-        const remote = task.source.remoteUrl || task.source.issueUrl
-        if (task.source.repoPath.includes(s.id) || (remote && s.basePath && remote.includes(s.basePath))) {
-          return true
-        }
-        return false
-      })
-
-      if (src) {
-        try {
-          const token = await resolveToken(src.provider, src.tokenSource, src.id)
-          const conn: Conn = { provider: src.provider, url: src.url, token }
-          const title = task.title
-          const summary = task.handoffs?.docs?.mrDescription || task.handoffs?.review?.mrDescription || task.description
-          // Closes the originating issue when the MR is merged (GitLab and GitHub both read it)
-          const description = task.source.issueIid && !summary.includes(`#${task.source.issueIid}`) ? `${summary}\n\nCloses #${task.source.issueIid}` : summary
-
-          const apiBase = conn.provider === 'gitlab'
-            ? `${conn.url}/api/v4`
-            : conn.url === 'https://github.com'
-              ? 'https://api.github.com'
-              : `${conn.url}/api/v3`
-          const headers: Record<string, string> = {
-            'Content-Type': 'application/json',
-            ...(conn.provider === 'gitlab'
-              ? (conn.token ? { 'PRIVATE-TOKEN': conn.token } : {})
-              : { Accept: 'application/vnd.github+json', ...(conn.token ? { Authorization: `Bearer ${conn.token}` } : {}) }),
-          }
-
-          if (src.provider === 'gitlab') {
-            const encoded = encodeURIComponent(src.basePath.replace(/^\//, ''))
-            const resp = await fetch(`${apiBase}/projects/${encoded}/merge_requests`, {
-              method: 'POST',
-              headers,
-              body: JSON.stringify({
-                source_branch: task.branchName,
-                target_branch: targetBranchOf(task.baseBranch),
-                title,
-                description,
-              }),
-              signal: AbortSignal.timeout(20_000),
-            })
-            if (resp.ok) {
-              const data = await resp.json() as { web_url?: string }
-              prUrl = data.web_url
-            } else {
-              warning = `Branch enviada, mas o GitLab recusou o MR (HTTP ${resp.status}): ${(await resp.text()).slice(0, 300)}`
-            }
-          } else if (src.provider === 'github') {
-            const parts = src.basePath.split('/').filter(Boolean)
-            if (parts.length >= 2) {
-              const [owner, repo] = parts
-              const resp = await fetch(`${apiBase}/repos/${owner}/${repo}/pulls`, {
-                method: 'POST',
-                headers,
-                body: JSON.stringify({
-                  title,
-                  head: task.branchName,
-                  base: targetBranchOf(task.baseBranch),
-                  body: description,
-                }),
-                signal: AbortSignal.timeout(20_000),
-              })
-              if (resp.ok) {
-                const data = await resp.json() as { html_url?: string }
-                prUrl = data.html_url
-              } else {
-                warning = `Branch enviada, mas o GitHub recusou o PR (HTTP ${resp.status}): ${(await resp.text()).slice(0, 300)}`
-              }
-            }
-          }
-        } catch (e) {
-          warning = `Branch enviada, mas a abertura do MR falhou: ${(e as Error).message}`
-        }
-      } else {
-        warning = `Branch ${task.branchName} enviada, mas nenhuma conexão de Repositórios corresponde a este projeto; abra o MR manualmente.`
-      }
+    if (mode !== 'mr' && mode !== 'local_merge') {
+      res.status(400).json({ error: `modo de finalização inválido: ${mode}` })
+      return
     }
-
-    if (task.worktreePath) {
-      await removeWorktree(task.source.repoPath, task.worktreePath, mode === 'local_merge' ? task.branchName : undefined)
+    // Same tick as refuseState: a second click finds this execution and gets 409
+    const signal = beginExecution(task.id, 'finish')
+    try {
+      await finishTask(task, mode, res)
+    } finally {
+      endExecution(task.id, signal)
     }
-
-    const updatedTask: FactoryTask = {
-      ...task,
-      state: 'done',
-      worktreePath: undefined,
-      prUrl: prUrl || task.prUrl,
-      updatedAt: new Date().toISOString(),
-    }
-    await defaultFactoryStore.saveTask(updatedTask)
-
-    res.json({ ...updatedTask, warning })
   } catch (e) {
     res.status(500).json({ error: (e as Error).message })
   }
 })
+
+async function finishTask(task: FactoryTask, mode: 'mr' | 'local_merge', res: Response): Promise<void> {
+  let prUrl = task.prUrl
+  let warning: string | undefined
+
+  if (mode === 'local_merge') {
+    await mergeWorktreeLocal(task.source.repoPath, task.branchName, task.baseBranch)
+  } else if (mode === 'mr') {
+    // 1. Envia a branch para o repositório remoto via git push
+    if (task.worktreePath) {
+      try {
+        await pushWorktreeBranch(task.worktreePath, task.branchName)
+      } catch (pushErr) {
+        throw new Error(`Falha ao enviar branch para o servidor remoto: ${(pushErr as Error).message}`)
+      }
+    }
+
+    // 2. Busca conexão Git ativa para tentar criar o Pull/Merge Request oficial
+    // Tasks created before remoteUrl was filled in: read it from the repository now
+    const remote = task.source.remoteUrl || (await originUrl(task.source.repoPath))
+    const target = remote ? sourceForRemote(listSources(), remote) : null
+    const src = target?.source
+
+    if (src && target) {
+      try {
+        const token = await resolveToken(src.provider, src.tokenSource, src.id)
+        const conn: Conn = { provider: src.provider, url: src.url, token }
+        const title = task.title
+        const summary = task.handoffs?.docs?.mrDescription || task.handoffs?.review?.mrDescription || task.description
+        // Closes the originating issue when the MR is merged (GitLab and GitHub both read it)
+        const description = task.source.issueIid && !summary.includes(`#${task.source.issueIid}`) ? `${summary}\n\nCloses #${task.source.issueIid}` : summary
+
+        const apiBase = conn.provider === 'gitlab'
+          ? `${conn.url}/api/v4`
+          : conn.url === 'https://github.com'
+            ? 'https://api.github.com'
+            : `${conn.url}/api/v3`
+        const headers: Record<string, string> = {
+          'Content-Type': 'application/json',
+          ...(conn.provider === 'gitlab'
+            ? (conn.token ? { 'PRIVATE-TOKEN': conn.token } : {})
+            : { Accept: 'application/vnd.github+json', ...(conn.token ? { Authorization: `Bearer ${conn.token}` } : {}) }),
+        }
+
+        if (src.provider === 'gitlab') {
+          const encoded = encodeURIComponent(target.projectPath)
+          const resp = await fetch(`${apiBase}/projects/${encoded}/merge_requests`, {
+            method: 'POST',
+            headers,
+            body: JSON.stringify({
+              source_branch: task.branchName,
+              target_branch: targetBranchOf(task.baseBranch),
+              title,
+              description,
+            }),
+            signal: AbortSignal.timeout(20_000),
+          })
+          if (resp.ok) {
+            const data = await resp.json() as { web_url?: string }
+            prUrl = data.web_url
+          } else {
+            warning = `Branch enviada, mas o GitLab recusou o MR (HTTP ${resp.status}): ${(await resp.text()).slice(0, 300)}`
+          }
+        } else if (src.provider === 'github') {
+          const parts = target.projectPath.split('/').filter(Boolean)
+          if (parts.length >= 2) {
+            const [owner, repo] = parts
+            const resp = await fetch(`${apiBase}/repos/${owner}/${repo}/pulls`, {
+              method: 'POST',
+              headers,
+              body: JSON.stringify({
+                title,
+                head: task.branchName,
+                base: targetBranchOf(task.baseBranch),
+                body: description,
+              }),
+              signal: AbortSignal.timeout(20_000),
+            })
+            if (resp.ok) {
+              const data = await resp.json() as { html_url?: string }
+              prUrl = data.html_url
+            } else {
+              warning = `Branch enviada, mas o GitHub recusou o PR (HTTP ${resp.status}): ${(await resp.text()).slice(0, 300)}`
+            }
+          }
+        }
+      } catch (e) {
+        warning = `Branch enviada, mas a abertura do MR falhou: ${(e as Error).message}`
+      }
+    } else {
+      warning = `Branch ${task.branchName} enviada, mas nenhuma conexão de Repositórios corresponde a este projeto; abra o MR manualmente.`
+    }
+  }
+
+  if (task.worktreePath) {
+    await removeWorktree(task.source.repoPath, task.worktreePath, mode === 'local_merge' ? task.branchName : undefined)
+  }
+
+  const updatedTask: FactoryTask = {
+    ...task,
+    state: 'done',
+    worktreePath: undefined,
+    prUrl: prUrl || task.prUrl,
+    updatedAt: new Date().toISOString(),
+  }
+  await defaultFactoryStore.saveTask(updatedTask)
+
+  res.json({ ...updatedTask, warning })
+}
 
 // Exclui tarefa e limpa worktree
 factoryRouter.delete('/tasks/:id', async (req, res) => {
   try {
     const id = req.params.id as string
     cancelExecution(id)
-    await waitForIdle(id, 5000)
+    // Deleting while the run still writes would let it save the task back
+    if (!(await waitForIdle(id, 5000))) {
+      res.status(409).json({ error: 'a execução ainda está parando; tente excluir de novo em alguns segundos' })
+      return
+    }
     const task = await defaultFactoryStore.getTask(id)
     if (task && task.worktreePath) {
       await removeWorktree(task.source.repoPath, task.worktreePath, task.branchName)

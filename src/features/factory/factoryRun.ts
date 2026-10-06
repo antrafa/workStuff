@@ -69,6 +69,38 @@ export function isTaskRunning(task: FactoryTask): boolean {
   return Boolean(task.executing) || RUNNING_STATES.includes(task.state)
 }
 
+// What the developer can do next with a task, decided here for every screen that offers it.
+// Approving a plan or answering the Analyst always goes through the drawer, which shows what is
+// being approved; nothing else starts a build.
+export type TaskAction =
+  | { id: 'run'; label: string; run: FactoryAction }
+  | { id: 'stop'; label: string }
+  | { id: 'open-review'; label: string }
+
+export const retryActionOf = (task: Pick<FactoryTask, 'plan'>): FactoryAction => (task.plan ? 'approve-plan' : 'plan')
+
+export function nextActions(task: FactoryTask, running = isTaskRunning(task)): TaskAction[] {
+  if (running) return [{ id: 'stop', label: 'Parar' }]
+  switch (task.state) {
+    case 'intake': return [{ id: 'run', label: 'Planejar', run: 'plan' }]
+    case 'waiting_clarification': return [{ id: 'open-review', label: 'Responder dúvidas' }]
+    case 'waiting_approval': return [{ id: 'open-review', label: 'Ler e aprovar o plano' }]
+    case 'review': return [{ id: 'open-review', label: 'Revisar entrega' }]
+    // With a plan the retry rebuilds it; without one it plans again
+    case 'error': return [{ id: 'run', label: 'Tentar de novo', run: retryActionOf(task) }, { id: 'open-review', label: 'Detalhes' }]
+    default: return [{ id: 'open-review', label: 'Detalhes' }]
+  }
+}
+
+// States where the developer is the one holding the task up
+export const WAITING_STATES: FactoryTaskState[] = ['waiting_clarification', 'waiting_approval', 'review']
+
+// The step running now, or the last one: what a card shows under "agora"
+export function currentSpan(task: FactoryTask): ExecutionSpan | undefined {
+  const spans = task.spans ?? []
+  return [...spans].reverse().find(s => s.status === 'running') ?? spans[spans.length - 1]
+}
+
 export type ActionOutcome = { ok: boolean; cancelled?: boolean; error?: string }
 
 // Starts an action and resolves when the server closes the stream. A refused start
@@ -127,12 +159,15 @@ export function useLiveTask(initial: FactoryTask, busy = false) {
   }, [initial.id])
 
   const running = busy || isTaskRunning(task)
+  // A finished task no longer changes: one read, no polling
+  const finished = !running && task.state === 'done'
   useEffect(() => {
     if (paused) return
     refresh()
+    if (finished) return
     const timer = setInterval(refresh, running ? 1500 : 8000)
     return () => clearInterval(timer)
-  }, [refresh, running, paused])
+  }, [refresh, running, paused, finished])
 
   useEffect(() => {
     if (paused) return

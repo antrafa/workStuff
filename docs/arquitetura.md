@@ -121,7 +121,7 @@ Na maior parte do painel, fechar o stream aborta a execução. A Fábrica é a e
 
 O Antigravity grava em disco mesmo com `--mode plan` e `--sandbox` (verificado), por isso o jail. O selfcheck de `args.ts` garante que nenhum provedor recebe flags de autoaprovação nesse modo.
 
-A Fábrica tem argumentos próprios para os agentes com escrita, sempre presos no `bwrap` ou no sandbox do Codex: veja [fabrica.md, seção 10](fabrica.md#10-segurança-e-isolamento).
+A Fábrica tem argumentos próprios para os agentes com escrita, sempre presos no `bwrap`: veja [fabrica.md, seção 10](fabrica.md#10-segurança-e-isolamento).
 
 ### 4.2 Eventos (`events.ts`)
 
@@ -292,7 +292,7 @@ O painel roda comandos na sua máquina e em clusters reais, então o padrão é 
 1. **Só local.** A API escuta em `127.0.0.1` e não deve ser exposta.
 2. **Sem shell.** Processos sobem com lista de argumentos. Exceções: as correções automáticas da tela Máquina, que vêm de uma tabela fixa no servidor, e o comando de verificação da Fábrica, que roda dentro do jail.
 3. **IA em modo leitura** fora da Fábrica, com as flags da [seção 4.1](#41-argumentos-em-modo-leitura-argsts).
-4. **Agentes com escrita só na Fábrica**, numa worktree e presos no `bwrap` ou no sandbox do Codex; o código que eles escrevem também só executa no jail ([fabrica.md, seção 10](fabrica.md#10-segurança-e-isolamento)).
+4. **Agentes com escrita só na Fábrica**, numa worktree e presos no `bwrap`; o código que eles escrevem também só executa no jail ([fabrica.md, seção 10](fabrica.md#10-segurança-e-isolamento)).
 5. **Política de ambientes** para clusters ([seção 5](#5-kubernetes-e-a-política-de-ambientes)); PRO e sem classificação são somente leitura.
 6. **Escrita em cluster só pelo servidor**, depois da sua confirmação, conferida de novo contra a política ([seção 6](#6-cluster-doctor)).
 7. **Credenciais**: tokens digitados ficam com modo 600 e chegam ao git por um askpass temporário, nunca na URL.

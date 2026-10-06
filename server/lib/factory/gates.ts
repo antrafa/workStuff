@@ -3,13 +3,13 @@
 // Autoteste: node server/lib/factory/gates.ts --selfcheck
 
 import assert from 'node:assert/strict'
-import { existsSync, mkdirSync, readFileSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readdirSync, readFileSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { homedir, tmpdir } from 'node:os'
 import { spawn } from 'node:child_process'
 import { run } from '../run.ts'
 import { jail, withSandbox } from './runner.ts'
-import { uncommittedFiles } from './worktree.ts'
+import { GIT_NO_HOOKS, uncommittedFiles } from './worktree.ts'
 
 export type DiffGateResult = {
   passed: boolean
@@ -39,7 +39,7 @@ export async function gateDiffNotEmpty(worktreePath: string, baseBranch = 'main'
   try {
     // uncommittedFiles leaves the dependency symlink out: it is always "new" and would pass the gate alone
     const statusFiles = await uncommittedFiles(worktreePath)
-    const diffNames = await run('git', ['-C', worktreePath, 'diff', baseBranch, '--name-only']).catch(() => '')
+    const diffNames = await run('git', [...GIT_NO_HOOKS, '-C', worktreePath, 'diff', '--name-only', '--end-of-options', baseBranch]).catch(() => '')
     const diffFiles = diffNames.split('\n').map(l => l.trim()).filter(Boolean)
     const allFiles = Array.from(new Set([...statusFiles, ...diffFiles]))
 
@@ -101,8 +101,28 @@ export function gateArtifactsExist(worktreePath: string, claimedFiles: string[],
 // The suite executes code the agent just wrote, so it runs in the same bwrap jail as the agent:
 // only the worktree, a tmp dir and the build tool caches are writable. Without bwrap it does not run.
 // 10 min: `mvn test` in a real Java project rarely fits less, and a timeout reads as a failure.
-const BUILD_CACHES = ['.m2', '.npm', '.gradle', '.cache/go-build', 'go/pkg/mod', '.cache/pip'].map(d => join(homedir(), d))
 const MAX_OUTPUT = 30_000
+
+// Maven and Gradle caches are tens of GB, so they stay shared, but only the cache folders are writable:
+// ~/.m2/settings.xml, ~/.gradle/init.d and gradle.properties run code in the user's next build, outside
+// the jail. npm, Go and pip get a throwaway cache in the jail tmp: ~/.npm/_npx and the Go build
+// cache also feed later runs, and rebuilding them is cheap.
+// ponytail: an agent can still swap a jar in the shared caches; per-task Maven repo with
+// maven.repo.local.tail (Maven 3.9+) and GRADLE_RO_DEP_CACHE if that matters.
+export function buildCacheDirs(home = homedir()): string[] {
+  const gradle = join(home, '.gradle')
+  const gradleDirs = existsSync(gradle)
+    ? readdirSync(gradle, { withFileTypes: true }).filter(e => e.isDirectory() && e.name !== 'init.d').map(e => join(gradle, e.name))
+    : []
+  return [join(home, '.m2', 'repository'), join(home, '.m2', 'wrapper'), ...gradleDirs]
+}
+
+const throwawayCaches = (tmpDir: string): Record<string, string> => ({
+  npm_config_cache: join(tmpDir, 'npm'),
+  GOCACHE: join(tmpDir, 'go-build'),
+  GOMODCACHE: join(tmpDir, 'go-mod'),
+  PIP_CACHE_DIR: join(tmpDir, 'pip'),
+})
 
 export function detectVerifyCommand(worktreePath: string): string | null {
   const pkgJsonPath = join(worktreePath, 'package.json')
@@ -110,6 +130,8 @@ export function detectVerifyCommand(worktreePath: string): string | null {
     try {
       const scripts = JSON.parse(readFileSync(pkgJsonPath, 'utf-8')).scripts ?? {}
       if (scripts.test && !scripts.test.includes('no test specified')) return 'npm test'
+      // The project's own "everything green" script (this repo's), ahead of a bare typecheck
+      if (scripts.check) return 'npm run check'
       // No tests: at least prove it compiles, or the gate only checks that something changed
       if (scripts.typecheck) return 'npm run typecheck'
       if (scripts.build) return 'npm run build'
@@ -133,12 +155,13 @@ export async function gateTestsPass(
   if (!command) {
     return { passed: true, skipped: true, output: 'Nenhum comando de verificação detectado no repositório.', exitCode: 0, durationMs: 0 }
   }
-  return withSandbox([worktreePath, ...BUILD_CACHES], async sandbox => {
+  return withSandbox([worktreePath, ...buildCacheDirs()], async sandbox => {
     if (!sandbox) {
       const reason = 'bwrap (bubblewrap) não está instalado: a suíte não roda fora do sandbox porque executa código escrito pelo agente.'
       return { passed: false, skipped: true, command, output: reason, exitCode: -1, durationMs: 0, reason }
     }
-    return spawnVerify(jail(sandbox, worktreePath, 'sh', ['-c', command]), command, worktreePath, t0, opts)
+    const jailed = jail({ ...sandbox, env: throwawayCaches(sandbox.tmpDir) }, worktreePath, 'sh', ['-c', command])
+    return spawnVerify(jailed, command, worktreePath, t0, opts)
   })
 }
 
@@ -213,6 +236,14 @@ function spawnVerify(
 const DOC_FILE = /(^|\/)(docs?|documentation)\/|\.(md|mdx|rst|adoc|txt)$|(^|\/)(README|CHANGELOG|CONTRIBUTING)[^/]*$/i
 export const nonDocFiles = (files: string[]) => files.filter(f => !DOC_FILE.test(f))
 
+// Tracked documentation that names one of these files by path: what the Documenter may need to update.
+export async function docsCiting(worktreePath: string, files: string[]): Promise<string[]> {
+  if (files.length === 0) return []
+  // git grep exits 1 when nothing matches
+  const out = await run('git', [...GIT_NO_HOOKS, '-C', worktreePath, 'grep', '-l', '-F', ...files.flatMap(f => ['-e', f])]).catch(() => '')
+  return out.split('\n').filter(f => f && DOC_FILE.test(f) && !files.includes(f))
+}
+
 // Autoteste
 if (import.meta.main && process.argv.includes('--selfcheck')) {
   const tmp = mkdtempSync(join(tmpdir(), 'workstuff-gates-test-'))
@@ -239,6 +270,8 @@ if (import.meta.main && process.argv.includes('--selfcheck')) {
 
     writeFileSync(join(tmp, 'package.json'), JSON.stringify({ scripts: { test: 'echo "Error: no test specified"', typecheck: 'tsc', build: 'vite build' } }))
     assert.equal(detectVerifyCommand(tmp), 'npm run typecheck', 'sem teste, ao menos compila')
+    writeFileSync(join(tmp, 'package.json'), JSON.stringify({ scripts: { check: 'node x', typecheck: 'tsc' } }))
+    assert.equal(detectVerifyCommand(tmp), 'npm run check', 'check antes do typecheck')
     rmSync(join(tmp, 'package.json'))
 
     writeFileSync(join(tmp, 'pom.xml'), '<project/>')
@@ -253,10 +286,28 @@ if (import.meta.main && process.argv.includes('--selfcheck')) {
       assert.equal(jailed.passed, false, 'escrita fora da worktree falha')
       assert.ok(!existsSync(outside), 'nada escapou do sandbox')
     }
+    const npmCache = await gateTestsPass(tmp, { command: 'test "$npm_config_cache" != "$HOME/.npm" && case "$npm_config_cache" in "$TMPDIR"/*) exit 0;; esac; exit 1' })
+    if (!npmCache.skipped) assert.equal(npmCache.passed, true, 'cache do npm descartável, dentro do tmp do jail')
     const failing = await gateTestsPass(tmp, { command: 'exit 3' })
     if (!failing.skipped) assert.equal(failing.exitCode, 3)
 
     assert.deepEqual(nonDocFiles(['README.md', 'docs/api.yaml', 'src/a.ts', 'CHANGELOG']), ['src/a.ts'])
+
+    const repo = join(tmp, 'docs-repo')
+    mkdirSync(repo)
+    await run('git', ['-C', repo, 'init', '-q'])
+    writeFileSync(join(repo, 'README.md'), 'Veja src/nav.ts\n')
+    writeFileSync(join(repo, 'other.ts'), 'src/nav.ts\n')
+    await run('git', ['-C', repo, 'add', '.'])
+    assert.deepEqual(await docsCiting(repo, ['src/nav.ts']), ['README.md'], 'só documentação conta, código que cita não')
+    assert.deepEqual(await docsCiting(repo, ['src/outro.ts']), [], 'nenhuma doc cita: Documenter pulado')
+
+    const fakeHome = join(tmp, 'home')
+    mkdirSync(join(fakeHome, '.gradle', 'caches'), { recursive: true })
+    mkdirSync(join(fakeHome, '.gradle', 'init.d'))
+    writeFileSync(join(fakeHome, '.gradle', 'gradle.properties'), '')
+    assert.deepEqual(buildCacheDirs(fakeHome), [join(fakeHome, '.m2', 'repository'), join(fakeHome, '.m2', 'wrapper'), join(fakeHome, '.gradle', 'caches')],
+      'só pastas de cache graváveis: init.d, gradle.properties e settings.xml ficam de fora')
 
     console.log('factory gates selfcheck: ok')
   } finally {

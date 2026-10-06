@@ -10,6 +10,11 @@ import { join } from 'node:path'
 
 const tmp = mkdtempSync(join(tmpdir(), 'workstuff-pipeline-'))
 process.env.WORKSTUFF_HOME = join(tmp, 'home')
+// Fake user home with a Claude login: the jailed agents get a copy, never the real ~/.claude
+const agentHome = join(tmp, 'agent-home')
+process.env.WORKSTUFF_AGENT_HOME = agentHome
+mkdirSync(join(agentHome, '.claude'), { recursive: true })
+writeFileSync(join(agentHome, '.claude', '.credentials.json'), JSON.stringify({ claudeAiOauth: { accessToken: 'a', refreshToken: 'r' } }))
 
 // The fake CLI answers by agent (from the system prompt) and by what the prompt asks.
 const bin = join(tmp, 'bin')
@@ -28,14 +33,27 @@ if (sys.includes('o Analyst')) {
 } else if (sys.includes('o Architect')) {
   out = '## Plano\\n1. criar feature.txt\\n' + env({ plan: 'p', targetFiles: ['feature.txt'], testScenarios: ['cen1'] })
 } else if (sys.includes('o Implementer')) {
-  const content = prompt.includes('bloqueiam') ? 'ok\\nX tratado\\n' : prompt.includes('NÃO passou') ? 'ok\\n' : 'bug\\n'
+  // What the jail gave this agent: its own config home with the login, and a read-only real one
+  let realWritable = true
+  try { fs.writeFileSync(${JSON.stringify(join(tmp, 'agent-home', '.claude', 'settings.json'))}, '{}') } catch { realWritable = false }
+  const cfg = process.env.CLAUDE_CONFIG_DIR
+  fs.writeFileSync(cfg + '/jail-seen.json', JSON.stringify({ cfg, realWritable, creds: JSON.parse(fs.readFileSync(cfg + '/.credentials.json', 'utf-8')) }))
+  if (prompt.includes('AJUSTE_IMPOSSIVEL')) {
+    fs.writeFileSync('meio-feito.txt', 'x\\n')
+    console.log(JSON.stringify({ type: 'result', is_error: false, result: env({ status: 'error', changedFiles: [], summary: 'não dá' }), total_cost_usd: 0.01 }))
+    process.exit(0)
+  }
+  const stubborn = prompt.includes('TEIMOSO')
+  const content = prompt.includes('bloqueiam') && !stubborn ? 'ok\\nX tratado\\n' : prompt.includes('NÃO passou') || stubborn ? 'ok\\n' : 'bug\\n'
   fs.writeFileSync('feature.txt', content)
   out = env({ changedFiles: ['feature.txt'], commitMessage: 'feat: feature', summary: 'feito' })
 } else if (sys.includes('o Tester')) {
   fs.writeFileSync('feature.test.txt', 'teste\\n')
   out = env({ testSuitePassed: true, testsRan: ['t1'], details: 'cobertura ok' })
+} else if (sys.includes('o Reviewer') && prompt.includes('PROSA')) {
+  out = 'Revisei tudo e está certo.'
 } else if (sys.includes('o Reviewer')) {
-  const second = prompt.includes('rodada anterior')
+  const second = prompt.includes('rodada anterior') && !prompt.includes('TEIMOSO')
   out = env({ findings: second ? [] : [{ severity: 'high', confidence: 90, file: 'feature.txt', line: 1, description: 'falta X' }],
     criteria: [{ criterion: 'Dado x, quando y, então ok', met: true, evidence: 'feature.txt' }], mrDescription: 'rascunho', summary: 'revisado' })
 } else if (sys.includes('o Security')) {
@@ -57,7 +75,8 @@ const git = (...args: string[]) => execFileSync('git', ['-C', repo, ...args], { 
 git('init', '-b', 'main')
 git('config', 'user.name', 'Test')
 git('config', 'user.email', 'test@local')
-writeFileSync(join(repo, 'README.md'), '# repo\n')
+// Cites the file the fake Implementer writes, so the Documenter has something to keep current
+writeFileSync(join(repo, 'README.md'), '# repo\n\nVeja feature.txt.\n')
 // Like this project: `node_modules` without the slash, so the worktree's dependency symlink is ignored
 writeFileSync(join(repo, '.gitignore'), 'node_modules\n')
 mkdirSync(join(repo, 'node_modules'))
@@ -96,8 +115,14 @@ try {
   assert.equal(done.qaReport?.passed, true)
   assert.ok(existsSync(join(wt, 'README.md')) && !existsSync(join(wt, 'sneaky.ts')), 'Documenter só mexe em documentação')
   assert.equal(done.handoffs?.docs?.mrDescription, 'descrição final')
+  assert.equal(done.spans!.filter(s => s.agentId === 'security').length, 1, 'Security limpo na rodada 1 não roda de novo na correção')
+  assert.equal(done.spans!.filter(s => s.agentId === 'reviewer').length, 2, 'Reviewer confere a correção')
   assert.ok(done.spans!.every(s => s.status !== 'running'))
   assert.ok(done.spans!.some(s => s.usage?.costUsd === 0.01), 'custo por agente registrado')
+  const jailSeen = JSON.parse(readFileSync(`${wt}.agent-home/claude/jail-seen.json`, 'utf-8'))
+  assert.equal(jailSeen.cfg, `${wt}.agent-home/claude`, 'agente com escrita usa a config própria da worktree')
+  assert.equal(jailSeen.realWritable, false, '~/.claude real somente leitura dentro do jail')
+  assert.deepEqual(jailSeen.creds, { claudeAiOauth: { accessToken: 'a' } }, 'login copiado sem o refresh token')
   const log = execFileSync('git', ['-C', wt, 'log', '--format=%s', 'main..HEAD'], { encoding: 'utf-8' })
   assert.match(log, /^docs: /m)
   assert.match(log, /^test: /m)
@@ -109,6 +134,32 @@ try {
   const modelOf = (agent: string) => new Set(done.spans!.filter(s => s.agentId === agent).map(s => s.model))
   assert.deepEqual(modelOf('architect'), new Set(['plan-model']))
   assert.deepEqual(modelOf('implementer'), new Set(['base-model']))
+
+  // Failure paths that used to pass silently. Each builds a fresh task on the same repo.
+  const runCase = async (id: string, title: string) => {
+    const t: Task = { ...task, id, branchName: `factory/${id}`, title, spans: [] }
+    await store.saveTask(t)
+    const c = { ...ctx, taskId: id }
+    return { c, built: await buildTask(c, await planTask(c, t)) }
+  }
+  const prose = await runCase('fac-prose', 'Feature PROSA')
+  assert.equal(prose.built.securityReport?.passed, false, 'Reviewer sem envelope não aprova')
+  assert.match(prose.built.securityReport!.findings[0].description, /Reviewer não concluiu/)
+  await removeWorktree(repo, prose.built.worktreePath!, prose.built.branchName)
+
+  const stubborn = await runCase('fac-stubborn', 'Feature TEIMOSO')
+  assert.equal(stubborn.built.securityReport?.passed, false)
+  assert.equal(stubborn.built.securityReport?.fixRounds, 0, 'correção que não muda nada encerra o laço')
+  assert.equal(stubborn.built.spans!.filter(s => s.agentId === 'reviewer').length, 1, 'sem revisão repetida do mesmo código')
+
+  // A failed adjust goes back to the reviewed commit: nothing unreviewed reaches a merge
+  const { adjustTask } = await import('../server/lib/factory/pipeline.ts')
+  const wtS = stubborn.built.worktreePath!
+  const reviewedHead = execFileSync('git', ['-C', wtS, 'rev-parse', 'HEAD'], { encoding: 'utf-8' })
+  await assert.rejects(adjustTask(stubborn.c, stubborn.built, 'AJUSTE_IMPOSSIVEL'), /bloqueio/)
+  assert.equal(execFileSync('git', ['-C', wtS, 'rev-parse', 'HEAD'], { encoding: 'utf-8' }), reviewedHead)
+  assert.ok(!existsSync(join(wtS, 'meio-feito.txt')), 'alteração do ajuste que falhou descartada')
+  await removeWorktree(repo, wtS, stubborn.built.branchName)
 
   // Budget: each fake run costs US$ 0.01; with a 0.015 cap the second run still starts
   // (0.01 spent) and the third is refused before it spends anything

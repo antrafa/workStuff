@@ -18,6 +18,8 @@ const git = (repo: string, args: string[]) => run('git', ['-C', repo, ...args], 
 const REF = /^[A-Za-z0-9][A-Za-z0-9._/~^-]{0,199}$/
 export const validRef = (r: string) => REF.test(r) && !r.includes('..')
 
+export const originUrl = (repo: string) => git(repo, ['remote', 'get-url', 'origin']).then(u => u.trim() || undefined, () => undefined)
+
 export async function repoInfo(repo: string) {
   const inside = (await git(repo, ['rev-parse', '--is-inside-work-tree']).catch(() => '')).trim()
   if (inside !== 'true') throw new Error('a pasta não é um repositório git')
