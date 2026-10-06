@@ -1,4 +1,5 @@
 import { api } from '@/lib/api'
+import type { Lang } from '../../../server/lib/lang.ts'
 
 export type ProviderId = 'claude' | 'agy' | 'codex'
 
@@ -26,7 +27,7 @@ export type Provider = {
   source: ModelSource
 }
 
-export type Settings = { provider: ProviderId; model: string; effort: string }
+export type Settings = { provider: ProviderId; model: string; effort: string; language: Lang }
 
 export const fetchSettings = () => api.get<{ settings: Settings; providers: Provider[] }>('/settings')
 export const saveSettings = (settings: Settings) => api.put<{ settings: Settings }>('/settings', settings)

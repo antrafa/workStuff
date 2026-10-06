@@ -6,13 +6,14 @@ import { Async, Page, SkeletonRows, useToast } from '@/ui'
 import { useAsync } from '@/lib/useAsync'
 import { useHiddenPaths } from '@/app/menu'
 import { AiSection } from './AiSection'
-import { AccentSection, AppearanceSection, MenuSection } from './Sections'
+import { AccentSection, AppearanceSection, LanguageSection, MenuSection } from './Sections'
+import { tx } from '@/lib/i18n'
 import { fetchSettings, saveSettings, type Settings } from './api'
 
 const SECTIONS = [
-  { id: 'ia', label: 'Provedor de IA', icon: Bot },
-  { id: 'aparencia', label: 'Aparência', icon: Palette },
-  { id: 'menu', label: 'Itens do menu', icon: PanelLeft },
+  { id: 'ia', label: tx({ en: 'AI provider', pt: 'Provedor de IA' }), icon: Bot },
+  { id: 'aparencia', label: tx({ en: 'Appearance', pt: 'Aparência' }), icon: Palette },
+  { id: 'menu', label: tx({ en: 'Menu items', pt: 'Itens do menu' }), icon: PanelLeft },
 ]
 
 export default function SettingsPage() {
@@ -32,9 +33,9 @@ export default function SettingsPage() {
       const { settings } = await saveSettings(draft)
       state.setData({ ...state.data, settings })
       setDraft(null)
-      toast('Configurações salvas')
+      toast(tx({ en: 'Settings saved', pt: 'Configurações salvas' }))
     } catch (e) {
-      toast(`Não salvou: ${(e as Error).message}`)
+      toast(tx({ en: `Not saved: ${(e as Error).message}`, pt: `Não salvou: ${(e as Error).message}` }))
     } finally {
       setSaving(false)
     }
@@ -43,17 +44,18 @@ export default function SettingsPage() {
   const badge = (id: string) => {
     if (!current) return null
     if (id === 'ia') return state.data?.providers.find(p => p.id === current.provider)?.name
-    if (id === 'menu') return hidden.length ? `${hidden.length} ocultos` : 'todos visíveis'
+    if (id === 'menu') return hidden.length ? tx({ en: `${hidden.length} hidden`, pt: `${hidden.length} ocultos` }) : tx({ en: 'all visible', pt: 'todos visíveis' })
     return null
   }
 
   return (
     <Page
-      title="Configurações"
-      hint="Provedor de IA, tema, cor de destaque e quais telas aparecem no menu."
+      title={tx({ en: 'Settings', pt: 'Configurações' })}
+      hint={tx({ en: 'AI provider, language, theme, accent color and which screens show in the menu.', pt: 'Provedor de IA, idioma, tema, cor de destaque e quais telas aparecem no menu.' })}
       actions={
-        <button className="btn btn-primary" disabled={!draft || saving} onClick={save} title={draft ? 'Grava provedor, modelo e esforço em ~/.workstuff/settings.json' : 'Nada alterado'}>
-          <Save size={14} /> {saving ? 'Salvando…' : draft ? 'Salvar alterações' : 'Salvo'}
+        <button className="btn btn-primary" disabled={!draft || saving} onClick={save}
+          title={draft ? tx({ en: 'Writes provider, model and effort to ~/.workstuff/settings.json', pt: 'Grava provedor, modelo e esforço em ~/.workstuff/settings.json' }) : tx({ en: 'Nothing changed', pt: 'Nada alterado' })}>
+          <Save size={14} /> {saving ? tx({ en: 'Saving…', pt: 'Salvando…' }) : draft ? tx({ en: 'Save changes', pt: 'Salvar alterações' }) : tx({ en: 'Saved', pt: 'Salvo' })}
         </button>
       }
     >
@@ -74,6 +76,7 @@ export default function SettingsPage() {
                 {secao === 'ia' && current && <AiSection providers={data.providers} settings={current} onChange={update} />}
                 {secao === 'aparencia' && (
                   <div className="stack" style={{ ['--gap' as string]: '16px' }}>
+                    <LanguageSection saved={data.settings} />
                     <AppearanceSection />
                     <AccentSection />
                   </div>
