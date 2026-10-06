@@ -1,7 +1,7 @@
-// Unidades do Kubernetes. Autoteste: node server/lib/k8s/units.ts --selfcheck
+// Kubernetes units. Autoteste: node server/lib/k8s/units.ts --selfcheck
 import assert from 'node:assert/strict'
 
-// CPU em millicores: "250m", "2", "1500000n" (nanocores, como vem das métricas).
+// CPU in millicores: "250m", "2", "1500000n" (nanocores, as metrics report it).
 export function cpuMillis(v: string | undefined | null): number {
   if (!v) return 0
   if (v.endsWith('n')) return Number(v.slice(0, -1)) / 1e6
@@ -13,7 +13,7 @@ export function cpuMillis(v: string | undefined | null): number {
 const BIN: Record<string, number> = { Ki: 1024, Mi: 1024 ** 2, Gi: 1024 ** 3, Ti: 1024 ** 4 }
 const DEC: Record<string, number> = { k: 1e3, K: 1e3, M: 1e6, G: 1e9, T: 1e12 }
 
-// Memória em bytes: "512Mi", "1Gi", "1000000k", "134217728".
+// Memory in bytes: "512Mi", "1Gi", "1000000k", "134217728".
 export function memBytes(v: string | undefined | null): number {
   if (!v) return 0
   const m = v.match(/^([\d.]+)([A-Za-z]*)$/)

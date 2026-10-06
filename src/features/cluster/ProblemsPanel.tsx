@@ -4,6 +4,7 @@ import { Async, Empty, SkeletonRows } from '@/ui'
 import { RestartModal } from './RestartModal'
 import { restartTitle } from './PodsTable'
 import { canWrite, type Environment, type Pod } from './api'
+import { tx } from '@/lib/i18n'
 
 type State = { data: Pod[] | null; error: string | null; loading: boolean; reload: () => void }
 type Props = { state: State; env: Environment | null; onOpen: (p: Pod) => void; onLogs: (p: Pod) => void }
@@ -18,7 +19,7 @@ export function ProblemsPanel({ state, env, onOpen, onLogs }: Props) {
         isEmpty={d => d.every(p => p.health.level === 'ok')}
         empty={
           <div className="card">
-            <Empty icon={HeartPulse} title="Nenhum problema encontrado">Todos os pods deste escopo estão saudáveis.</Empty>
+            <Empty icon={HeartPulse} title={tx({ en: 'No problem found', pt: 'Nenhum problema encontrado' })}>{tx({ en: 'Every pod in this scope is healthy.', pt: 'Todos os pods deste escopo estão saudáveis.' })}</Empty>
           </div>
         }
         skeleton={<SkeletonRows rows={3} height={96} />}
@@ -33,7 +34,7 @@ export function ProblemsPanel({ state, env, onOpen, onLogs }: Props) {
                 return (
                   <article key={`${p.namespace}/${p.name}`} className={`card interactive problem ${critical ? 'is-crit' : 'is-warn'}`} onClick={() => onOpen(p)}>
                     <div className="row">
-                      <span className={`badge ${critical ? 'badge-crit' : 'badge-warn'}`}>{critical ? 'crítico' : 'atenção'}</span>
+                      <span className={`badge ${critical ? 'badge-crit' : 'badge-warn'}`}>{critical ? tx({ en: 'critical', pt: 'crítico' }) : tx({ en: 'warning', pt: 'atenção' })}</span>
                       <span className="muted" style={{ fontSize: 12 }}>{p.namespace}</span>
                     </div>
                     <b className="mono" style={{ fontSize: 13 }}>{p.name}</b>
@@ -46,10 +47,10 @@ export function ProblemsPanel({ state, env, onOpen, onLogs }: Props) {
                     <div className="row" onClick={e => e.stopPropagation()}>
                       <button className="btn btn-sm" onClick={() => onLogs(p)}><ScrollText size={13} /> Logs</button>
                       <button className="btn btn-sm" disabled={!canWrite(env) || !p.workload} onClick={() => setRestarting(p)} title={restartTitle(env, p)}>
-                        <RotateCcw size={13} /> Reiniciar
+                        <RotateCcw size={13} /> {tx({ en: 'Restart', pt: 'Reiniciar' })}
                       </button>
                       <div className="spacer" />
-                      <span className="muted" style={{ fontSize: 12 }}>clique para ver eventos</span>
+                      <span className="muted" style={{ fontSize: 12 }}>{tx({ en: 'click to see events', pt: 'clique para ver eventos' })}</span>
                     </div>
                   </article>
                 )

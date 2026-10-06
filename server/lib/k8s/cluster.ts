@@ -6,8 +6,9 @@ import { getKubeconfig, type Kubeconfig } from './kubeconfigs.ts'
 import { KubeError, configView, kubectl, kubectlJson, kubectlRaw, type Target } from './kubectl.ts'
 import { authorizeMutation } from './policy.ts'
 import { cpuMillis, memBytes, toGi, toMi } from './units.ts'
+import { say } from '../i18n.ts'
 
-// Sessão = kubeconfig + contexto ativos. Um só por vez, persistido: reabrir o painel volta onde estava.
+// Session = active kubeconfig + context. One at a time, persisted: reopening the panel goes back to it.
 type Session = { kubeconfigId: string; context: string }
 const SESSION_FILE = dataFile('cluster-session.json')
 
@@ -24,30 +25,39 @@ export async function activeSession(): Promise<{ kubeconfig: Kubeconfig; context
 
 export async function requireSession() {
   const s = await activeSession()
-  if (!s) throw new ClusterError('nenhum cluster conectado: escolha um kubeconfig', 409)
+  if (!s) throw new ClusterError(say({ en: 'no cluster connected: choose a kubeconfig', pt: 'nenhum cluster conectado: escolha um kubeconfig' }), 409)
   return s
 }
 
 export async function connect(kubeconfigId: string, context?: string) {
   const kubeconfig = await getKubeconfig(kubeconfigId)
-  if (!kubeconfig) throw new ClusterError('kubeconfig não encontrado', 404)
-  if (context && !kubeconfig.contexts.includes(context)) throw new ClusterError(`contexto ${context} não existe neste kubeconfig`)
+  if (!kubeconfig) throw new ClusterError(say({ en: 'kubeconfig not found', pt: 'kubeconfig não encontrado' }), 404)
+  if (context && !kubeconfig.contexts.includes(context)) throw new ClusterError(say({ en: `context ${context} does not exist in this kubeconfig`, pt: `contexto ${context} não existe neste kubeconfig` }))
   writeJson(SESSION_FILE, { kubeconfigId, context: context ?? kubeconfig.currentContext })
   return activeSession()
 }
 
 export const disconnect = () => writeJson(SESSION_FILE, null)
 
-// Erro do kubectl vira mensagem para a tela; o tipo ajuda a tela a oferecer a saída certa.
+// A kubectl error becomes a message for the screen; the kind helps the screen offer the right way out.
 export function explain(e: unknown): never {
   if (e instanceof KubeError) {
-    const hint = {
-      forbidden: 'o RBAC deste usuário não permite essa leitura',
-      unauthorized: 'o token do kubeconfig foi recusado (expirado ou revogado)',
-      unreachable: 'o cluster não respondeu; confira VPN e rede',
-      notfound: 'recurso não encontrado',
-      other: 'o kubectl falhou',
-    }[e.kind]
+    const hint = say({
+      en: {
+        forbidden: "this user's RBAC does not allow this read",
+        unauthorized: 'the kubeconfig token was refused (expired or revoked)',
+        unreachable: 'the cluster did not respond; check VPN and network',
+        notfound: 'resource not found',
+        other: 'kubectl failed',
+      },
+      pt: {
+        forbidden: 'o RBAC deste usuário não permite essa leitura',
+        unauthorized: 'o token do kubeconfig foi recusado (expirado ou revogado)',
+        unreachable: 'o cluster não respondeu; confira VPN e rede',
+        notfound: 'recurso não encontrado',
+        other: 'o kubectl falhou',
+      },
+    })[e.kind]
     throw new ClusterError(`${hint}: ${e.message.split('\n')[0].slice(0, 300)}`, e.kind === 'notfound' ? 404 : 502)
   }
   throw e
@@ -83,7 +93,7 @@ export type Pod = {
   health: Health
 }
 
-// Tag = o que vem depois do último ":" no último segmento do caminho (porta de registry não é tag).
+// Tag = what comes after the last ":" in the last path segment (a registry port is not a tag).
 export function imageTag(image: string): string | null {
   const last = image.split('@')[0].split('/').pop() ?? ''
   const i = last.lastIndexOf(':')
@@ -109,7 +119,7 @@ export async function listPods(namespace?: string) {
   return podsIn(target, namespace)
 }
 
-// Pods de um alvo qualquer (kubeconfig + contexto), sem depender da sessão ativa do Cluster.
+// Pods of any target (kubeconfig + context), without depending on the Cluster's active session.
 export async function podsIn(target: Target, namespace?: string) {
   const scope = namespace ? ['-n', namespace] : ['-A']
   try {
@@ -127,7 +137,7 @@ export async function podsIn(target: Target, namespace?: string) {
       return {
         name: p.metadata.name,
         namespace: p.metadata.namespace,
-        // Motivo de espera do container diz mais que a phase (CrashLoopBackOff em vez de Running).
+        // The container's waiting reason says more than the phase (CrashLoopBackOff instead of Running).
         status: statuses.find(s => s.state?.waiting?.reason)?.state?.waiting?.reason ?? p.status.phase ?? 'Unknown',
         nodeName: p.spec.nodeName ?? '',
         podIP: p.status.podIP ?? '',
@@ -147,7 +157,7 @@ export async function podsIn(target: Target, namespace?: string) {
     return { pods: items, metricsUnavailable: metrics === null }
   } catch (e) {
     if (e instanceof KubeError && e.kind === 'forbidden' && !namespace) {
-      throw new ClusterError('o RBAC não permite listar pods de todos os namespaces: escolha um namespace', 403)
+      throw new ClusterError(say({ en: 'RBAC does not allow listing pods in all namespaces: choose a namespace', pt: 'o RBAC não permite listar pods de todos os namespaces: escolha um namespace' }), 403)
     }
     explain(e)
   }
@@ -159,7 +169,7 @@ export async function listNamespaces() {
     const list = await kubectlJson<K8sList<{ metadata: { name: string } }>>(target, ['get', 'namespaces'])
     return { namespaces: list.items.map(n => n.metadata.name).sort(), limitedRbac: false }
   } catch (e) {
-    // ponytail: sem fallback via API do Rancher; com RBAC limitado o usuário digita o namespace.
+    // ponytail: no fallback through the Rancher API; with limited RBAC the user types the namespace.
     if (e instanceof KubeError && e.kind === 'forbidden') {
       const ns = await configView(kubeconfig.file).then(v => v.contexts?.find(c => c.name === context)?.context.namespace).catch(() => undefined)
       return { namespaces: ns ? [ns] : [], limitedRbac: true }
@@ -200,7 +210,7 @@ export async function listNodes() {
           internalIP: n.status.addresses.find(a => a.type === 'InternalIP')?.address ?? '',
           cpuCapacity: cpuMillis(n.status.capacity.cpu) / 1000,
           memCapacityGi: toGi(memBytes(n.status.capacity.memory)),
-          // Em uso (métricas) quando há metrics-server; reservado (soma dos requests) sempre que dá para ler os pods.
+          // In use (metrics) when there is a metrics-server; reserved (sum of requests) whenever the pods can be read.
           cpuUsage: u ? Math.round(cpuMillis(u.cpu) / 100) / 10 : null,
           memUsageGi: u ? toGi(memBytes(u.memory)) : null,
           cpuRequested: Math.round(onNode.reduce((a, p) => a + sum(p.spec.containers, 'requests', 'cpu', cpuMillis), 0) / 100) / 10,
@@ -218,7 +228,7 @@ export async function listNodes() {
 const NAME = /^[a-z0-9]([-a-z0-9.]{0,251}[a-z0-9])?$/
 
 export function checkName(kind: string, v: unknown): string {
-  if (typeof v !== 'string' || !NAME.test(v)) throw new ClusterError(`${kind} inválido`)
+  if (typeof v !== 'string' || !NAME.test(v)) throw new ClusterError(say({ en: `invalid ${kind}`, pt: `${kind} inválido` }))
   return v
 }
 
@@ -253,7 +263,7 @@ export async function podDetail(namespace: string, pod: string) {
       [...cmNames].map(name =>
         kubectlJson<{ data?: Record<string, string> }>(target, ['get', 'configmap', name, '-n', namespace])
           .then(cm => ({ name, data: cm.data ?? {} }))
-          .catch(() => ({ name, data: {} as Record<string, string>, error: 'sem permissão ou não encontrado' })),
+          .catch(() => ({ name, data: {} as Record<string, string>, error: say({ en: 'no permission or not found', pt: 'sem permissão ou não encontrado' }) })),
       ),
     )
     return {
@@ -266,8 +276,8 @@ export async function podDetail(namespace: string, pod: string) {
   }
 }
 
-// Única escrita no cluster. A política por ambiente é conferida aqui, não só na tela, e o workload é
-// descoberto a partir do pod no próprio servidor: a tela só diz qual pod.
+// The only write to the cluster. The per-environment policy is checked here, not only on screen, and the
+// workload is found from the pod by the server itself: the screen only says which pod.
 export async function restartWorkload(namespace: string, pod: string) {
   const { target, kubeconfig } = await requireSession()
   const decision = authorizeMutation(kubeconfig.environment, 'restart')
@@ -282,7 +292,7 @@ export async function restartWorkload(namespace: string, pod: string) {
   } catch (e) {
     explain(e)
   }
-  if (!workload) throw new ClusterError('o pod não pertence a um Deployment, StatefulSet ou DaemonSet; não há o que reiniciar', 422)
+  if (!workload) throw new ClusterError(say({ en: 'the pod does not belong to a Deployment, StatefulSet or DaemonSet; there is nothing to restart', pt: 'o pod não pertence a um Deployment, StatefulSet ou DaemonSet; não há o que reiniciar' }), 422)
 
   const resource = `${workload.kind.toLowerCase()}/${workload.name}`
   try {
@@ -294,7 +304,7 @@ export async function restartWorkload(namespace: string, pod: string) {
   return { ok: true, workload: `${workload.kind}/${workload.name}`, namespace, environment: kubeconfig.environment }
 }
 
-// Últimas linhas de log para o diagnóstico com IA (sem follow).
+// Last log lines for the AI diagnosis (no follow). The note on failure goes into the prompt.
 export async function recentLogs(namespace: string, pod: string, container?: string, lines = 150) {
   const { target } = await requireSession()
   try {

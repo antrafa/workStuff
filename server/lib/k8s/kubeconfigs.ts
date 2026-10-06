@@ -6,8 +6,9 @@ import { readJson, writeJson } from '../jsonFile.ts'
 import { ClusterError } from './errors.ts'
 import { configView, type KubeconfigView } from './kubectl.ts'
 import { detectEnvironment, type Environment } from './policy.ts'
+import { say } from '../i18n.ts'
 
-// Pasta dos kubeconfigs. Sobrescrevível para testar upload/remoção sem tocar na ~/.kube real.
+// Kubeconfig folder. Overridable to test upload/removal without touching the real ~/.kube.
 export const KUBE_DIR = process.env.WORKSTUFF_KUBE_DIR ?? join(homedir(), '.kube')
 const ENV_FILE = dataFile('cluster-environments.json')
 const EXTENSIONS = /\.(ya?ml|kubeconfig)$/
@@ -25,7 +26,7 @@ export type Kubeconfig = {
   updatedAt: string
 }
 
-// id = nome do arquivo (inclui a extensão): sem colisão entre a.yaml e a.yml, e sem o bug de abrir .yml.
+// id = file name (with the extension): no collision between a.yaml and a.yml, and no bug opening .yml.
 const candidates = () => {
   if (!existsSync(KUBE_DIR)) return []
   return readdirSync(KUBE_DIR).filter(f => f === 'config' || EXTENSIONS.test(f)).filter(f => statSync(join(KUBE_DIR, f)).isFile())
@@ -89,14 +90,14 @@ export function setEnvironment(id: string, env: Environment | null) {
 
 const SAFE_NAME = /^[a-zA-Z0-9][a-zA-Z0-9._-]{0,80}$/
 
-// Valida com o próprio kubectl num arquivo temporário antes de gravar. Nunca sobrescreve.
+// Validates with kubectl itself on a temporary file before writing. Never overwrites.
 export async function saveKubeconfig(filename: string, content: string) {
   const name = basename(filename).replace(/\s+/g, '-')
   const finalName = EXTENSIONS.test(name) ? name : `${name}.yaml`
-  if (!SAFE_NAME.test(finalName)) throw new ClusterError('nome de arquivo inválido: use letras, números, ponto, hífen e sublinhado')
-  if (content.length > 1024 * 1024) throw new ClusterError('arquivo maior que 1 MB não parece um kubeconfig')
+  if (!SAFE_NAME.test(finalName)) throw new ClusterError(say({ en: 'invalid file name: use letters, numbers, dot, hyphen and underscore', pt: 'nome de arquivo inválido: use letras, números, ponto, hífen e sublinhado' }))
+  if (content.length > 1024 * 1024) throw new ClusterError(say({ en: 'a file larger than 1 MB does not look like a kubeconfig', pt: 'arquivo maior que 1 MB não parece um kubeconfig' }))
   const target = join(KUBE_DIR, finalName)
-  if (existsSync(target)) throw new ClusterError(`já existe ${finalName} em ${KUBE_DIR}; renomeie o arquivo ou remova o antigo antes`, 409)
+  if (existsSync(target)) throw new ClusterError(say({ en: `${finalName} already exists in ${KUBE_DIR}; rename the file or remove the old one first`, pt: `já existe ${finalName} em ${KUBE_DIR}; renomeie o arquivo ou remova o antigo antes` }), 409)
 
   const tmp = mkdtempSync(join(tmpdir(), 'kubeconfig-'))
   try {
@@ -104,7 +105,7 @@ export async function saveKubeconfig(filename: string, content: string) {
     const view = await configView(join(tmp, 'k.yaml')).catch(e => {
       throw new ClusterError((e as Error).message, 422)
     })
-    if (!view.contexts?.length || !view.clusters?.length) throw new ClusterError('kubeconfig sem contexto ou cluster')
+    if (!view.contexts?.length || !view.clusters?.length) throw new ClusterError(say({ en: 'kubeconfig with no context or cluster', pt: 'kubeconfig sem contexto ou cluster' }))
   } finally {
     rmSync(tmp, { recursive: true, force: true })
   }
@@ -113,10 +114,10 @@ export async function saveKubeconfig(filename: string, content: string) {
   return finalName
 }
 
-// O ~/.kube/config é o padrão de todo kubectl da máquina: remover por aqui quebraria outras ferramentas.
+// ~/.kube/config is the default of every kubectl on the machine: removing it here would break other tools.
 export function deleteKubeconfig(id: string) {
-  if (id === 'config') throw new ClusterError('o ~/.kube/config não é removido pelo painel; ele é o padrão de todo kubectl da máquina')
-  if (!candidates().includes(id)) throw new ClusterError('kubeconfig não encontrado', 404)
+  if (id === 'config') throw new ClusterError(say({ en: '~/.kube/config is not removed by the panel; it is the default of every kubectl on the machine', pt: 'o ~/.kube/config não é removido pelo painel; ele é o padrão de todo kubectl da máquina' }))
+  if (!candidates().includes(id)) throw new ClusterError(say({ en: 'kubeconfig not found', pt: 'kubeconfig não encontrado' }), 404)
   unlinkSync(join(KUBE_DIR, id))
   setEnvironment(id, null)
 }

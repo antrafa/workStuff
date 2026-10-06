@@ -18,6 +18,8 @@ import { getKubeconfig } from '../k8s/kubeconfigs.ts'
 import { KubeError, type Target } from '../k8s/kubectl.ts'
 import { fetchThrottling, findGatewayPod, findPrometheus, readMeshSnapshot, sampleNamespace, type PromRef } from './cluster.ts'
 import { cleanKubeMessage, meshDiff, type MeshSnapshot, type Sample, type Target as ObsTarget } from './metrics.ts'
+import { say } from '../i18n.ts'
+import type { Pair } from '../lang.ts'
 
 export const PERF_DIR = dataFile('performance')
 const SAMPLES_DIR = join(PERF_DIR, 'samples')
@@ -82,8 +84,8 @@ export const getObservation = (id: string) => {
 
 export async function resolveTarget(kubeconfigId: string, context: string): Promise<Target> {
   const k = await getKubeconfig(kubeconfigId)
-  if (!k) throw new Error(`kubeconfig ${kubeconfigId} não existe mais em ~/.kube`)
-  if (!k.contexts.includes(context)) throw new Error(`contexto ${context} não existe em ${kubeconfigId}`)
+  if (!k) throw new Error(say({ en: `kubeconfig ${kubeconfigId} no longer exists in ~/.kube`, pt: `kubeconfig ${kubeconfigId} não existe mais em ~/.kube` }))
+  if (!k.contexts.includes(context)) throw new Error(say({ en: `context ${context} does not exist in ${kubeconfigId}`, pt: `contexto ${context} não existe em ${kubeconfigId}` }))
   return { file: k.file, context }
 }
 
@@ -95,7 +97,7 @@ async function collectMesh(e: Entry, namespace: string, services: Set<string>) {
   if (e.meshOff || !services.size) return null
   e.gatewayPod ??= await findGatewayPod(e.target)
   if (!e.gatewayPod) {
-    e.meshOff = 'sem istio-ingressgateway neste cluster'
+    e.meshOff = say({ en: 'no istio-ingressgateway in this cluster', pt: 'sem istio-ingressgateway neste cluster' })
     return null
   }
   const now = Date.now()
@@ -110,16 +112,16 @@ async function collectThrottle(e: Entry, meta: ObservationMeta) {
   if (e.throttleOff) return null
   e.prometheus ??= await findPrometheus(e.target)
   if (!e.prometheus) {
-    e.throttleOff = 'sem Prometheus neste cluster'
+    e.throttleOff = say({ en: 'no Prometheus in this cluster', pt: 'sem Prometheus neste cluster' })
     return null
   }
   return fetchThrottling(e.target, e.prometheus, meta.namespace, meta.targets.map(t => t.pod), meta.intervalSeconds * 2)
 }
 
-// RBAC negando o proxy é o caso comum com usuário do Rancher: diz o que falta em vez do erro cru.
-function offReason(err: unknown, what: string) {
+// RBAC denying the proxy is the common case for a Rancher user: says what is missing instead of the raw error.
+function offReason(err: unknown, what: Pair) {
   const msg = (err as Error).message
-  if (/forbidden/i.test(msg)) return `o RBAC deste usuário não permite ler ${what}`
+  if (/forbidden/i.test(msg)) return say({ en: `this user's RBAC does not allow reading ${what.en}`, pt: `o RBAC deste usuário não permite ler ${what.pt}` })
   return cleanKubeMessage(msg, 200)
 }
 
@@ -131,9 +133,9 @@ async function tick(id: string) {
   try {
     base = await sampleNamespace(e.target, meta.namespace, meta.targets, e.seenEvents)
   } catch (err) {
-    // Credencial recusada ou RBAC negando: repetir a cada tick não resolve, para e diz o motivo.
+    // Credential refused or RBAC denying: repeating every tick does not help; it stops and says why.
     if (err instanceof KubeError && (err.kind === 'unauthorized' || err.kind === 'forbidden')) {
-      stopObservation(id, 'failed', `o cluster recusou a leitura: ${cleanKubeMessage(err.message, 200)}`)
+      stopObservation(id, 'failed', say({ en: 'the cluster refused the read: ', pt: 'o cluster recusou a leitura: ' }) + cleanKubeMessage(err.message, 200))
       return
     }
     e.lastError = cleanKubeMessage((err as Error).message, 200)
@@ -141,8 +143,8 @@ async function tick(id: string) {
   }
 
   const [throttle, mesh] = await Promise.all([
-    collectThrottle(e, meta).catch(err => ((e.throttleOff = offReason(err, 'o Prometheus do cluster (services/proxy)')), null)),
-    collectMesh(e, meta.namespace, base.services).catch(err => ((e.meshOff = offReason(err, 'o Envoy do istio-ingressgateway (pods/proxy)')), null)),
+    collectThrottle(e, meta).catch(err => ((e.throttleOff = offReason(err, { en: "the cluster's Prometheus (services/proxy)", pt: 'o Prometheus do cluster (services/proxy)' })), null)),
+    collectMesh(e, meta.namespace, base.services).catch(err => ((e.meshOff = offReason(err, { en: "the istio-ingressgateway's Envoy (pods/proxy)", pt: 'o Envoy do istio-ingressgateway (pods/proxy)' })), null)),
   ])
   for (const p of base.pods) p.throttlePct = throttle?.get(`${p.pod}/${p.container}`) ?? null
 
@@ -164,8 +166,8 @@ function schedule(meta: ObservationMeta, target: Target) {
 }
 
 export async function startObservation(input: { kubeconfigId: string; context: string; namespace: string; targets: ObsTarget[]; intervalSeconds: number }) {
-  if (!input.targets.length) throw new Error('selecione ao menos um pod')
-  if (input.targets.length > MAX_TARGETS) throw new Error(`no máximo ${MAX_TARGETS} pods por observação`)
+  if (!input.targets.length) throw new Error(say({ en: 'select at least one pod', pt: 'selecione ao menos um pod' }))
+  if (input.targets.length > MAX_TARGETS) throw new Error(say({ en: `at most ${MAX_TARGETS} pods per observation`, pt: `no máximo ${MAX_TARGETS} pods por observação` }))
   const target = await resolveTarget(input.kubeconfigId, input.context)
   const meta: ObservationMeta = {
     id: randomUUID(),
@@ -187,7 +189,7 @@ export async function startObservation(input: { kubeconfigId: string; context: s
 
 export async function resumeObservation(id: string) {
   const meta = readAll()[id]
-  if (!meta) throw new Error('observação não encontrada')
+  if (!meta) throw new Error(say({ en: 'observation not found', pt: 'observação não encontrada' }))
   if (active.has(id)) return withLive(meta)
   const target = await resolveTarget(meta.kubeconfigId, meta.context)
   patch(id, { status: 'running', stoppedAt: null, failure: null })
@@ -232,7 +234,7 @@ export function readSamples(id: string, range: { from?: string; to?: string } = 
   return samples.filter(s => (!range.from || s.t >= range.from) && (!range.to || s.t <= range.to))
 }
 
-// Retoma, ao subir o servidor, o que estava rodando. Falha ao resolver o alvo marca a observação.
+// On server start, resumes what was running. Failing to resolve the target marks the observation.
 export async function resumeRunning() {
   for (const meta of Object.values(readAll()).filter(m => m.status === 'running')) {
     try {

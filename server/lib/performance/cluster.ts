@@ -4,6 +4,7 @@ import { createInterface } from 'node:readline'
 import { KubeError, kubectlJson, kubectlRaw, kubectlStream, type Target } from '../k8s/kubectl.ts'
 import { cpuMillis, memBytes } from '../k8s/units.ts'
 import { LIMIT_SERIES, SERIES, accumulateLine, historyToSamples, podSelector, type MeshSnapshot, type PodSample, type Sample, type Target as ObsTarget } from './metrics.ts'
+import { say } from '../i18n.ts'
 
 type List<T> = { items: T[] }
 type PodJson = {
@@ -100,7 +101,7 @@ type PromResult = { status: string; error?: string; data: { result: { metric: Re
 async function promQuery(t: Target, ref: PromRef, endpoint: 'query' | 'query_range', params: Record<string, string>) {
   const qs = new URLSearchParams(params).toString()
   const body = await kubectlRaw<PromResult>(t, `/api/v1/namespaces/${ref.namespace}/services/${ref.service}:${ref.port}/proxy/api/v1/${endpoint}?${qs}`)
-  if (body.status !== 'success') throw new Error(body.error ?? 'o Prometheus recusou a consulta')
+  if (body.status !== 'success') throw new Error(body.error ?? say({ en: 'Prometheus refused the query', pt: 'o Prometheus recusou a consulta' }))
   return body.data.result
 }
 
@@ -151,6 +152,6 @@ export async function readMeshSnapshot(t: Target, gatewayPod: string, namespace:
   for await (const line of createInterface({ input: child.stdout })) accumulateLine(acc, line, namespace, wanted)
   const code = await exited
   clearTimeout(killer)
-  if (code !== 0) throw new KubeError(stderr.split('\n').filter(l => l && !l.startsWith('Warning:')).join(' ') || `kubectl saiu com ${code}`, /forbidden/i.test(stderr) ? 'forbidden' : 'other')
+  if (code !== 0) throw new KubeError(stderr.split('\n').filter(l => l && !l.startsWith('Warning:')).join(' ') || say({ en: `kubectl exited with ${code}`, pt: `kubectl saiu com ${code}` }), /forbidden/i.test(stderr) ? 'forbidden' : 'other')
   return acc
 }
