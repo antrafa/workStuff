@@ -4,6 +4,7 @@ import { CopyButton } from './CopyButton'
 import { useEffect, useId, useState, type ReactElement, type ReactNode } from 'react'
 import ReactMarkdown, { type Components } from 'react-markdown'
 import remarkGfm from 'remark-gfm'
+import { tx } from '@/lib/i18n'
 
 // Markdown de resposta de IA: GFM (tabelas, listas de tarefa) e blocos ```mermaid como diagrama.
 // HTML cru no texto não é interpretado (react-markdown ignora sem rehype-raw): o conteúdo vem do modelo.
@@ -33,7 +34,7 @@ const COMPONENTS: Components = {
     return (
       <div className="code-block">
         <div className="code-block-head">
-          <span>{lang ?? 'código'}</span>
+          <span>{lang ?? tx({ en: 'code', pt: 'código' })}</span>
           <span className="spacer" />
           <CopyButton value={text} />
         </div>

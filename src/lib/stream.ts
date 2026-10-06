@@ -1,3 +1,5 @@
+import { tx } from './i18n'
+
 // Lê uma resposta SSE de um POST (o EventSource do navegador só faz GET).
 // Cada evento chega como "data: {json}\n\n"; o retorno termina quando o servidor fecha a conexão.
 export async function streamPost<E>(path: string, onEvent: (e: E) => void, signal?: AbortSignal, body?: unknown) {
@@ -11,11 +13,11 @@ export async function streamPost<E>(path: string, onEvent: (e: E) => void, signa
     })
   } catch (e) {
     if ((e as Error).name === 'AbortError') return
-    throw new Error('o servidor local não respondeu; ele está rodando? (npm run dev)')
+    throw new Error(tx({ en: 'the local server did not respond; is it running? (npm run dev)', pt: 'o servidor local não respondeu; ele está rodando? (npm run dev)' }))
   }
   if (!res.ok || !res.body) {
     const data = await res.json().catch(() => null)
-    throw new Error(data?.error ?? `POST ${path} respondeu ${res.status}`)
+    throw new Error(data?.error ?? tx({ en: `POST ${path} answered ${res.status}`, pt: `POST ${path} respondeu ${res.status}` }))
   }
 
   const reader = res.body.pipeThrough(new TextDecoderStream()).getReader()
