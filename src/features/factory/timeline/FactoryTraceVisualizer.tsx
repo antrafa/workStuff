@@ -23,6 +23,7 @@ import { PhaseDetailModal } from './PhaseDetailModal'
 import { ActivityFeed } from '../ActivityFeed'
 import { TaskActions } from '../TaskActions'
 import { AGENT_ORDER, AGENT_UI, fmtDuration, useLiveTask } from '../factoryRun'
+import { locale, tx } from '@/lib/i18n'
 import type { SpecializedAgentId } from '../../../../server/lib/factory/types.ts'
 
 type Props = {
@@ -59,7 +60,7 @@ export function FactoryTraceVisualizer({ task, onBack, onUpdate, onOpenReview }:
   const [isRefreshing, setIsRefreshing] = useState(false)
   const [currentTime, setCurrentTime] = useState(Date.now())
 
-  // Timer em tempo real durante a execução para atualizar duração e escala temporal
+  // Live clock while running, to update the duration and the time scale
   useEffect(() => {
     if (!isExecuting) return
     const timer = setInterval(() => {
@@ -74,15 +75,15 @@ export function FactoryTraceVisualizer({ task, onBack, onUpdate, onOpenReview }:
     setIsRefreshing(false)
   }
 
-  // Definição das Raias do Waterfall
+  // Waterfall lanes
   const lanes: LaneDef[] = [
-    { id: 'engineer', name: 'Engenheiro', role: 'Usuário (Human-in-the-loop)', color: 'var(--fx-engineer)', icon: User },
-    { id: 'code', name: 'Workspace', role: 'Código (Git Worktree & Commits)', color: 'var(--fx-code)', icon: Code2 },
+    { id: 'engineer', name: tx({ en: 'Engineer', pt: 'Engenheiro' }), role: tx({ en: 'You (human in the loop)', pt: 'Você (humano no circuito)' }), color: 'var(--fx-engineer)', icon: User },
+    { id: 'code', name: tx({ en: 'Workspace', pt: 'Workspace' }), role: tx({ en: 'Code (Git worktree and commits)', pt: 'Código (Git Worktree e commits)' }), color: 'var(--fx-code)', icon: Code2 },
     ...AGENT_ORDER.map(id => ({ id, ...AGENT_UI[id], model: liveTask.agentModels?.[id] || liveTask.model || liveTask.provider, icon: AGENT_ICON[id] })),
-    { id: 'gates', name: 'Portões', role: 'Portões Mecânicos de Aceitação', color: 'var(--fx-gates)', icon: ShieldCheck },
+    { id: 'gates', name: tx({ en: 'Gates', pt: 'Portões' }), role: tx({ en: 'Mechanical acceptance gates', pt: 'Portões Mecânicos de Aceitação' }), color: 'var(--fx-gates)', icon: ShieldCheck },
   ]
 
-  // Monta lista de fases e blocos a partir dos spans gravados ou dos estados padrão
+  // Phases and blocks from the recorded spans
   const spans = liveTask.spans ?? []
   const taskStartTime = new Date(liveTask.createdAt).getTime()
   // Only a running task grows with the clock; any other state ended at its last update
@@ -92,7 +93,7 @@ export function FactoryTraceVisualizer({ task, onBack, onUpdate, onOpenReview }:
   // Clicking a phase opens its detail modal; read from the live task so it updates while running
   const selectedSpan = spans.find(s => s.id === selectedSpanId) ?? null
 
-  // Ticks temporais da escala
+  // Time scale ticks
   const ticks = [
     { label: '0s', pct: 0 },
     { label: fmtDuration(totalDurationMs * 0.25), pct: 25 },
@@ -139,18 +140,18 @@ export function FactoryTraceVisualizer({ task, onBack, onUpdate, onOpenReview }:
             onClick={onBack}
             
           >
-            <ArrowLeft size={14} /> Voltar
+            <ArrowLeft size={14} /> {tx({ en: 'Back', pt: 'Voltar' })}
           </button>
 
           <span style={{ fontSize: 13, color: 'var(--muted)' }}>
-            Fábrica de Software &gt; execuções &gt;{' '}
+            {tx({ en: 'Software Factory > runs > ', pt: 'Fábrica de Software > execuções > ' })}
             <b style={{ color: 'var(--fx-architect)', fontFamily: 'var(--font-mono)' }}>{liveTask.id}</b>
             {selectedSpan && <span> &gt; <b style={{ color: 'var(--fx-implementer)' }}>{selectedSpan.name}</b></span>}
           </span>
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-          {/* Botão de Atualização Manual */}
+          {/* Manual refresh */}
           <button
             type="button"
             className="btn btn-sm"
@@ -162,10 +163,10 @@ export function FactoryTraceVisualizer({ task, onBack, onUpdate, onOpenReview }:
               gap: 6,
               fontSize: 12,
             }}
-            title="Atualizar dados e eventos agora"
+            title={tx({ en: 'Refresh data and events now', pt: 'Atualizar dados e eventos agora' })}
           >
             <RefreshCw size={12} className={isRefreshing ? 'spin' : ''} />
-            Atualizar
+            {tx({ en: 'Refresh', pt: 'Atualizar' })}
           </button>
 
           <button
@@ -173,10 +174,10 @@ export function FactoryTraceVisualizer({ task, onBack, onUpdate, onOpenReview }:
             className="btn btn-sm"
             aria-pressed={!paused}
             onClick={() => setPaused(p => !p)}
-            title={paused ? 'Atualização pausada: clique para retomar' : 'Atualizando ao vivo: clique para pausar'}
+            title={paused ? tx({ en: 'Updates paused: click to resume', pt: 'Atualização pausada: clique para retomar' }) : tx({ en: 'Updating live: click to pause', pt: 'Atualizando ao vivo: clique para pausar' })}
           >
             {paused ? <Play size={12} /> : <Pause size={12} />}
-            {paused ? 'Pausado' : 'Ao vivo'}
+            {paused ? tx({ en: 'Paused', pt: 'Pausado' }) : tx({ en: 'Live', pt: 'Ao vivo' })}
           </button>
 
           <TaskActions task={liveTask} running={isExecuting} onOpenReview={onOpenReview} onChanged={onChanged} />
@@ -187,13 +188,13 @@ export function FactoryTraceVisualizer({ task, onBack, onUpdate, onOpenReview }:
               style={{ background: isExecuting ? 'var(--ok)' : 'var(--muted)', animation: isExecuting ? undefined : 'none' }}
             />
             <span style={{ fontSize: 12, color: isExecuting ? 'var(--ok)' : 'var(--muted)', fontFamily: 'var(--font-mono)', fontWeight: 600 }}>
-              {isExecuting ? 'executando em background' : 'inativo'}
+              {isExecuting ? tx({ en: 'running in the background', pt: 'executando em background' }) : tx({ en: 'idle', pt: 'inativo' })}
             </span>
           </div>
         </div>
       </div>
 
-      {/* 2. RUN STRIP (TOP BAR DE MÉTRICAS) */}
+      {/* 2. RUN STRIP (metrics bar) */}
       <div
         style={{
           display: 'flex',
@@ -222,7 +223,7 @@ export function FactoryTraceVisualizer({ task, onBack, onUpdate, onOpenReview }:
         <FactoryStatusChip state={liveTask.state} executing={liveTask.executing} />
 
         <span style={{ fontSize: 12, color: 'var(--muted)', fontFamily: 'var(--font-mono)' }}>
-          iniciado em {new Date(liveTask.createdAt).toLocaleTimeString()}
+          {tx({ en: 'started at', pt: 'iniciado em' })} {new Date(liveTask.createdAt).toLocaleTimeString(locale())}
         </span>
 
         <div style={{ display: 'inline-flex', gap: 8, marginLeft: 'auto', flexWrap: 'wrap' }}>
@@ -232,7 +233,7 @@ export function FactoryTraceVisualizer({ task, onBack, onUpdate, onOpenReview }:
         </div>
       </div>
 
-      {/* Banner de Execução Contínua em Background */}
+      {/* Background run banner */}
       {isExecuting && (
         <div
           style={{
@@ -253,13 +254,16 @@ export function FactoryTraceVisualizer({ task, onBack, onUpdate, onOpenReview }:
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <span className="live-dot" style={{ background: 'var(--ok)' }} />
             <span>
-              <strong>Execução contínua no servidor:</strong> O processo roda desacoplado em background. O visualizador sincroniza eventos e progresso automaticamente a cada 1.5s.
+              {tx({
+                en: <><strong>Running on the server:</strong> the process runs detached in the background. This view syncs events and progress on its own every 1.5 s.</>,
+                pt: <><strong>Execução contínua no servidor:</strong> O processo roda desacoplado em background. O visualizador sincroniza eventos e progresso automaticamente a cada 1.5s.</>,
+              })}
             </span>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0, color: 'var(--muted)', fontFamily: 'var(--font-mono)' }}>
-            <span>Tempo ativo: <strong style={{ color: 'var(--ok)' }}>{fmtDuration(totalDurationMs)}</strong></span>
+            <span>{tx({ en: 'Active time', pt: 'Tempo ativo' })}: <strong style={{ color: 'var(--ok)' }}>{fmtDuration(totalDurationMs)}</strong></span>
             <span>|</span>
-            <span>{consolidatedEvents.length} eventos</span>
+            <span>{tx({ en: `${consolidatedEvents.length} events`, pt: `${consolidatedEvents.length} eventos` })}</span>
           </div>
         </div>
       )}
@@ -275,7 +279,7 @@ export function FactoryTraceVisualizer({ task, onBack, onUpdate, onOpenReview }:
         <ActivityFeed events={consolidatedEvents} running={isExecuting} />
       </div>
 
-      {/* 3. A GRANDE MATRIZ EM CASCATA COM ROLAGEM HORIZONTAL E COLUNA STICKY */}
+      {/* 3. The waterfall grid: horizontal scroll with a sticky actor column */}
       <div
         style={{
           margin: 20,
@@ -287,7 +291,7 @@ export function FactoryTraceVisualizer({ task, onBack, onUpdate, onOpenReview }:
         }}
       >
         <div style={{ minWidth: 980 }}>
-          {/* Linha do Eixo de Tempo (Header Row) */}
+          {/* Time axis (header row) */}
           <div
             style={{
               display: 'grid',
@@ -312,7 +316,7 @@ export function FactoryTraceVisualizer({ task, onBack, onUpdate, onOpenReview }:
                 borderRight: '1px solid var(--line)',
               }}
             >
-              Ator / Fase
+              {tx({ en: 'Actor / Phase', pt: 'Ator / Fase' })}
             </div>
 
             <div style={{ position: 'relative', height: '100%' }}>
@@ -335,7 +339,7 @@ export function FactoryTraceVisualizer({ task, onBack, onUpdate, onOpenReview }:
             </div>
           </div>
 
-          {/* Raias do Waterfall */}
+          {/* Waterfall lanes */}
           {lanes.map(lane => {
             const LaneIcon = lane.icon
 
@@ -357,7 +361,7 @@ export function FactoryTraceVisualizer({ task, onBack, onUpdate, onOpenReview }:
                   minHeight: 104,
                 }}
               >
-                {/* Coluna do Ator (Esquerda, Fixa com Sticky) */}
+                {/* Actor column (left, sticky) */}
                 <div
                   style={{
                     position: 'sticky',
@@ -383,9 +387,9 @@ export function FactoryTraceVisualizer({ task, onBack, onUpdate, onOpenReview }:
 
                 </div>
 
-                {/* Coluna da Linha do Tempo (Direita) */}
+                {/* Timeline column (right) */}
                 <div style={{ position: 'relative', height: '100%', minHeight: 104, overflow: 'visible' }}>
-                  {/* Linhas de Grade Verticais */}
+                  {/* Vertical grid lines */}
                   {ticks.map((t, idx) => (
                     <span
                       key={idx}
@@ -400,7 +404,7 @@ export function FactoryTraceVisualizer({ task, onBack, onUpdate, onOpenReview }:
                     />
                   ))}
 
-                  {/* Blocos de Fase da Raia */}
+                  {/* Phase blocks of the lane */}
                   {laneSpans.map(span => {
                     const sStart = new Date(span.startedAt).getTime()
                     const sEnd = span.finishedAt ? new Date(span.finishedAt).getTime() : currentTime
@@ -448,12 +452,12 @@ export function FactoryTraceVisualizer({ task, onBack, onUpdate, onOpenReview }:
                           {span.error ? span.error : span.phase}
                         </span>
 
-                        {/* Tool Ticks (Marcas verticais de ferramentas executadas) */}
+                        {/* Tool ticks: one mark per tool call */}
                         <div style={{ position: 'relative', height: 8, width: '100%', marginTop: 2 }}>
                           {span.toolCalls?.map((tc, tcIdx) => (
                             <span
                               key={tcIdx}
-                              title={`${tc.tool}${tc.isError ? ' (erro)' : ''}`}
+                              title={`${tc.tool}${tc.isError ? tx({ en: ' (error)', pt: ' (erro)' }) : ''}`}
                               style={{
                                 position: 'absolute',
                                 bottom: 0,
@@ -477,12 +481,12 @@ export function FactoryTraceVisualizer({ task, onBack, onUpdate, onOpenReview }:
         </div>
       </div>
 
-      {/* Worktree da tarefa */}
+      {/* The task's worktree */}
       <div style={{ margin: '0 20px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--surface)', padding: '12px 16px', borderRadius: 12, border: '1px solid var(--line)', flexWrap: 'wrap', gap: 10 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <GitBranch size={16} style={{ color: 'var(--fx-implementer)' }} />
           <span style={{ fontSize: 13, color: 'var(--ink-2)' }}>
-            Worktree isolada: <b className="mono" style={{ color: 'var(--ink)' }}>{liveTask.branchName}</b>
+            {tx({ en: 'Isolated worktree', pt: 'Worktree isolada' })}: <b className="mono" style={{ color: 'var(--ink)' }}>{liveTask.branchName}</b>
           </span>
         </div>
 

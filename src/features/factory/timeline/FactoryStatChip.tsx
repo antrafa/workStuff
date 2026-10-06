@@ -1,5 +1,6 @@
 import { Clock, Cpu, Terminal } from 'lucide-react'
 import { fmtDuration } from '../factoryRun'
+import { tx } from '@/lib/i18n'
 
 type Props = {
   kind: 'runtime' | 'tools' | 'model'
@@ -20,12 +21,12 @@ export function FactoryStatChip({ kind, value, compact = false }: Props) {
       color = 'var(--ink-2)'
       break
     case 'tools':
-      label = `${value ?? 0} ferramentas`
+      label = tx({ en: `${value ?? 0} tools`, pt: `${value ?? 0} ferramentas` })
       Icon = Terminal
       color = 'var(--signal)'
       break
     case 'model':
-      label = String(value ?? 'IA')
+      label = String(value ?? tx({ en: 'AI', pt: 'IA' }))
       Icon = Cpu
       color = 'var(--info)'
       break
