@@ -22,7 +22,7 @@ export type ResourceService = {
 }
 
 export type Clients = { fetchedAt: string; clients: Client[] }
-// failed: manifests que o GitLab não entregou na última leitura (timeout, erro 5xx).
+// failed: manifests GitLab did not deliver on the last read (timeout, 5xx error).
 export type StackResources = { fetchedAt: string; services: ResourceService[]; failed?: string[] }
 
 export const fetchClients = (refresh = false) =>
@@ -32,7 +32,7 @@ export const fetchStack = (projectId: number, refresh = false) =>
 export const fetchManifest = (projectId: number, path: string) =>
   api.get<{ content: string }>(`/resources/stacks/${projectId}/manifest?path=${encodeURIComponent(path)}`)
 
-// ── Uso ao vivo (vínculo da stack com um namespace de cluster) ──
+// ── Live usage (the stack linked to a cluster namespace) ──
 export type NamespaceLink = { kubeconfigId: string; context: string | null; namespace: string }
 export type Recommendation = { level: 'critical' | 'warn' | 'info' | 'ok'; badge: string; text: string }
 export type LiveService = { usageMi: number | null; replicas: number; pods: string[]; pct: number | null; recommendation: Recommendation | null }
@@ -47,7 +47,7 @@ export const fetchKubeconfigs = () => api.get<{ items: KubeconfigOption[] }>('/k
 export const fetchNamespaces = (kubeconfigId: string) =>
   api.get<{ namespaces: string[]; limitedRbac: boolean }>(`/resources/namespaces?kubeconfigId=${encodeURIComponent(kubeconfigId)}`)
 
-// ── Origem dos manifests (conexão GitLab da tela Repositórios + grupo) ──
+// ── Where manifests come from (a GitLab connection from Repositórios + a group) ──
 export type ResourcesConfig = { sourceId: string; groupPath: string; label: string | null }
 export type RepoSource = { id: string; provider: 'gitlab' | 'github'; label: string; url: string }
 

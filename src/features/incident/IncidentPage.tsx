@@ -7,9 +7,10 @@ import { api } from '@/lib/api'
 import { streamPost } from '@/lib/stream'
 import { useAsync } from '@/lib/useAsync'
 import { fetchSession } from '@/features/cluster/api'
+import { locale, tx } from '@/lib/i18n'
 
 type Entry = { at: string; source: 'evento' | 'restart' | 'rollout' | 'log'; severity: 'info' | 'aviso' | 'crítico'; object: string; title: string; detail: string }
-// params: o que gerou a linha do tempo na tela. O post-mortem usa estes, não o que está digitado agora.
+// params: what produced the timeline on screen. The post-mortem uses these, not what is typed now.
 type Params = { namespace: string; hours: string; focus: string }
 type Timeline = { context: string; since: string; entries: Entry[]; notes: string[]; params: Params }
 type Level = 'tudo' | 'aviso' | 'crítico'
@@ -25,8 +26,11 @@ const read = () => {
 
 const SEVERITY_BADGE = { crítico: 'badge-crit', aviso: 'badge-warn', info: '' }
 const SOURCE_BADGE = { evento: 'badge-info', restart: 'badge-crit', rollout: 'badge-signal', log: 'badge-warn' }
+// The server's ids are Portuguese words; what the screen shows follows the language
+const SEVERITY_LABEL = { crítico: tx({ en: 'critical', pt: 'crítico' }), aviso: tx({ en: 'warning', pt: 'aviso' }), info: 'info' }
+const SOURCE_LABEL = { evento: tx({ en: 'event', pt: 'evento' }), restart: 'restart', rollout: 'rollout', log: 'log' }
 
-const time = (iso: string) => new Date(iso).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' })
+const time = (iso: string) => new Date(iso).toLocaleString(locale(), { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' })
 
 export default function IncidentPage() {
   const session = useAsync(fetchSession)
@@ -46,7 +50,7 @@ export default function IncidentPage() {
     try {
       localStorage.setItem(NS_KEY, namespace)
     } catch {
-      // sem storage o namespace não é lembrado
+      // no storage: the namespace is not remembered
     }
     try {
       const params = { namespace, hours, focus }
@@ -63,16 +67,19 @@ export default function IncidentPage() {
     .filter(e => level === 'tudo' || e.severity === 'crítico' || (level === 'aviso' && e.severity === 'aviso'))
     .filter(e => !query || `${e.object} ${e.title} ${e.detail}`.toLowerCase().includes(query.toLowerCase())), [timeline, level, query])
 
-  if (session.loading && !session.data) return <Page title="Linha do tempo" hint=""><SkeletonRows rows={3} /></Page>
+  if (session.loading && !session.data) return <Page title={tx({ en: 'Timeline', pt: 'Linha do tempo' })} hint=""><SkeletonRows rows={3} /></Page>
 
   return (
     <Page
-      title="Linha do tempo de incidente"
-      hint="Eventos, restarts, rollouts e erros de log de um namespace numa ordem só, e o rascunho do post-mortem pela IA. Só leitura."
-      actions={timeline && timeline.entries.length > 0 && <button className="btn btn-primary" onClick={() => setDrafting(true)}><Sparkles size={14} /> Rascunhar post-mortem</button>}
+      title={tx({ en: 'Incident timeline', pt: 'Linha do tempo de incidente' })}
+      hint={tx({
+        en: "A namespace's events, restarts, rollouts and log errors in a single order, and the AI's post-mortem draft. Read-only.",
+        pt: 'Eventos, restarts, rollouts e erros de log de um namespace numa ordem só, e o rascunho do post-mortem pela IA. Só leitura.',
+      })}
+      actions={timeline && timeline.entries.length > 0 && <button className="btn btn-primary" onClick={() => setDrafting(true)}><Sparkles size={14} /> {tx({ en: 'Draft post-mortem', pt: 'Rascunhar post-mortem' })}</button>}
     >
       {!session.data ? (
-        <div className="card"><Empty icon={History} title="Nenhum cluster conectado" action={<Link className="btn btn-primary" to="/cluster">Conectar na tela Cluster</Link>} /></div>
+        <div className="card"><Empty icon={History} title={tx({ en: 'No cluster connected', pt: 'Nenhum cluster conectado' })} action={<Link className="btn btn-primary" to="/cluster">{tx({ en: 'Connect on the Cluster screen', pt: 'Conectar na tela Cluster' })}</Link>} /></div>
       ) : (
         <>
           <section className="card card-pad stack">
@@ -80,10 +87,10 @@ export default function IncidentPage() {
               <span className="muted" style={{ fontSize: 12.5 }}>Cluster <span className="mono">{session.data.context}</span></span>
               <input className="input mono" style={{ width: 180 }} value={namespace} onChange={e => setNamespace(e.target.value.trim())} placeholder="namespace" />
               <select className="select" value={hours} onChange={e => setHours(e.target.value)}>
-                {['1', '3', '6', '12', '24'].map(h => <option key={h} value={h}>últimas {h} h</option>)}
+                {['1', '3', '6', '12', '24'].map(h => <option key={h} value={h}>{tx({ en: `last ${h} h`, pt: `últimas ${h} h` })}</option>)}
               </select>
-              <input className="input mono spacer" value={focus} onChange={e => setFocus(e.target.value)} placeholder="foco opcional: parte do nome (ex.: api-pedidos)" />
-              <button className="btn btn-primary" disabled={!namespace || running}><ScanSearch size={14} /> {running ? 'Montando…' : 'Montar linha do tempo'}</button>
+              <input className="input mono spacer" value={focus} onChange={e => setFocus(e.target.value)} placeholder={tx({ en: 'optional focus: part of the name (e.g. api-orders)', pt: 'foco opcional: parte do nome (ex.: api-pedidos)' })} />
+              <button className="btn btn-primary" disabled={!namespace || running}><ScanSearch size={14} /> {running ? tx({ en: 'Building…', pt: 'Montando…' }) : tx({ en: 'Build timeline', pt: 'Montar linha do tempo' })}</button>
             </form>
             {error && <div className="callout callout-crit" style={{ fontSize: 12.5 }}>{error}</div>}
           </section>
@@ -94,16 +101,16 @@ export default function IncidentPage() {
               <div className="card-head" style={{ flexWrap: 'wrap' }}>
                 <div className="segmented">
                   {(['crítico', 'aviso', 'tudo'] as Level[]).map(l => (
-                    <button key={l} aria-pressed={level === l} onClick={() => setLevel(l)}>{l === 'crítico' ? 'Só críticos' : l === 'aviso' ? 'Avisos e críticos' : 'Tudo'}</button>
+                    <button key={l} aria-pressed={level === l} onClick={() => setLevel(l)}>{l === 'crítico' ? tx({ en: 'Critical only', pt: 'Só críticos' }) : l === 'aviso' ? tx({ en: 'Warnings and critical', pt: 'Avisos e críticos' }) : tx({ en: 'All', pt: 'Tudo' })}</button>
                   ))}
                 </div>
-                <span className="muted" style={{ fontSize: 12 }}>{visible.length} de {timeline.entries.length} entradas desde {time(timeline.since)}</span>
+                <span className="muted" style={{ fontSize: 12 }}>{tx({ en: `${visible.length} of ${timeline.entries.length} entries since ${time(timeline.since)}`, pt: `${visible.length} de ${timeline.entries.length} entradas desde ${time(timeline.since)}` })}</span>
                 <div className="spacer" />
-                <Search value={query} onChange={setQuery} placeholder="Filtrar" width={220} />
+                <Search value={query} onChange={setQuery} placeholder={tx({ en: 'Filter', pt: 'Filtrar' })} width={220} />
               </div>
               {timeline.notes.map(n => <div key={n} className="callout callout-info" style={{ fontSize: 12, margin: '10px 14px 0' }}>{n}</div>)}
               {visible.length === 0 ? (
-                <Empty icon={History} title="Nada neste filtro" />
+                <Empty icon={History} title={tx({ en: 'Nothing in this filter', pt: 'Nada neste filtro' })} />
               ) : (
                 <ol className="ic-list">
                   {visible.map((e, i) => (
@@ -111,8 +118,8 @@ export default function IncidentPage() {
                       <span className="mono muted ic-time">{time(e.at)}</span>
                       <div className="spacer">
                         <div className="row" style={{ ['--gap' as string]: '6px', flexWrap: 'wrap' }}>
-                          <span className={`badge ${SOURCE_BADGE[e.source]}`}>{e.source}</span>
-                          {e.severity !== 'info' && <span className={`badge ${SEVERITY_BADGE[e.severity]}`}>{e.severity}</span>}
+                          <span className={`badge ${SOURCE_BADGE[e.source]}`}>{SOURCE_LABEL[e.source]}</span>
+                          {e.severity !== 'info' && <span className={`badge ${SEVERITY_BADGE[e.severity]}`}>{SEVERITY_LABEL[e.severity]}</span>}
                           <span className="mono" style={{ fontSize: 12.5 }}>{e.object}</span>
                           <b style={{ fontSize: 13 }}>{e.title}</b>
                         </div>
@@ -127,11 +134,11 @@ export default function IncidentPage() {
         </>
       )}
       {drafting && timeline && (
-        <Modal title="Rascunho do post-mortem" width={860} onClose={() => setDrafting(false)}>
+        <Modal title={tx({ en: 'Post-mortem draft', pt: 'Rascunho do post-mortem' })} width={860} onClose={() => setDrafting(false)}>
           <AiStream<AiStreamEvent & { entries?: number; sent?: number }>
-            initial="remontando a linha do tempo…"
+            initial={tx({ en: 'rebuilding the timeline…', pt: 'remontando a linha do tempo…' })}
             start={(onEvent, signal) => streamPost('/incident/postmortem', onEvent, signal, { ...timeline.params, hours: Number(timeline.params.hours) })}
-            describe={e => (e.type === 'timeline' ? `${e.sent} de ${e.entries} entradas enviadas; a IA está escrevendo…` : null)}
+            describe={e => (e.type === 'timeline' ? tx({ en: `${e.sent} of ${e.entries} entries sent; the AI is writing…`, pt: `${e.sent} de ${e.entries} entradas enviadas; a IA está escrevendo…` }) : null)}
           />
         </Modal>
       )}

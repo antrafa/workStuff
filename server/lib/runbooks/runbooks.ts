@@ -12,6 +12,7 @@ import { DEFAULT_RUNBOOKS_DIR, dataFile, expandHome } from '../paths.ts'
 import { readJson, writeJson } from '../jsonFile.ts'
 import { decide } from '../doctorAi/command.ts'
 import { authorizeMutation, type Environment } from '../k8s/policy.ts'
+import { say } from '../i18n.ts'
 
 export type Segment = { type: 'text'; md: string } | { type: 'step'; id: number; line: string; vars: string[] }
 
@@ -55,7 +56,7 @@ export function listRunbooks(root: string): { file: string; title: string }[] {
 // Caminho relativo vindo da tela: tem que cair dentro da pasta dos runbooks.
 export function runbookPath(root: string, file: string): string {
   const full = resolve(root, file)
-  if (!full.startsWith(resolve(root) + sep) || !full.endsWith('.md')) throw new Error('runbook fora da pasta configurada')
+  if (!full.startsWith(resolve(root) + sep) || !full.endsWith('.md')) throw new Error(say({ en: 'runbook outside the configured folder', pt: 'runbook fora da pasta configurada' }))
   return full
 }
 
@@ -91,8 +92,8 @@ const VALUE = /^[a-z0-9]([a-z0-9.=_/-]{0,251}[a-z0-9])?$/i
 export function fill(line: string, values: Record<string, string>): string {
   return line.replace(VAR, (_all, name: string) => {
     const v = values[name]
-    if (v === undefined || v === '') throw new Error(`preencha a variável ${name}`)
-    if (!VALUE.test(v)) throw new Error(`valor inválido para ${name}: use só letras, números, ponto, hífen, barra e =`)
+    if (v === undefined || v === '') throw new Error(say({ en: `fill in the variable ${name}`, pt: `preencha a variável ${name}` }))
+    if (!VALUE.test(v)) throw new Error(say({ en: `invalid value for ${name}: use only letters, numbers, dot, hyphen, slash and =`, pt: `valor inválido para ${name}: use só letras, números, ponto, hífen, barra e =` }))
     return v
   })
 }
@@ -159,7 +160,7 @@ if (import.meta.main && process.argv.includes('--selfcheck')) {
   assert.equal(classify(steps[2].line, v, 'PRO').kind, 'blocked', 'PRO não escreve')
   assert.equal(classify(steps[3].line, v, 'DES').kind, 'blocked', 'DES não apaga')
   assert.match((classify(steps[4].line, v, 'DES') as { reason: string }).reason, /só o kubectl/)
-  assert.match((classify(steps[0].line, {}, 'DES') as { reason: string }).reason, /preencha a variável namespace/)
+  assert.match((classify(steps[0].line, {}, 'DES') as { reason: string }).reason, /preencha a variável namespace|fill in the variable namespace/)
   for (const bad of ['loja; rm -rf ~', '$(id)', 'a b', '--all-namespaces']) {
     assert.equal(classify(steps[0].line, { namespace: bad }, 'DES').kind, 'blocked', `valor ${bad}`)
   }
@@ -172,8 +173,8 @@ if (import.meta.main && process.argv.includes('--selfcheck')) {
     writeFileSync(join(root, 'k8s', 'crash.md'), md)
     writeFileSync(join(root, 'leia.txt'), 'x')
     assert.deepEqual(listRunbooks(root), [{ file: join('k8s', 'crash.md'), title: 'Pod em CrashLoop' }])
-    assert.throws(() => runbookPath(root, '../fora.md'), /fora da pasta/)
-    assert.throws(() => runbookPath(root, 'leia.txt'), /fora da pasta/)
+    assert.throws(() => runbookPath(root, '../fora.md'), /fora da pasta|outside the configured folder/)
+    assert.throws(() => runbookPath(root, 'leia.txt'), /fora da pasta|outside the configured folder/)
     assert.equal(runbookPath(root, 'k8s/crash.md'), join(root, 'k8s', 'crash.md'))
   } finally {
     rmSync(root, { recursive: true, force: true })

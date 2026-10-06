@@ -8,6 +8,7 @@ import { execFile } from 'node:child_process'
 import { readFileSync } from 'node:fs'
 import { connect } from 'node:tls'
 import { promisify } from 'node:util'
+import { say } from '../i18n.ts'
 
 const exec = promisify(execFile)
 
@@ -31,32 +32,38 @@ export function tlsCertificate(host: string, port = 443, timeoutMs = 8000): Prom
     const done = (info: CertInfo) => (socket.destroy(), resolve(info))
     socket.once('secureConnect', () => {
       const cert = socket.getPeerCertificate()
-      if (!cert?.valid_to) return done({ validTo: null, daysLeft: null, state: 'sem-certificado', detail: 'o host não apresentou certificado' })
+      if (!cert?.valid_to) return done({ validTo: null, daysLeft: null, state: 'sem-certificado', detail: say({ en: 'the host presented no certificate', pt: 'o host não apresentou certificado' }) })
       const validTo = new Date(cert.valid_to)
-      const chain = socket.authorized ? 'cadeia válida' : `cadeia não confiável (${socket.authorizationError})`
-      done({ validTo: validTo.toISOString(), ...classify(validTo), trusted: socket.authorized, detail: `${chain} · emitido por ${cert.issuer?.O ?? cert.issuer?.CN ?? '?'}` })
+      const chain = socket.authorized
+        ? say({ en: 'valid chain', pt: 'cadeia válida' })
+        : say({ en: `untrusted chain (${socket.authorizationError})`, pt: `cadeia não confiável (${socket.authorizationError})` })
+      const issuer = cert.issuer?.O ?? cert.issuer?.CN ?? '?'
+      done({ validTo: validTo.toISOString(), ...classify(validTo), trusted: socket.authorized, detail: `${chain} · ${say({ en: `issued by ${issuer}`, pt: `emitido por ${issuer}` })}` })
     })
-    socket.once('timeout', () => done({ validTo: null, daysLeft: null, state: 'inacessível', detail: `sem resposta em ${timeoutMs / 1000}s (rede interna ou VPN?)` }))
+    socket.once('timeout', () => done({ validTo: null, daysLeft: null, state: 'inacessível', detail: say({ en: `no answer in ${timeoutMs / 1000}s (internal network or VPN?)`, pt: `sem resposta em ${timeoutMs / 1000}s (rede interna ou VPN?)` }) }))
     socket.once('error', e => done({ validTo: null, daysLeft: null, state: 'inacessível', detail: e.message.slice(0, 160) }))
   })
 }
 
 type RawUser = { name: string; user: { 'client-certificate-data'?: string; 'client-certificate'?: string; token?: string; exec?: unknown; 'auth-provider'?: unknown } }
 
-// Certificado de cliente de cada usuário do kubeconfig. Token, exec e auth-provider não têm data
-// conhecida aqui: aparecem como "sem certificado" com o tipo de credencial.
+// Client certificate of each kubeconfig user. Token, exec and auth-provider have no date known here:
+// they show as "no certificate" with the credential type.
 export function userCertificates(users: RawUser[], readCert: (u: RawUser['user']) => string | null): { user: string; info: CertInfo }[] {
   return users.map(({ name, user }) => {
     const pem = readCert(user)
     if (!pem) {
-      const kind = user.exec ? 'login por exec (OIDC, cloud)' : user['auth-provider'] ? 'auth-provider' : user.token ? 'token' : 'credencial desconhecida'
-      return { user: name, info: { validTo: null, daysLeft: null, state: 'sem-certificado' as const, detail: `${kind}: validade não informada no kubeconfig` } }
+      const kind = user.exec
+        ? say({ en: 'exec login (OIDC, cloud)', pt: 'login por exec (OIDC, cloud)' })
+        : user['auth-provider'] ? 'auth-provider' : user.token ? 'token' : say({ en: 'unknown credential', pt: 'credencial desconhecida' })
+      const detail = say({ en: `${kind}: expiry not stated in the kubeconfig`, pt: `${kind}: validade não informada no kubeconfig` })
+      return { user: name, info: { validTo: null, daysLeft: null, state: 'sem-certificado' as const, detail } }
     }
     try {
       const validTo = new Date(new X509Certificate(pem).validTo)
-      return { user: name, info: { validTo: validTo.toISOString(), ...classify(validTo), detail: 'certificado de cliente' } }
+      return { user: name, info: { validTo: validTo.toISOString(), ...classify(validTo), detail: say({ en: 'client certificate', pt: 'certificado de cliente' }) } }
     } catch (e) {
-      return { user: name, info: { validTo: null, daysLeft: null, state: 'sem-certificado' as const, detail: `certificado ilegível: ${(e as Error).message.slice(0, 80)}` } }
+      return { user: name, info: { validTo: null, daysLeft: null, state: 'sem-certificado' as const, detail: say({ en: `unreadable certificate: ${(e as Error).message.slice(0, 80)}`, pt: `certificado ilegível: ${(e as Error).message.slice(0, 80)}` }) } }
     }
   })
 }
@@ -91,7 +98,7 @@ if (import.meta.main && process.argv.includes('--selfcheck')) {
   assert.deepEqual(users.map(u => u.info.state), ['sem-certificado', 'sem-certificado', 'sem-certificado'])
   assert.match(users[0].info.detail, /exec/)
   assert.match(users[1].info.detail, /token/)
-  assert.match(users[2].info.detail, /ilegível/)
+  assert.match(users[2].info.detail, /ilegível|unreadable/)
   for (const u of users) assert.ok(!JSON.stringify(u).includes('"x"'), 'credencial nunca volta')
   console.log('upgrade certs selfcheck: ok')
 }

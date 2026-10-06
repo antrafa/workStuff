@@ -6,6 +6,7 @@ import { expandHome, tildify } from '../lib/paths.ts'
 import { ClusterError, activeSession } from '../lib/k8s/cluster.ts'
 import { kubectl } from '../lib/k8s/kubectl.ts'
 import { DEFAULT_ROOT, audit, classify, listRunbooks, parseRunbook, readRoot, runbookPath, saveRoot } from '../lib/runbooks/runbooks.ts'
+import { say } from '../lib/i18n.ts'
 
 export const runbooksRouter = Router()
 
@@ -19,7 +20,7 @@ const handle = (fn: (req: Request) => unknown) => async (req: Request, res: Resp
 
 function requireRoot() {
   const root = readRoot()
-  if (!root) throw new Error('escolha a pasta dos runbooks')
+  if (!root) throw new Error(say({ en: 'choose the runbooks folder', pt: 'escolha a pasta dos runbooks' }))
   return root
 }
 
@@ -41,12 +42,12 @@ runbooksRouter.put('/root', handle(req => {
     return { ok: true, root: tildify(DEFAULT_ROOT), isDefault: true }
   }
   const root = expandHome(raw)
-  if (!statSync(root, { throwIfNoEntry: false })?.isDirectory()) throw new Error(`pasta não encontrada: ${root}`)
+  if (!statSync(root, { throwIfNoEntry: false })?.isDirectory()) throw new Error(say({ en: `folder not found: ${root}`, pt: `pasta não encontrada: ${root}` }))
   saveRoot(root)
   return { ok: true, root: tildify(root), isDefault: resolve(root) === resolve(DEFAULT_ROOT) }
 }))
 
-runbooksRouter.post('/pick-folder', handle(async () => ({ path: await pickFolder('Pasta dos runbooks') })))
+runbooksRouter.post('/pick-folder', handle(async () => ({ path: await pickFolder(say({ en: 'Runbooks folder', pt: 'Pasta dos runbooks' })) })))
 
 // Documento em segmentos, com cada passo já classificado para o cluster da sessão e os valores digitados.
 runbooksRouter.post('/doc', handle(async req => {
@@ -68,13 +69,13 @@ runbooksRouter.post('/run', handle(async req => {
   const file = String(req.body?.file ?? '')
   const step = Number(req.body?.step)
   const seg = parseRunbook(readFileSync(runbookPath(root, file), 'utf-8')).find(s => s.type === 'step' && s.id === step)
-  if (!seg || seg.type !== 'step') throw new Error('passo não encontrado; o arquivo pode ter mudado, recarregue')
+  if (!seg || seg.type !== 'step') throw new Error(say({ en: 'step not found; the file may have changed, reload', pt: 'passo não encontrado; o arquivo pode ter mudado, recarregue' }))
   const session = await activeSession()
-  if (!session) throw new ClusterError('nenhum cluster conectado: escolha um kubeconfig na tela Cluster', 409)
+  if (!session) throw new ClusterError(say({ en: 'no cluster connected: choose a kubeconfig on the Cluster screen', pt: 'nenhum cluster conectado: escolha um kubeconfig na tela Cluster' }), 409)
   const env = session.kubeconfig.environment
   const c = classify(seg.line, (req.body?.values ?? {}) as Record<string, string>, env)
   if (c.kind === 'blocked') throw new Error(c.reason)
-  if (c.kind === 'write' && req.body?.confirmed !== true) throw new Error('passo de escrita: confirme na tela antes de executar')
+  if (c.kind === 'write' && req.body?.confirmed !== true) throw new Error(say({ en: 'write step: confirm on screen before running', pt: 'passo de escrita: confirme na tela antes de executar' }))
   const command = `kubectl ${c.args.join(' ')}`
   try {
     const out = await kubectl(session.target, c.args, 60_000)

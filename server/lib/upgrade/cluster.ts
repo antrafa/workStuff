@@ -8,6 +8,7 @@ import { explain, requireSession } from '../k8s/cluster.ts'
 import { KubeError, kubectl, kubectlJson, type Target } from '../k8s/kubectl.ts'
 import { CLUSTER_RESOURCES, appliedApiVersion, parseDeprecatedMetrics, parseVersion, removalFor, type DeprecatedCall, type Removal } from './deprecations.ts'
 import { tlsCertificate, type CertInfo } from './certs.ts'
+import { say } from '../i18n.ts'
 
 type Obj = { kind: string; metadata: { name: string; namespace?: string; annotations?: Record<string, string> }; spec?: { tls?: { hosts?: string[] }[]; hosts?: string[] } }
 
@@ -107,7 +108,7 @@ export async function ingressCertificates(namespace: string | null): Promise<{ c
     ingresses: names,
     // Curinga não é um host conectável: o certificado dele aparece pelos hosts concretos.
     info: host.startsWith('*.')
-      ? { validTo: null, daysLeft: null, state: 'sem-certificado', detail: 'host curinga: confira pelos hosts concretos' }
+      ? { validTo: null, daysLeft: null, state: 'sem-certificado', detail: say({ en: 'wildcard host: check through the concrete hosts', pt: 'host curinga: confira pelos hosts concretos' }) }
       : await tlsCertificate(host),
   }))
   return { context, forbidden, certificates: certificates.sort((a, b) => (a.info.daysLeft ?? 1e9) - (b.info.daysLeft ?? 1e9)) }

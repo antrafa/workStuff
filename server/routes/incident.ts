@@ -6,6 +6,7 @@ import { runAi } from '../lib/ai/runner.ts'
 import { openSse } from '../lib/sse.ts'
 import { ClusterError, checkName, requireSession } from '../lib/k8s/cluster.ts'
 import { buildTimeline, type Entry } from '../lib/incident/timeline.ts'
+import { say } from '../lib/i18n.ts'
 
 export const incidentRouter = Router()
 
@@ -14,7 +15,7 @@ const HOURS = [1, 3, 6, 12, 24]
 function params(src: Record<string, unknown>) {
   const namespace = checkName('namespace', src.namespace)
   const hours = Number(src.hours)
-  if (!HOURS.includes(hours)) throw new ClusterError(`janela inválida: use ${HOURS.join(', ')} horas`)
+  if (!HOURS.includes(hours)) throw new ClusterError(say({ en: `invalid window: use ${HOURS.join(', ')} hours`, pt: `janela inválida: use ${HOURS.join(', ')} horas` }))
   // Foco: parte do nome do objeto (ex.: o deployment que caiu). Texto curto, só para filtrar.
   const focus = typeof src.focus === 'string' ? src.focus.trim().slice(0, 100) : ''
   return { namespace, hours, focus }

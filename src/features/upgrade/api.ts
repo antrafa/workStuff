@@ -1,4 +1,5 @@
 import { api } from '@/lib/api'
+import { locale, tx } from '@/lib/i18n'
 
 export type Removal = { apiVersion: string; kind: string; removedIn: string; replacement: string | null }
 export type ObjectHit = { kind: string; namespace: string | null; name: string; appliedWith: string; removal: Removal }
@@ -35,14 +36,14 @@ export const pickFolder = () => api.post<{ path: string | null }>('/upgrade/pick
 
 export const CERT_BADGE: Record<CertState, { badge: string; label: string }> = {
   ok: { badge: 'badge-ok', label: 'ok' },
-  'vence-logo': { badge: 'badge-warn', label: 'vence logo' },
-  vencido: { badge: 'badge-crit', label: 'vencido' },
-  inacessível: { badge: '', label: 'inacessível' },
-  'sem-certificado': { badge: '', label: 'sem data' },
+  'vence-logo': { badge: 'badge-warn', label: tx({ en: 'expires soon', pt: 'vence logo' }) },
+  vencido: { badge: 'badge-crit', label: tx({ en: 'expired', pt: 'vencido' }) },
+  inacessível: { badge: '', label: tx({ en: 'unreachable', pt: 'inacessível' }) },
+  'sem-certificado': { badge: '', label: tx({ en: 'no date', pt: 'sem data' }) },
 }
 
 export function expiry(info: CertInfo) {
   if (info.daysLeft === null || !info.validTo) return '—'
-  const date = new Date(info.validTo).toLocaleDateString('pt-BR')
-  return info.daysLeft < 0 ? `${date} (há ${-info.daysLeft} d)` : `${date} (${info.daysLeft} d)`
+  const date = new Date(info.validTo).toLocaleDateString(locale())
+  return info.daysLeft < 0 ? tx({ en: `${date} (${-info.daysLeft} d ago)`, pt: `${date} (há ${-info.daysLeft} d)` }) : `${date} (${info.daysLeft} d)`
 }

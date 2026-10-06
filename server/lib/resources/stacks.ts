@@ -3,6 +3,7 @@ import { readJson, writeJson } from '../jsonFile.ts'
 import { GitlabError, gitlabAllPages, gitlabText, type GitlabConn } from '../gitlab/client.ts'
 import { cpuMillis, memMi, parseEnvVars, parseResources, resolveResources, type Resources } from './manifest.ts'
 import { currentOrigin, type Origin } from './config.ts'
+import { say } from '../i18n.ts'
 
 export type Stack = { name: string; projectId: number; projectUrl: string; defaultBranch: string }
 export type Client = { name: string; stacks: Stack[] }
@@ -84,7 +85,7 @@ export async function getClients(refresh = false) {
 
 function findStack(o: Origin, projectId: number) {
   const stack = readCache(o.key).clients.flatMap(c => c.stacks).find(s => s.projectId === projectId)
-  if (!stack) throw new GitlabError('stack desconhecida; atualize a lista de clientes', 404)
+  if (!stack) throw new GitlabError(say({ en: 'unknown stack; refresh the client list', pt: 'stack desconhecida; atualize a lista de clientes' }), 404)
   return stack
 }
 
@@ -155,8 +156,8 @@ export async function getManifest(projectId: number, path: string) {
   const o = await currentOrigin()
   const stack = findStack(o, projectId)
   const known = readCache(o.key).stacks[projectId]?.services.some(s => s.path === path)
-  if (!known) throw new GitlabError('arquivo não pertence aos manifests desta stack', 404)
+  if (!known) throw new GitlabError(say({ en: "file is not one of this stack's manifests", pt: 'arquivo não pertence aos manifests desta stack' }), 404)
   const content = await gitlabText(o.conn, rawPath(projectId, path, stack.defaultBranch))
-  if (content === null) throw new GitlabError('arquivo não encontrado no repositório; atualize a stack', 404)
+  if (content === null) throw new GitlabError(say({ en: 'file not found in the repository; refresh the stack', pt: 'arquivo não encontrado no repositório; atualize a stack' }), 404)
   return content
 }
