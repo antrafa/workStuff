@@ -4,7 +4,7 @@ A local, single-user web panel for day-to-day developer and DevOps work: checkin
 
 It runs entirely on your machine. The API binds to `127.0.0.1` only, keeps its data in `~/.workstuff` (never in the repository), and calls the CLIs you already have installed (`kubectl`, `git`, `claude`, ...).
 
-> The user interface is in English by default, with Brazilian Portuguese (pt-BR) as an option in Configurações (the migration is in progress: some screens are still pt-BR only).
+> The user interface is in English by default, with Brazilian Portuguese (pt-BR) as an option in Configurações. What the AI agents write, and the runbook and playbook content, is still in Portuguese.
 
 Architecture and the software factory are documented in [`docs/`](docs/README.md) (in Portuguese): [architecture](docs/arquitetura.md) and [factory](docs/fabrica.md).
 
