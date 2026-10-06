@@ -3,7 +3,8 @@
 import { Router, type Response } from 'express'
 import { openInEditor, pickFolder } from '../lib/desktop.ts'
 import { openSse } from '../lib/sse.ts'
-import { repoInfo } from '../lib/review/git.ts'
+import { originUrl, repoInfo } from '../lib/review/git.ts'
+import { sourceForRemote } from '../lib/repos/remote.ts'
 import { which } from '../lib/run.ts'
 import { detectVerifyCommand } from '../lib/factory/gates.ts'
 import { defaultFactoryStore } from '../lib/factory/store.ts'
@@ -291,7 +292,8 @@ factoryRouter.post('/tasks', async (req, res) => {
       source: {
         type: b.source.type || 'manual',
         repoPath: b.source.repoPath,
-        remoteUrl: b.source.remoteUrl,
+        // Finds the Repositórios connection when the MR is opened
+        remoteUrl: b.source.remoteUrl || (await originUrl(b.source.repoPath)),
         issueIid: b.source.issueIid ? Number(b.source.issueIid) : undefined,
         issueUrl: b.source.issueUrl,
       },
@@ -559,16 +561,12 @@ async function finishTask(task: FactoryTask, mode: 'mr' | 'local_merge', res: Re
     }
 
     // 2. Busca conexão Git ativa para tentar criar o Pull/Merge Request oficial
-    const sources = listSources()
-    const src = sources.find(s => {
-      const remote = task.source.remoteUrl || task.source.issueUrl
-      if (task.source.repoPath.includes(s.id) || (remote && s.basePath && remote.includes(s.basePath))) {
-        return true
-      }
-      return false
-    })
+    // Tasks created before remoteUrl was filled in: read it from the repository now
+    const remote = task.source.remoteUrl || (await originUrl(task.source.repoPath))
+    const target = remote ? sourceForRemote(listSources(), remote) : null
+    const src = target?.source
 
-    if (src) {
+    if (src && target) {
       try {
         const token = await resolveToken(src.provider, src.tokenSource, src.id)
         const conn: Conn = { provider: src.provider, url: src.url, token }
@@ -590,7 +588,7 @@ async function finishTask(task: FactoryTask, mode: 'mr' | 'local_merge', res: Re
         }
 
         if (src.provider === 'gitlab') {
-          const encoded = encodeURIComponent(src.basePath.replace(/^\//, ''))
+          const encoded = encodeURIComponent(target.projectPath)
           const resp = await fetch(`${apiBase}/projects/${encoded}/merge_requests`, {
             method: 'POST',
             headers,
@@ -609,7 +607,7 @@ async function finishTask(task: FactoryTask, mode: 'mr' | 'local_merge', res: Re
             warning = `Branch enviada, mas o GitLab recusou o MR (HTTP ${resp.status}): ${(await resp.text()).slice(0, 300)}`
           }
         } else if (src.provider === 'github') {
-          const parts = src.basePath.split('/').filter(Boolean)
+          const parts = target.projectPath.split('/').filter(Boolean)
           if (parts.length >= 2) {
             const [owner, repo] = parts
             const resp = await fetch(`${apiBase}/repos/${owner}/${repo}/pulls`, {
