@@ -16,7 +16,11 @@ const NO_GIT = 'Não rode git add, git commit nem altere a pasta .git: o .git é
 
 // Shared by the two reviewers of the squad. Severity is judged by consequence, not by which
 // rule was broken, and the verdict is computed in code, never by the agent.
-const FINDING_BAR = `Critério para cada achado:
+const FINDING_BAR = `Todo achado começa pela falha concreta: a entrada, o estado ou a sequência que faz o código errar, e o que acontece então. Código que "poderia" falhar sem um caminho que chegue lá não é high nem critical.
+Em arquivo de teste, só é achado um teste quebrado (uma asserção que não pode falhar, um teste que não roda). Estilo nunca bloqueia.
+Não audite o arquivo inteiro: só o que o diff introduz ou altera, e o que ele quebra fora dali.
+
+Critério para cada achado:
 - critical: comportamento errado, perda de dado, segredo exposto, contrato quebrado ou regressão demonstrável.
 - high: vulnerabilidade ou bug provável num caminho de produção, ainda sem prova completa.
 - medium: risco não demonstrado ou caminho novo de produção sem teste.
@@ -88,12 +92,13 @@ Instruções fundamentais:
 Você está operando dentro de uma Git Worktree isolada no diretório atual.
 
 Instruções fundamentais:
-1. Parta dos cenários de teste e critérios de aceite recebidos; acrescente casos de borda que o código novo exige.
-2. Escreva ou atualize os testes unitários e de integração utilizando a biblioteca de testes padrão do projeto.
-3. Um teste que não falharia se o código estivesse errado não conta: verifique comportamento, não implementação.
-4. Execute a suíte de testes do projeto via terminal para validar a ausência de regressões.
-5. Não altere o código de produção para fazer teste passar; se encontrar bug, descreva-o no relatório.
-6. ${NO_GIT}`,
+1. Cada critério de aceite (CA1, CA2...) precisa de pelo menos um teste automatizado que falharia se o critério deixasse de valer. No envelope, diga em "criteriaTests" qual arquivo de teste cobre cada critério; a esteira confere que o arquivo existe. Só marque "untestable" quando o critério não tem comportamento executável (texto, documentação, configuração externa), dizendo por quê.
+2. Parta também dos cenários de teste do plano e acrescente os casos de borda que o código novo exige.
+3. Escreva ou atualize os testes com a biblioteca e a convenção que o projeto já usa (mesmo lugar, mesmo estilo). Não crie framework nem dependência de teste nova.
+4. Um teste que não falharia se o código estivesse errado não conta: verifique comportamento, não implementação.
+5. Execute a suíte de testes do projeto via terminal para validar a ausência de regressões.
+6. Não altere o código de produção para fazer teste passar; se encontrar bug, descreva-o no relatório. Se o projeto guarda o teste dentro do próprio módulo, altere só o bloco de teste.
+7. ${NO_GIT}`,
   },
 
   reviewer: {
@@ -131,13 +136,28 @@ Instruções fundamentais:
 ${FINDING_BAR}`,
   },
 
+  verifier: {
+    id: 'verifier',
+    name: 'Verifier',
+    role: 'Tenta refutar cada achado bloqueante lendo o código; só o que resiste bloqueia a entrega',
+    mode: 'read',
+    systemPrompt: `Você é o Verifier, revisor cético.
+Você recebe achados que outros revisores marcaram como bloqueantes. Sua missão é tentar provar que cada um está errado, para que só problema real bloqueie a entrega.
+
+Instruções fundamentais:
+1. Para cada achado, leia o código citado e o caminho que leva até ele: quem chama, que validação vem antes, o tipo do dado, o teste que já existe.
+2. O achado se sustenta só se você consegue descrever a entrada ou a sequência concreta que leva à falha descrita, no código como está agora. Se a falha depende de algo que o código já impede, ou de um caminho que nenhum chamador percorre, ele não se sustenta.
+3. Na dúvida, mantenha o achado: deixar passar um problema real custa mais do que segurar um falso.
+4. Não procure achados novos, não reavalie severidade e não comente estilo.`,
+  },
+
   documenter: {
     id: 'documenter',
     name: 'Documenter',
     role: 'Atualiza a documentação afetada pela mudança e consolida a descrição final do MR',
     mode: 'write',
     systemPrompt: `Você é o Documenter, redator técnico.
-Você está operando dentro de uma Git Worktree isolada no diretório atual, depois que a implementação foi revisada.
+Você está operando dentro de uma Git Worktree isolada no diretório atual, depois da implementação e dos testes; a revisão vem depois de você e lê o que você escrever.
 
 Instruções fundamentais:
 1. Atualize apenas documentação que a mudança tornou desatualizada: README, docs/, CHANGELOG (se o projeto mantém um), exemplos em markdown.
@@ -158,7 +178,7 @@ if (import.meta.main && process.argv.includes('--selfcheck')) {
     assert.ok(agent.systemPrompt.length > 50)
   }
   // Read-only agents never get write tools: the pipeline relies on it
-  for (const id of ['analyst', 'architect', 'reviewer', 'security'] as const) assert.equal(SPECIALIZED_AGENTS[id].mode, 'read', id)
+  for (const id of ['analyst', 'architect', 'reviewer', 'security', 'verifier'] as const) assert.equal(SPECIALIZED_AGENTS[id].mode, 'read', id)
   for (const id of ['implementer', 'tester', 'documenter'] as const) assert.equal(SPECIALIZED_AGENTS[id].mode, 'write', id)
 
   console.log('factory agents selfcheck: ok')

@@ -3,12 +3,16 @@
 // HTTP concerns (SSE, state guards) stay in server/routes/factory.ts.
 
 import { defaultFactoryStore as store } from './store.ts'
-import { commitWorktree, createWorktree, discardFiles, getWorktreeDiff, headOf, resetWorktree, uncommittedFiles } from './worktree.ts'
+import { commitWorktree, createWorktree, discardFiles, fetchBase, getWorktreeDiff, headOf, resetWorktree, syncWithBase, uncommittedFiles, type BaseSync } from './worktree.ts'
 import { runFactoryAgent } from './runner.ts'
-import { docsCiting, gateArtifactsExist, gateDiffNotEmpty, gateTestsPass, nonDocFiles, type TestsGateResult } from './gates.ts'
+import { checkCriteriaCoverage, docsCiting, gateArtifactsExist, gateDiffNotEmpty, gateTestsPass, nonDocFiles, nonTestFiles, type TestsGateResult } from './gates.ts'
+import { runSecurityScans, scanFindings } from './scanners.ts'
+import { assessDelivery } from './readiness.ts'
 import { ExecutionCancelledError, throwIfCancelled } from './executions.ts'
 import {
+  applyVerifierEnvelope,
   computeVerdict,
+  criteriaIds,
   formatAdjustPrompt,
   formatBuildPrompt,
   formatCorrectionPrompt,
@@ -19,6 +23,7 @@ import {
   formatSecurityPrompt,
   formatSpecPrompt,
   formatTestPrompt,
+  formatVerifyPrompt,
   incompleteReview,
   mergeFindings,
   parseBuildEnvelope,
@@ -29,7 +34,7 @@ import {
   parseTestEnvelope,
 } from './envelopes.ts'
 import { taskUsage } from './types.ts'
-import type { BuildEnvelope, ExecutionSpan, FactoryTask, PlanEnvelope, ReviewEnvelope, SecurityFinding, SpecEnvelope, SpecializedAgentId } from './types.ts'
+import type { BuildEnvelope, ExecutionSpan, FactoryTask, PlanEnvelope, ReviewEnvelope, ScanToolResult, SecurityFinding, SpecEnvelope, SpecializedAgentId, TestEnvelope } from './types.ts'
 import type { RunResult } from '../ai/runner.ts'
 import { say } from '../i18n.ts'
 
@@ -139,9 +144,9 @@ const runTests = (ctx: ExecContext, task: FactoryTask, worktreePath: string, nam
     ctx,
     'gate',
     { name, phase: 'qa_security' },
-    () => gateTestsPass(worktreePath, { command: task.verifyCommand, signal: ctx.signal }),
+    () => gateTestsPass(worktreePath, { command: task.verifyCommand, smokeCommand: task.smokeCommand, signal: ctx.signal }),
     r => (r.passed ? undefined : r.reason),
-    r => ({ command: r.command, output: r.output, skipped: r.skipped }),
+    r => ({ command: r.command, steps: r.steps, output: r.output, skipped: r.skipped }),
   )
 
 const commit = (ctx: ExecContext, worktreePath: string, message: string) =>
@@ -166,14 +171,14 @@ async function checkBuildGates(ctx: ExecContext, task: FactoryTask, worktreePath
   }
 
   const tests = await runTests(ctx, task, worktreePath, say({ en: 'Gate: project verification', pt: 'Portão: verificação do projeto' }))
-  // A suite that could not run (no bwrap) is reported to the human, not "fixed" by the agent
+  // A suite that could not run (no command, no bwrap) is reported to the human, not "fixed" by the agent
   if (tests.passed || tests.skipped) return { fatal: false, tests }
   return { failure: `Comando: ${tests.command}\n${tests.output}`, fatal: false, tests }
 }
 
 // SSSF-style correction: a failed gate re-prompts the same CLI session (Claude) with exactly
 // what failed, instead of starting over. Exhausted attempts: a broken diff aborts the run;
-// failing tests go to the human with the failure on display.
+// failing tests go on to the review rounds, which hand them back to the Implementer.
 async function implementWithGates(
   ctx: ExecContext,
   task: FactoryTask,
@@ -205,83 +210,129 @@ async function implementWithGates(
   }
 }
 
+// ── Tester ───────────────────────────────────────────────────────────────────
+
+// What the QA side knows so far. The Tester runs after the build and again after every change to
+// the code (fix round, adjustment), so the final tests always describe the final code.
+type QaState = {
+  tests: TestsGateResult
+  testEnv?: TestEnvelope
+  testerSummary?: string
+  // Non-test files the Tester changed across its runs
+  testerTouched: string[]
+}
+
+async function testStep(ctx: ExecContext, task: FactoryTask, worktreePath: string, qa: QaState, plan?: PlanEnvelope, spec?: SpecEnvelope, changedSince?: string): Promise<QaState> {
+  ctx.send({ type: 'status', message: say({ en: 'Tester: covering the acceptance criteria with tests...', pt: 'Tester: cobrindo os critérios de aceite com testes...' }) })
+  const { result, envelope } = await agentStep(ctx, task, 'tester',
+    { name: changedSince ? say({ en: 'Tests after the change', pt: 'Testes depois da mudança' }) : say({ en: 'Tests and coverage', pt: 'Testes e cobertura' }), phase: 'qa_security' },
+    { prompt: formatTestPrompt(task, qa.tests, plan, spec, changedSince), cwd: worktreePath }, t => parseTestEnvelope(t, qa.tests.passed))
+
+  // Tests the Tester wrote are part of the delivery; the code, not the agent's report, decides if they pass
+  const changed = await uncommittedFiles(worktreePath)
+  let tests = qa.tests
+  if (changed.length > 0) {
+    await commit(ctx, worktreePath, `test: cover "${task.title.slice(0, 50)}"`)
+    tests = await runTests(ctx, task, worktreePath, say({ en: 'Gate: verification with the new tests', pt: 'Portão: verificação com os testes novos' }))
+  }
+  const testerTouched = [...new Set([...qa.testerTouched, ...nonTestFiles(changed)])]
+  return { tests, testEnv: envelope, testerSummary: envelope.details || result.text, testerTouched }
+}
+
 // ── Review squad ─────────────────────────────────────────────────────────────
 
-type ReviewOutcome = { review: ReviewEnvelope; security: ReviewEnvelope; findings: SecurityFinding[]; passed: boolean; fixRounds: number; tests?: TestsGateResult }
+type ReviewOutcome = { review: ReviewEnvelope; security: ReviewEnvelope; tools: ScanToolResult[]; findings: SecurityFinding[]; passed: boolean; fixRounds: number; qa: QaState }
 
-// Reviewer and Security run in parallel. allSettled: when one fails, the other
-// is still awaited, so nothing keeps writing after the run is marked failed.
-// Each reviewer re-checks only its own earlier findings: handed the merged list, Security repeated
-// the Reviewer's. `keptSecurity` is the clean audit of an earlier round, reused instead of a rerun.
+// The security tools run first (their output is evidence for the Security agent), then Reviewer and
+// Security in parallel. allSettled: when one fails, the other is still awaited, so
+// nothing keeps writing after the run is marked failed. Each reviewer re-checks only its own earlier
+// findings: handed the merged list, Security repeated the Reviewer's. Security runs every round:
+// a fix for a Reviewer finding can open a hole as easily as any other change.
 async function reviewSquad(
   ctx: ExecContext, task: FactoryTask, worktreePath: string, round: number,
-  previous: SecurityFinding[], tests: TestsGateResult, spec?: SpecEnvelope, keptSecurity?: ReviewEnvelope,
+  previous: SecurityFinding[], tests: TestsGateResult, spec?: SpecEnvelope,
 ) {
-  const { diff } = await getWorktreeDiff(worktreePath, task.baseBranch)
+  const { diff, stat } = await getWorktreeDiff(worktreePath, task.baseBranch)
   const suffix = round > 0 ? ` (rodada ${round + 1})` : ''
   const own = (agentId: SpecializedAgentId) => previous.filter(f => f.agentId === agentId)
-  ctx.send({ type: 'status', message: keptSecurity
-    ? say({ en: `Reviewer: reviewing the fix${suffix}...`, pt: `Reviewer: revisando a correção${suffix}...` })
-    : say({ en: `Reviewer and Security: reviewing the diff in parallel${suffix}...`, pt: `Reviewer e Security: revisando o diff em paralelo${suffix}...` }) })
+
+  const tools = await codeStep(ctx, 'gate', { name: say({ en: `Security tools${suffix}`, pt: `Ferramentas de segurança${suffix}` }), phase: 'qa_security' },
+    () => runSecurityScans(worktreePath, task.baseBranch, stat.files, ctx.signal),
+    r => (r.some(t => t.status === 'failed') ? r.filter(t => t.status === 'failed').map(t => t.tool).join(', ') : undefined),
+    r => ({ tools: r.map(t => `${t.tool}: ${t.status}`) }))
+
+  ctx.send({ type: 'status', message: say({ en: `Reviewer and Security: reviewing the diff in parallel${suffix}...`, pt: `Reviewer e Security: revisando o diff em paralelo${suffix}...` }) })
   const settled = await Promise.allSettled([
     agentStep(ctx, task, 'reviewer', { name: say({ en: `Code review${suffix}`, pt: `Revisão de código${suffix}` }), phase: 'qa_security' },
       { prompt: formatReviewPrompt(task, diff, spec, own('reviewer'), tests), cwd: worktreePath }, t => parseReviewEnvelope(t, 'reviewer')),
-    keptSecurity
-      ? Promise.resolve({ envelope: keptSecurity })
-      : agentStep(ctx, task, 'security', { name: say({ en: `Security audit${suffix}`, pt: `Auditoria de segurança${suffix}` }), phase: 'qa_security' },
-        { prompt: formatSecurityPrompt(task, diff, own('security')), cwd: worktreePath }, t => parseReviewEnvelope(t, 'security')),
+    agentStep(ctx, task, 'security', { name: say({ en: `Security audit${suffix}`, pt: `Auditoria de segurança${suffix}` }), phase: 'qa_security' },
+      { prompt: formatSecurityPrompt(task, diff, own('security'), tools), cwd: worktreePath }, t => parseReviewEnvelope(t, 'security')),
   ])
   const rejected = settled.find(s => s.status === 'rejected')
   if (rejected) throw rejected.reason
   const [review, security] = settled.map(s => (s as PromiseFulfilledResult<{ envelope: ReviewEnvelope }>).value.envelope)
-  return { review, security }
+  return { review, security: { ...security, findings: [...scanFindings(tools), ...security.findings] }, tools }
+}
+
+// The Verifier tries to refute each finding that would block. Only those that resist keep blocking;
+// the refuted ones stay on display with the reason, for the human to confirm.
+async function verifyFindings(ctx: ExecContext, task: FactoryTask, worktreePath: string, findings: SecurityFinding[], round: number, spec?: SpecEnvelope): Promise<SecurityFinding[]> {
+  const contested = computeVerdict(findings).blocking
+  if (contested.length === 0) return findings
+  ctx.send({ type: 'status', message: say({ en: `Verifier: trying to refute ${contested.length} blocking finding(s)...`, pt: `Verifier: tentando refutar ${contested.length} achado(s) bloqueante(s)...` }) })
+  const suffix = round > 0 ? ` (rodada ${round + 1})` : ''
+  const { envelope: checked } = await agentStep(ctx, task, 'verifier', { name: say({ en: `Finding verification${suffix}`, pt: `Verificação dos achados${suffix}` }), phase: 'qa_security' },
+    { prompt: formatVerifyPrompt(task, contested, spec), cwd: worktreePath }, t => applyVerifierEnvelope(t, contested))
+  return findings.map(f => checked[contested.indexOf(f)] ?? f)
 }
 
 // A review the code cannot trust becomes a blocking finding for the human, never a pass.
 const incompleteFinding = (description: string): SecurityFinding => ({ severity: 'high', confidence: 100, description })
 
-async function reviewAndFix(ctx: ExecContext, task: FactoryTask, worktreePath: string, tests: TestsGateResult, spec?: SpecEnvelope, plan?: PlanEnvelope): Promise<ReviewOutcome> {
+// Failing verification is fixed in the same rounds as the findings: after 3 build attempts it is
+// the most likely thing still wrong, and the next round's tests must describe the fixed code.
+async function reviewAndFix(ctx: ExecContext, task: FactoryTask, worktreePath: string, qa: QaState, spec?: SpecEnvelope, plan?: PlanEnvelope): Promise<ReviewOutcome> {
   let previous: SecurityFinding[] = []
-  let latestTests = tests
-  // ponytail: a fix for a Reviewer finding is not re-audited when Security found nothing; rerun it
-  // when the fix touches what it audits (spawn, auth, dependencies) if that ever bites.
-  let cleanSecurity: ReviewEnvelope | undefined
   for (let round = 0; ; round++) {
-    const { review, security } = await reviewSquad(ctx, task, worktreePath, round, previous, latestTests, spec, cleanSecurity)
-    cleanSecurity = security.status === 'ok' && security.findings.length === 0 ? security : undefined
-    const findings = mergeFindings(review.findings, security.findings)
+    const { review, security, tools } = await reviewSquad(ctx, task, worktreePath, round, previous, qa.tests, spec)
+    let findings = mergeFindings(review.findings, security.findings)
     const outcome = (passed: boolean, extra: SecurityFinding[] = []) =>
-      ({ review, security, findings: [...extra, ...findings], passed, fixRounds: round, tests: round > 0 ? latestTests : undefined })
+      ({ review, security, tools, findings: [...extra, ...findings], passed, fixRounds: round, qa })
 
-    const incomplete = incompleteReview(review, security, spec?.acceptanceCriteria)
+    const incomplete = incompleteReview(review, security, criteriaIds(spec))
     if (incomplete.length) return outcome(false, incomplete.map(incompleteFinding))
+    findings = await verifyFindings(ctx, task, worktreePath, findings, round, spec)
     const verdict = computeVerdict(findings, review.criteria)
-    if (verdict.passed || round >= MAX_FIX_ROUNDS) return outcome(verdict.passed)
+    const testsFail = !qa.tests.passed && !qa.tests.skipped
+    if ((verdict.passed && !testsFail) || round >= MAX_FIX_ROUNDS) return outcome(verdict.passed)
 
-    const fixed = await implementWithGates(ctx, task, worktreePath, formatFixFindingsPrompt(task, verdict.blocking, verdict.unmet, plan), say({ en: `Fixing the review findings (round ${round + 1})`, pt: `Correção dos achados da revisão (rodada ${round + 1})` }), plan)
+    const failure = testsFail ? `${qa.tests.command}\n${qa.tests.output}` : undefined
+    const fixed = await implementWithGates(ctx, task, worktreePath, formatFixFindingsPrompt(task, verdict.blocking, verdict.unmet, plan, failure), say({ en: `Fixing the review findings (round ${round + 1})`, pt: `Correção dos achados da revisão (rodada ${round + 1})` }), plan)
     // The diff gate compares with the base, so a fix that changed nothing still passes it; reviewing
     // the same code again would only buy the same findings.
     if ((await uncommittedFiles(worktreePath)).length === 0) {
-      return outcome(false, [incompleteFinding(say({ en: `The automatic fix of round ${round + 1} changed no file; the findings below are left for you to decide.`, pt: `A correção automática da rodada ${round + 1} não alterou nenhum arquivo; os achados abaixo continuam para você decidir.` }))])
+      const stuck = say({ en: `The automatic fix of round ${round + 1} changed no file; what is left is for you to decide.`, pt: `A correção automática da rodada ${round + 1} não alterou nenhum arquivo; o que sobrou fica para você decidir.` })
+      return outcome(verdict.passed, verdict.passed ? [] : [incompleteFinding(stuck)])
     }
-    latestTests = fixed.tests
     await commit(ctx, worktreePath, `fix: address automatic review findings (round ${round + 1})`)
+    qa = await testStep(ctx, task, worktreePath, { ...qa, tests: fixed.tests }, plan, spec, say({ en: `fix round ${round + 1}`, pt: `rodada ${round + 1} de correção` }))
     previous = findings
   }
 }
 
 // ── Documenter ───────────────────────────────────────────────────────────────
 
-// Skipped when no documentation names a changed file: in the one real task it changed nothing and
-// cost 7%. The MR description then falls back to the Reviewer's draft.
-async function document(ctx: ExecContext, task: FactoryTask, worktreePath: string, review: ReviewEnvelope, spec?: SpecEnvelope) {
+// Runs before the review, so the review reads what it wrote. Skipped when no documentation names a
+// changed file: in the one real task it changed nothing and cost 7%. The MR description then falls
+// back to the Reviewer's draft.
+async function document(ctx: ExecContext, task: FactoryTask, worktreePath: string, buildSummary: string, spec?: SpecEnvelope) {
   const { stat } = await getWorktreeDiff(worktreePath, task.baseBranch)
   const citing = await codeStep(ctx, 'code', { name: say({ en: 'Documentation citing the changed files', pt: 'Documentação que cita os arquivos alterados' }), phase: 'qa_security' },
     () => docsCiting(worktreePath, stat.files), undefined, docs => ({ docs }))
   if (citing.length === 0) return undefined
   ctx.send({ type: 'status', message: say({ en: 'Documenter: updating the affected documentation and the MR description...', pt: 'Documenter: atualizando a documentação afetada e a descrição do MR...' }) })
   const { envelope: docs } = await agentStep(ctx, task, 'documenter', { name: say({ en: 'Documentation and MR description', pt: 'Documentação e descrição do MR' }), phase: 'qa_security' },
-    { prompt: formatDocsPrompt(task, stat.files, review, spec), cwd: worktreePath }, parseDocsEnvelope)
+    { prompt: formatDocsPrompt(task, stat.files, buildSummary, spec), cwd: worktreePath }, parseDocsEnvelope)
 
   // The Documenter may only touch docs: anything else it changed is thrown away by code
   await codeStep(ctx, 'gate', { name: say({ en: 'Gate: Documenter only changes docs', pt: 'Portão: Documenter só altera documentação' }), phase: 'qa_security' },
@@ -294,6 +345,37 @@ async function document(ctx: ExecContext, task: FactoryTask, worktreePath: strin
   )
   await commit(ctx, worktreePath, `docs: update documentation for "${task.title.slice(0, 50)}"`)
   return docs
+}
+
+// ── Base sync ────────────────────────────────────────────────────────────────
+
+// The last verification runs on top of the newest base, so a merge carries code verified on what
+// it lands on. Only a rebase that moved the branch needs the verification again.
+async function syncAndVerify(ctx: ExecContext, task: FactoryTask, worktreePath: string, tests: TestsGateResult): Promise<{ tests: TestsGateResult; sync: BaseSync }> {
+  const sync = await codeStep(ctx, 'code', { name: say({ en: `Sync with ${task.baseBranch}`, pt: `Sincronização com ${task.baseBranch}` }), phase: 'qa_security' },
+    () => syncWithBase(worktreePath, task.baseBranch), r => (r.status === 'conflict' ? r.detail : undefined), r => ({ status: r.status, baseHead: r.baseHead }))
+  if (sync.status !== 'rebased') return { tests, sync }
+  return { tests: await runTests(ctx, task, worktreePath, say({ en: 'Gate: verification on the current base', pt: 'Portão: verificação sobre a base atual' })), sync }
+}
+
+// Called before a finish: a base that moved since the last verification means rebase and verify again.
+export async function reverifyOnNewBase(ctx: ExecContext, task: FactoryTask): Promise<FactoryTask> {
+  const worktreePath = task.worktreePath
+  if (!worktreePath || !task.qaReport) return task
+  const baseHead = await fetchBase(worktreePath, task.baseBranch).catch(() => task.verifiedBase)
+  if (!baseHead || baseHead === task.verifiedBase) return task
+  ctx.send({ type: 'status', message: say({ en: `${task.baseBranch} moved since the verification: rebasing and verifying again...`, pt: `${task.baseBranch} andou desde a verificação: fazendo rebase e verificando de novo...` }) })
+  const lastRun: TestsGateResult = { passed: task.qaReport.passed, command: task.qaReport.testsRan, steps: task.qaReport.steps, output: task.qaReport.output ?? '', exitCode: 0, durationMs: 0 }
+  const { tests, sync } = await syncAndVerify(ctx, task, worktreePath, lastRun)
+  const { diff, stat } = await getWorktreeDiff(worktreePath, task.baseBranch)
+  const patch: Partial<FactoryTask> = {
+    diffContent: diff,
+    diffStat: stat,
+    qaReport: { ...task.qaReport, ...qaRun(tests), baseSync: { status: sync.status, detail: sync.detail } },
+    reviewedHead: await headOf(worktreePath),
+    verifiedBase: sync.baseHead,
+  }
+  return saveState(task, { ...patch, readiness: assessDelivery({ ...task, ...patch }) })
 }
 
 // ── Phases called by the routes ──────────────────────────────────────────────
@@ -328,25 +410,15 @@ export async function buildTask(ctx: ExecContext, task: FactoryTask): Promise<Fa
   await commit(ctx, worktreePath, built.build.commitMessage || `feat: ${task.title}`)
 
   current = await saveState(current, { state: 'qa_security' })
-  ctx.send({ type: 'status', message: say({ en: 'Tester: covering the test scenarios...', pt: 'Tester: cobrindo os cenários de teste...' }) })
-  const { result: testerRun, envelope: testEnv } = await agentStep(ctx, current, 'tester', { name: say({ en: 'Tests and coverage', pt: 'Testes e cobertura' }), phase: 'qa_security' },
-    { prompt: formatTestPrompt(current, built.tests, plan, spec), cwd: worktreePath }, t => parseTestEnvelope(t, built.tests.passed))
+  const qa = await testStep(ctx, current, worktreePath, { tests: built.tests, testerTouched: [] }, plan, spec)
+  const docs = await document(ctx, current, worktreePath, built.build.summary, spec)
+  const outcome = await reviewAndFix(ctx, current, worktreePath, qa, spec, plan)
+  const { tests, sync } = await syncAndVerify(ctx, current, worktreePath, outcome.qa.tests)
 
-  // Tests the Tester wrote are part of the delivery; the code, not the agent's report, decides if they pass
-  let tests = built.tests
-  if ((await uncommittedFiles(worktreePath)).length > 0) {
-    await commit(ctx, worktreePath, `test: cover "${task.title.slice(0, 50)}"`)
-    tests = await runTests(ctx, current, worktreePath, say({ en: 'Gate: verification with the new tests', pt: 'Portão: verificação com os testes novos' }))
-  }
-
-  const outcome = await reviewAndFix(ctx, current, worktreePath, tests, spec, plan)
-  tests = outcome.tests ?? tests
-  const docs = await document(ctx, current, worktreePath, outcome.review, spec)
-
-  return finishReview(current, worktreePath, outcome, tests, testEnv.details || testerRun.text, { spec, plan, build: built.build, test: testEnv, docs })
+  return finishReview(current, worktreePath, outcome, { ...outcome.qa, tests }, sync, outcome.qa.testerSummary ?? '', { spec, plan, build: built.build, test: outcome.qa.testEnv, docs })
 }
 
-// The developer's feedback goes through the same gates and the same review squad as the first build.
+// The developer's feedback goes through the same gates, Tester and review squad as the first build.
 // A failed or stopped adjust puts the worktree back where the last review left it: the task returns
 // to 'review' showing that review, and a merge must not carry commits nobody reviewed.
 export async function adjustTask(ctx: ExecContext, task: FactoryTask, feedback: string): Promise<FactoryTask> {
@@ -368,38 +440,48 @@ async function adjustReviewedWork(ctx: ExecContext, task: FactoryTask, worktreeP
   await commit(ctx, worktreePath, built.build.commitMessage || `fix: adjust "${task.title.slice(0, 40)}" after review`)
 
   const current = await saveState(task, { state: 'qa_security' })
-  const outcome = await reviewAndFix(ctx, current, worktreePath, built.tests, spec, plan)
-  const tests = outcome.tests ?? built.tests
   const asked = feedback.slice(0, 120)
+  const qa = await testStep(ctx, current, worktreePath, { tests: built.tests, testerTouched: task.qaReport?.testerTouched ?? [] }, plan, spec,
+    say({ en: `adjustment "${asked}"`, pt: `ajuste "${asked}"` }))
+  const outcome = await reviewAndFix(ctx, current, worktreePath, qa, spec, plan)
+  const { tests, sync } = await syncAndVerify(ctx, current, worktreePath, outcome.qa.tests)
   const summary = tests.passed
     ? say({ en: `Verification passed after the adjustment "${asked}".`, pt: `Verificação passou após o ajuste "${asked}".` })
     : say({ en: `Verification failed after the adjustment "${asked}".`, pt: `Verificação falhou após o ajuste "${asked}".` })
-  return finishReview(current, worktreePath, outcome, tests, summary, { ...current.handoffs, build: built.build })
+  return finishReview(current, worktreePath, outcome, { ...outcome.qa, tests }, sync, `${summary}\n\n${outcome.qa.testerSummary ?? ''}`.trim(),
+    { ...current.handoffs, build: built.build, test: outcome.qa.testEnv })
 }
+
+// The verification fields of the QA report. A suite that did not run is never a pass.
+const qaRun = (tests: TestsGateResult) => ({ passed: tests.passed, output: tests.output, testsRan: tests.command, steps: tests.steps })
 
 async function finishReview(
   task: FactoryTask,
   worktreePath: string,
   outcome: ReviewOutcome,
-  tests: TestsGateResult,
+  qa: QaState,
+  sync: BaseSync,
   qaSummary: string,
   handoffs: FactoryTask['handoffs'],
 ): Promise<FactoryTask> {
   const { diff, stat } = await getWorktreeDiff(worktreePath, task.baseBranch)
   const summary = [outcome.review.summary, outcome.security.summary].filter(Boolean).join('\n\n')
-  return saveState(task, {
+  const ids = criteriaIds(handoffs?.spec)
+  const patch: Partial<FactoryTask> = {
     state: 'review',
     diffContent: diff,
     diffStat: stat,
     qaReport: {
-      // A suite that did not run is not a pass
-      passed: tests.passed && !(tests.skipped && tests.command),
+      ...qaRun(qa.tests),
       summary: qaSummary,
-      output: tests.output,
-      testsRan: tests.command,
+      criteria: ids.length ? checkCriteriaCoverage(worktreePath, ids, qa.testEnv?.criteriaTests ?? []) : undefined,
+      testerTouched: qa.testerTouched,
+      baseSync: { status: sync.status, detail: sync.detail },
     },
-    securityReport: { passed: outcome.passed, findings: outcome.findings, criteria: outcome.review.criteria, summary, fixRounds: outcome.fixRounds },
+    securityReport: { passed: outcome.passed, findings: outcome.findings, criteria: outcome.review.criteria, summary, fixRounds: outcome.fixRounds, tools: outcome.tools },
     reviewedHead: await headOf(worktreePath),
+    verifiedBase: sync.baseHead,
     handoffs: { ...handoffs, review: outcome.review, security: outcome.security },
-  })
+  }
+  return saveState(task, { ...patch, readiness: assessDelivery({ ...task, ...patch }) })
 }

@@ -24,6 +24,23 @@ import { TraceTimeline } from './TraceTimeline'
 import { tx } from '@/lib/i18n'
 import { FactoryStatusChip } from './timeline/FactoryStatusChip'
 
+// Same minimum the server asks for (server/routes/factory.ts)
+const MIN_OVERRIDE = 10
+
+const COVERAGE_LABEL = {
+  tested: tx({ en: 'tested', pt: 'testado' }),
+  untestable: tx({ en: 'no automated test', pt: 'sem teste automático' }),
+  missing: tx({ en: 'missing', pt: 'faltando' }),
+}
+
+const TOOL_LABEL = {
+  passed: tx({ en: 'clean', pt: 'limpo' }),
+  failed: tx({ en: 'found issues', pt: 'encontrou problemas' }),
+  missing: tx({ en: 'not installed', pt: 'não instalado' }),
+  error: tx({ en: 'did not finish', pt: 'não concluiu' }),
+  skipped: tx({ en: 'nothing to scan', pt: 'nada a analisar' }),
+}
+
 type Props = {
   task: FactoryTask | null
   onClose: () => void
@@ -61,6 +78,8 @@ export function TaskReviewDrawer({ task, onClose, onUpdate }: Props) {
   // A finish that worked but left something to do by hand (MR not opened): not an execution error
   const [notice, setNotice] = useState<string | null>(null)
   const [confirming, setConfirming] = useState<'delete' | 'merge' | null>(null)
+  // Why the delivery goes with blockers on; the server refuses the finish without it
+  const [override, setOverride] = useState('')
 
   if (!task) return null
 
@@ -161,13 +180,17 @@ export function TaskReviewDrawer({ task, onClose, onUpdate }: Props) {
     }
   }
 
+  const blockers = task.readiness?.blockers ?? []
+  const attention = task.readiness?.attention ?? []
+  const finishLocked = blockers.length > 0 && override.trim().length < MIN_OVERRIDE
+
   const handleFinish = (mode: 'mr' | 'local_merge') => (mode === 'local_merge' ? setConfirming('merge') : finish('mr'))
 
   const finish = async (mode: 'mr' | 'local_merge') => {
     setProcessing(true)
     setError(null)
     try {
-      const res = await api.post<FactoryTask & { warning?: string }>(`/factory/tasks/${task.id}/finish`, { mode })
+      const res = await api.post<FactoryTask & { warning?: string }>(`/factory/tasks/${task.id}/finish`, { mode, override: blockers.length ? override.trim() : undefined })
       onUpdate()
       if (res?.prUrl) {
         window.open(res.prUrl, '_blank')
@@ -556,6 +579,28 @@ export function TaskReviewDrawer({ task, onClose, onUpdate }: Props) {
                     {task.qaReport?.passed ? tx({ en: 'Tests passed', pt: 'Testes Passaram' }) : tx({ en: 'Check the tests', pt: 'Atenção aos Testes' })}
                   </span>
                 </div>
+                {task.qaReport?.steps && task.qaReport.steps.length > 0 && (
+                  <div className="stack" style={{ gap: 4 }}>
+                    <span className="eyebrow">{tx({ en: 'Verification steps', pt: 'Etapas da verificação' })}</span>
+                    {task.qaReport.steps.map(st => (
+                      <div key={st.command} className="row" style={{ gap: 8, fontSize: 13 }}>
+                        <span className={`badge ${st.passed ? 'badge-ok' : 'badge-crit'}`}>{st.passed ? tx({ en: 'passed', pt: 'passou' }) : tx({ en: `exit ${st.exitCode}`, pt: `código ${st.exitCode}` })}</span>
+                        <span className="mono">{st.command}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {task.qaReport?.criteria && task.qaReport.criteria.length > 0 && (
+                  <div className="stack" style={{ gap: 4 }}>
+                    <span className="eyebrow">{tx({ en: 'Tests per acceptance criterion', pt: 'Testes por critério de aceite' })}</span>
+                    {task.qaReport.criteria.map(c => (
+                      <div key={c.id} className="row" style={{ gap: 8, alignItems: 'flex-start', fontSize: 13 }}>
+                        <span className={`badge ${c.status === 'tested' ? 'badge-ok' : 'badge-warn'}`}>{COVERAGE_LABEL[c.status]}</span>
+                        <span><b className="mono">{c.id}</b> <span className="mono muted">{c.tests.join(', ')}</span>{c.note && <span className="muted"> {c.note}</span>}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
                 {task.qaReport?.output && (
                   <div className="stack" style={{ gap: 4 }}>
                     <span className="muted" style={{ fontSize: 11 }}>
@@ -596,8 +641,24 @@ export function TaskReviewDrawer({ task, onClose, onUpdate }: Props) {
                     {task.securityReport.criteria.map(c => (
                       <div key={c.criterion} className="row" style={{ gap: 8, alignItems: 'flex-start', fontSize: 13 }}>
                         <span className={`badge ${c.met ? 'badge-ok' : 'badge-crit'}`}>{c.met ? tx({ en: 'met', pt: 'atendido' }) : tx({ en: 'not met', pt: 'não atendido' })}</span>
-                        <span>{c.criterion}<span className="muted"> {c.evidence}</span></span>
+                        <span>{c.id && <b className="mono">{c.id} </b>}{c.criterion}<span className="muted"> {c.evidence}</span></span>
                       </div>
+                    ))}
+                  </div>
+                )}
+
+                {task.securityReport?.tools && task.securityReport.tools.some(t => t.status !== 'skipped') && (
+                  <div className="stack" style={{ gap: 4 }}>
+                    <span className="eyebrow">{tx({ en: 'Security tools', pt: 'Ferramentas de segurança' })}</span>
+                    {task.securityReport.tools.filter(t => t.status !== 'skipped').map(t => (
+                      <details key={t.tool} style={{ fontSize: 13 }}>
+                        <summary className="row" style={{ gap: 8, cursor: t.output ? 'pointer' : 'default' }}>
+                          <span className={`badge ${t.status === 'passed' ? 'badge-ok' : t.status === 'failed' ? 'badge-crit' : 'badge-warn'}`}>{TOOL_LABEL[t.status]}</span>
+                          <span className="mono">{t.tool}</span>
+                          {t.install && <span className="muted mono" style={{ fontSize: 12 }}>{t.install}</span>}
+                        </summary>
+                        {t.output && <pre style={{ margin: '4px 0 0', padding: 8, background: 'var(--surface-3)', borderRadius: 4, fontSize: 11, maxHeight: 160, overflowY: 'auto' }}>{t.output}</pre>}
+                      </details>
                     ))}
                   </div>
                 )}
@@ -606,9 +667,10 @@ export function TaskReviewDrawer({ task, onClose, onUpdate }: Props) {
                   <span className="eyebrow">{tx({ en: `Findings (${task.securityReport?.findings.length ?? 0})`, pt: `Achados (${task.securityReport?.findings.length ?? 0})` })}</span>
                   {(task.securityReport?.findings ?? []).map((f, i) => (
                     <div key={i} className="row" style={{ gap: 8, alignItems: 'flex-start', fontSize: 13, borderTop: '1px solid var(--line)', paddingTop: 6 }}>
-                      <span className={`badge ${f.severity === 'critical' || f.severity === 'high' ? 'badge-crit' : f.severity === 'medium' ? 'badge-warn' : ''}`}>{f.severity}</span>
+                      <span className={`badge ${f.refuted ? '' : f.severity === 'critical' || f.severity === 'high' ? 'badge-crit' : f.severity === 'medium' ? 'badge-warn' : ''}`}>{f.severity}</span>
                       <div className="stack" style={{ gap: 2, flex: 1 }}>
-                        <span>{f.description}</span>
+                        <span style={f.refuted ? { textDecoration: 'line-through' } : undefined}>{f.description}</span>
+                        {f.refuted && <span style={{ fontSize: 12 }}><b>{tx({ en: 'Refuted by the Verifier:', pt: 'Refutado pelo Verifier:' })}</b> {f.refuted}</span>}
                         <span className="muted mono" style={{ fontSize: 11 }}>
                           {f.agentId ? AGENT_UI[f.agentId].name : ''}
                           {f.file ? ` · ${f.file}${f.line !== undefined ? `:${f.line}` : ''}` : ''}
@@ -637,6 +699,22 @@ export function TaskReviewDrawer({ task, onClose, onUpdate }: Props) {
             <div className="card card-pad stack" style={{ background: 'var(--surface)', borderColor: 'var(--line)' }}>
               <span className="eyebrow">{tx({ en: 'Your call: adjustments and decision', pt: 'Sua decisão: ajustes e entrega' })}</span>
 
+              {task.readiness && blockers.length === 0 && attention.length === 0 && (
+                <div className="callout callout-info">{tx({ en: 'Everything verified: nothing blocks and nothing needs a look.', pt: 'Tudo verificado: nada bloqueia e nada pede atenção.' })}</div>
+              )}
+              {blockers.length > 0 && (
+                <div className="callout callout-crit stack" style={{ gap: 4 }}>
+                  <b>{tx({ en: 'Blocks the delivery', pt: 'Bloqueia a entrega' })}</b>
+                  <ul style={{ margin: 0, paddingLeft: 18 }}>{blockers.map(b => <li key={b}>{b}</li>)}</ul>
+                </div>
+              )}
+              {attention.length > 0 && (
+                <div className="callout callout-warn stack" style={{ gap: 4 }}>
+                  <b>{tx({ en: 'Needs your look', pt: 'Pede o seu olhar' })}</b>
+                  <ul style={{ margin: 0, paddingLeft: 18 }}>{attention.map(a => <li key={a}>{a}</li>)}</ul>
+                </div>
+              )}
+
               <div className="row" style={{ gap: 8 }}>
                 <input
                   className="input"
@@ -656,6 +734,19 @@ export function TaskReviewDrawer({ task, onClose, onUpdate }: Props) {
                 </button>
               </div>
 
+              {blockers.length > 0 && (
+                <label className="stack" style={{ gap: 4 }}>
+                  <span className="eyebrow">{tx({ en: 'Deliver anyway: why?', pt: 'Entregar mesmo assim: por quê?' })}</span>
+                  <input
+                    className="input"
+                    placeholder={tx({ en: 'e.g. the failing test is flaky on main too (goes into the MR description)', pt: 'ex.: o teste que falha também falha na main (vai na descrição do MR)' })}
+                    value={override}
+                    onChange={e => setOverride(e.target.value)}
+                    disabled={processing}
+                  />
+                </label>
+              )}
+
               <div className="row" style={{ justifyContent: 'space-between', marginTop: 8, paddingTop: 10, borderTop: '1px solid var(--line)' }}>
                 <div className="row" style={{ gap: 8 }}>
                   <button type="button" className="btn btn-sm" onClick={handleOpenEditor} title={tx({ en: 'Opens the worktree in VS Code or the default editor', pt: 'Abre a worktree no VS Code ou editor padrão' })}>
@@ -671,7 +762,7 @@ export function TaskReviewDrawer({ task, onClose, onUpdate }: Props) {
                     type="button"
                     className="btn btn-sm"
                     onClick={() => handleFinish('local_merge')}
-                    disabled={processing}
+                    disabled={processing || finishLocked}
                     title={tx({ en: 'Merges the branch into your local base branch and cleans up the worktree', pt: 'Mescla a branch na sua branch base local e limpa a worktree' })}
                   >
                     <Check size={14} /> {tx({ en: 'Local merge', pt: 'Merge Local' })}
@@ -681,7 +772,7 @@ export function TaskReviewDrawer({ task, onClose, onUpdate }: Props) {
                     type="button"
                     className="btn btn-sm btn-primary"
                     onClick={() => handleFinish('mr')}
-                    disabled={processing}
+                    disabled={processing || finishLocked}
                     title={tx({ en: 'Pushes the branch and opens the remote Pull/Merge Request', pt: 'Envia a branch e abre o Pull/Merge Request remoto' })}
                   >
                     <GitPullRequest size={14} /> {tx({ en: 'Create MR/PR', pt: 'Criar MR/PR Remoto' })}

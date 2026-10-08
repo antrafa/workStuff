@@ -228,6 +228,32 @@ export async function pushWorktreeBranch(
 // starts from it, but a merge or an MR targets the branch itself.
 export const targetBranchOf = (base: string) => base.replace(/^origin\//, '')
 
+// Updates a remote-tracking base (`origin/main`) before comparing with it. Never prompts: a fetch
+// that needs a password fails and the last fetched base is used. A local base is taken as it is.
+export async function fetchBase(worktreePath: string, base: string): Promise<string> {
+  if (base.startsWith('origin/')) {
+    await git(worktreePath, ['-c', 'core.askPass=true', '-c', 'core.sshCommand=ssh -o BatchMode=yes', 'fetch', '--quiet', 'origin', targetBranchOf(base)], 60_000).catch(() => {})
+  }
+  return (await git(worktreePath, ['rev-parse', '--verify', `${base}^{commit}`])).trim()
+}
+
+export type BaseSync = { status: 'current' | 'rebased' | 'conflict'; baseHead: string; detail?: string }
+
+// Puts the branch on top of the newest base, so the verification that counts ran on what the merge
+// will produce. A conflict aborts the rebase and leaves the branch exactly as it was.
+export async function syncWithBase(worktreePath: string, base: string): Promise<BaseSync> {
+  const baseHead = await fetchBase(worktreePath, base)
+  const current = await git(worktreePath, ['merge-base', '--is-ancestor', baseHead, 'HEAD']).then(() => true, () => false)
+  if (current) return { status: 'current', baseHead }
+  try {
+    await git(worktreePath, ['rebase', '--quiet', baseHead], 120_000)
+    return { status: 'rebased', baseHead }
+  } catch (e) {
+    await git(worktreePath, ['rebase', '--abort']).catch(() => {})
+    return { status: 'conflict', baseHead, detail: (e as Error).message.slice(0, 2000) }
+  }
+}
+
 export async function mergeWorktreeLocal(
   repoPath: string,
   branchName: string,
@@ -346,6 +372,26 @@ if (import.meta.main && process.argv.includes('--selfcheck')) {
     assert.ok(await commitWorktree(wt2.worktreePath, 'feat: b'), 'commit com symlink ignorado')
     assert.deepEqual((await getWorktreeDiff(wt2.worktreePath, 'main')).stat.files, ['b.ts'], 'symlink fora do commit')
     await removeWorktree(repoDir, wt2.worktreePath, wt2.branchName)
+
+    // Base que andou: rebase limpo; base que conflita: rebase desfeito, branch intacta
+    const wt3 = await createWorktree(repoDir, 'wt-task-3', 'main', wtRootDir)
+    writeFileSync(join(wt3.worktreePath, 'c.ts'), 'c\n')
+    await commitWorktree(wt3.worktreePath, 'feat: c')
+    assert.equal((await syncWithBase(wt3.worktreePath, 'main')).status, 'current')
+    writeFileSync(join(repoDir, 'base.ts'), 'base\n')
+    sh('add', 'base.ts')
+    sh('commit', '-qm', 'feat: base andou')
+    const rebased = await syncWithBase(wt3.worktreePath, 'main')
+    assert.equal(rebased.status, 'rebased')
+    assert.ok(existsSync(join(wt3.worktreePath, 'base.ts')) && existsSync(join(wt3.worktreePath, 'c.ts')), 'branch em cima da base nova')
+    writeFileSync(join(repoDir, 'c.ts'), 'outro\n')
+    sh('add', 'c.ts')
+    sh('commit', '-qm', 'feat: conflito')
+    const headBefore = await headOf(wt3.worktreePath)
+    assert.equal((await syncWithBase(wt3.worktreePath, 'main')).status, 'conflict')
+    assert.equal(await headOf(wt3.worktreePath), headBefore, 'conflito não deixa rebase pela metade')
+    await removeWorktree(repoDir, wt3.worktreePath, wt3.branchName)
+    sh('reset', '-q', '--hard', 'HEAD~2')
 
     // Teste de mergeWorktreeLocal com repositório sujo (dirty check)
     writeFileSync(join(repoDir, 'dirty.txt'), 'modificacao nao commitada\n')

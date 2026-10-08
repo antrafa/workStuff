@@ -6,13 +6,14 @@ import { openSse } from '../lib/sse.ts'
 import { originUrl, repoInfo, validRef } from '../lib/review/git.ts'
 import { sourceForRemote } from '../lib/repos/remote.ts'
 import { which } from '../lib/run.ts'
-import { detectVerifyCommand } from '../lib/factory/gates.ts'
+import { detectVerifyCommands } from '../lib/factory/gates.ts'
 import { defaultFactoryStore } from '../lib/factory/store.ts'
 import { existsSync } from 'node:fs'
 import { getWorktreeDiff, removeWorktree, mergeWorktreeLocal, pushWorktreeBranch, resetWorktree, targetBranchOf } from '../lib/factory/worktree.ts'
 import { SPECIALIZED_AGENTS } from '../lib/factory/agents.ts'
 import { runFactoryAgent } from '../lib/factory/runner.ts'
-import { adjustTask, buildTask, planTask, type ExecContext } from '../lib/factory/pipeline.ts'
+import { adjustTask, buildTask, planTask, reverifyOnNewBase, type ExecContext } from '../lib/factory/pipeline.ts'
+import { assessDelivery, canAutoMr } from '../lib/factory/readiness.ts'
 import { AGENT_ORDER, type FactoryTask, type FactoryTaskState, type SpecializedAgentId } from '../lib/factory/types.ts'
 import { listSources, resolveToken } from '../lib/repos/sources.ts'
 import { call, type Conn } from '../lib/repos/providers.ts'
@@ -107,6 +108,8 @@ function refuseState(res: Response, task: FactoryTask, allowed: FactoryTaskState
 // rebuilds the worktree from scratch and would throw the reviewed work away.
 async function reconcileTask(task: FactoryTask): Promise<FactoryTask> {
   const executing = isExecuting(task.id)
+  // Reviewed before readiness existed: computed on read so the drawer shows what the finish will ask
+  if (task.state === 'review' && !task.readiness) return { ...task, executing, readiness: assessDelivery(task) }
   if (executing || !RUNNING_STATES.includes(task.state)) return { ...task, executing }
 
   await defaultFactoryStore.failRunningSpans(task.id, say({ en: 'Run interrupted: the server was restarted.', pt: 'Execução interrompida: o servidor foi reiniciado.' }))
@@ -158,7 +161,7 @@ function budgetOf(raw: unknown): number | undefined {
   return n
 }
 
-type TaskOptions = Pick<FactoryTask, 'provider' | 'model' | 'verifyCommand' | 'agentModels' | 'budgetUsd'>
+type TaskOptions = Pick<FactoryTask, 'provider' | 'model' | 'verifyCommand' | 'smokeCommand' | 'autoMr' | 'agentModels' | 'budgetUsd'>
 function taskOptions(b: Record<string, any>, current?: FactoryTask): TaskOptions {
   if (b.provider !== undefined && !isProviderId(b.provider)) throw new Error(say({ en: 'invalid provider: use claude, agy or codex', pt: 'provedor inválido: use claude, agy ou codex' }))
   if (b.model && !MODEL_ID.test(String(b.model))) throw new Error(say({ en: 'invalid model id', pt: 'id de modelo inválido' }))
@@ -168,6 +171,8 @@ function taskOptions(b: Record<string, any>, current?: FactoryTask): TaskOptions
     model: b.model !== undefined ? String(b.model) || undefined : current?.model ?? settings.model,
     // The developer's own command, run inside the jail like the autodetected one
     verifyCommand: b.verifyCommand !== undefined ? String(b.verifyCommand).trim() || undefined : current?.verifyCommand,
+    smokeCommand: b.smokeCommand !== undefined ? String(b.smokeCommand).trim() || undefined : current?.smokeCommand,
+    autoMr: b.autoMr !== undefined ? b.autoMr === true : current?.autoMr,
     // undefined in the body keeps the current value; null or '' clears it
     agentModels: 'agentModels' in b ? agentModelsOf(b.agentModels) : current?.agentModels,
     budgetUsd: 'budgetUsd' in b ? budgetOf(b.budgetUsd) : current?.budgetUsd,
@@ -326,7 +331,7 @@ factoryRouter.get('/preflight', async (req, res) => {
   if (repoPath) {
     try {
       const info = await repoInfo(repoPath)
-      repo = { ok: true, current: info.current, defaultBase: info.defaultBase ?? info.current, dirty: info.dirty, verifyCommand: detectVerifyCommand(repoPath) }
+      repo = { ok: true, current: info.current, defaultBase: info.defaultBase ?? info.current, dirty: info.dirty, verifyCommand: detectVerifyCommands(repoPath).join(' && ') || null }
     } catch (e) {
       repo = { ok: false, error: (e as Error).message }
     }
@@ -467,7 +472,7 @@ factoryRouter.post('/tasks/:id/approve-plan', async (req, res) => {
 
   await runExecution(task.id, 'build', res, async ctx => {
     const built = await buildTask(ctx, approved)
-    ctx.send({ type: 'done', task: built })
+    ctx.send({ type: 'done', task: await autoFinish(ctx, built) })
   })
 })
 
@@ -488,7 +493,7 @@ factoryRouter.post('/tasks/:id/adjust', async (req, res) => {
 
   await runExecution(task.id, 'adjust', res, async ctx => {
     const adjusted = await adjustTask(ctx, task, feedback)
-    ctx.send({ type: 'done', task: adjusted })
+    ctx.send({ type: 'done', task: await autoFinish(ctx, adjusted) })
   })
 })
 
@@ -522,7 +527,35 @@ factoryRouter.post('/tasks/:id/open-editor', async (req, res) => {
   }
 })
 
-// Finalização: aprovação para MR remoto ou merge local
+// The developer asked for the MR to open by itself: only when nothing blocks and nothing needs a
+// human eye (readiness.ts). Never a local merge: that writes to the developer's own checkout.
+async function autoFinish(ctx: ExecContext, task: FactoryTask): Promise<FactoryTask> {
+  if (!task.readiness || !canAutoMr(task, task.readiness)) return task
+  ctx.send({ type: 'status', message: say({ en: 'Everything verified and nothing needs a look: opening the MR...', pt: 'Tudo verificado e nada pede atenção: abrindo o MR...' }) })
+  // A failed push must not throw: the run would mark the reviewed task as 'error', and "retry"
+  // from there rebuilds it from scratch. It stays in review for the developer instead.
+  try {
+    const { task: finished, warning } = await finishTask(task, 'mr')
+    if (warning) ctx.send({ type: 'status', message: warning })
+    return finished
+  } catch (e) {
+    const message = say({ en: `The automatic MR failed; the task waits for your review: ${(e as Error).message}`, pt: `O MR automático falhou; a tarefa espera a sua revisão: ${(e as Error).message}` })
+    ctx.send({ type: 'status', message })
+    return saveTaskError(task, message)
+  }
+}
+
+async function saveTaskError(task: FactoryTask, error: string): Promise<FactoryTask> {
+  const fresh = (await defaultFactoryStore.getTask(task.id)) ?? task
+  const next = { ...fresh, error, updatedAt: new Date().toISOString() }
+  await defaultFactoryStore.saveTask(next)
+  return next
+}
+
+// Finish: remote MR or local merge. A base that moved is rebased and verified first, and blockers
+// (failing verification, blocking findings, unmet criteria) refuse the finish unless the developer
+// writes why; the reason is kept on the task.
+const MIN_OVERRIDE = 10
 factoryRouter.post('/tasks/:id/finish', async (req, res) => {
   try {
     const task = await defaultFactoryStore.getTask(req.params.id as string)
@@ -536,10 +569,22 @@ factoryRouter.post('/tasks/:id/finish', async (req, res) => {
       res.status(400).json({ error: say({ en: `invalid finish mode: ${mode}`, pt: `modo de finalização inválido: ${mode}` }) })
       return
     }
+    const override = String(req.body?.override ?? '').trim()
     // Same tick as refuseState: a second click finds this execution and gets 409
     const signal = beginExecution(task.id, 'finish')
     try {
-      await finishTask(task, mode, res)
+      const current = await reverifyOnNewBase({ taskId: task.id, signal, send: () => {} }, task)
+      const { blockers } = assessDelivery(current)
+      if (blockers.length && override.length < MIN_OVERRIDE) {
+        res.status(409).json({
+          error: say({ en: `The delivery has blockers; write why it goes anyway (at least ${MIN_OVERRIDE} characters): ${blockers.join(' ')}`, pt: `A entrega tem bloqueios; escreva por que ela segue mesmo assim (pelo menos ${MIN_OVERRIDE} caracteres): ${blockers.join(' ')}` }),
+          blockers,
+        })
+        return
+      }
+      const withOverride = blockers.length ? { ...current, finishOverride: { reason: override, blockers, at: new Date().toISOString() } } : current
+      const { task: finished, warning } = await finishTask(withOverride, mode)
+      res.json({ ...finished, warning })
     } finally {
       endExecution(task.id, signal)
     }
@@ -548,7 +593,7 @@ factoryRouter.post('/tasks/:id/finish', async (req, res) => {
   }
 })
 
-async function finishTask(task: FactoryTask, mode: 'mr' | 'local_merge', res: Response): Promise<void> {
+async function finishTask(task: FactoryTask, mode: 'mr' | 'local_merge'): Promise<{ task: FactoryTask; warning?: string }> {
   let prUrl = task.prUrl
   let warning: string | undefined
 
@@ -577,7 +622,12 @@ async function finishTask(task: FactoryTask, mode: 'mr' | 'local_merge', res: Re
         const title = task.title
         const summary = task.handoffs?.docs?.mrDescription || task.handoffs?.review?.mrDescription || task.description
         // Closes the originating issue when the MR is merged (GitLab and GitHub both read it)
-        const description = task.source.issueIid && !summary.includes(`#${task.source.issueIid}`) ? `${summary}\n\nCloses #${task.source.issueIid}` : summary
+        // Whoever reviews the MR sees what the factory could not verify and why it went anyway
+        const override = task.finishOverride
+          ? `\n\n## ${say({ en: 'Delivered with blockers', pt: 'Entregue com bloqueios' })}\n\n${task.finishOverride.blockers.map(b => `- ${b}`).join('\n')}\n\n> ${task.finishOverride.reason}`
+          : ''
+        const withOverride = `${summary}${override}`
+        const description = task.source.issueIid && !summary.includes(`#${task.source.issueIid}`) ? `${withOverride}\n\nCloses #${task.source.issueIid}` : withOverride
 
         const apiBase = conn.provider === 'gitlab'
           ? `${conn.url}/api/v4`
@@ -655,8 +705,7 @@ async function finishTask(task: FactoryTask, mode: 'mr' | 'local_merge', res: Re
     updatedAt: new Date().toISOString(),
   }
   await defaultFactoryStore.saveTask(updatedTask)
-
-  res.json({ ...updatedTask, warning })
+  return { task: updatedTask, warning }
 }
 
 // Exclui tarefa e limpa worktree

@@ -27,9 +27,10 @@ const CHECKPOINTS = [
   { who: 'analyst', text: tx({ en: 'writes the acceptance criteria; with a business question, stops and asks you', pt: 'escreve os critérios de aceite; se tiver dúvida de negócio, para e pergunta a você' }) },
   { who: 'architect', text: tx({ en: 'writes the technical plan; you read it, edit it if you want and approve', pt: 'escreve o plano técnico; você lê, edita se quiser e aprova' }) },
   { who: 'implementer', text: tx({ en: 'codes in an isolated worktree; when a gate fails, gets the failure and fixes it', pt: 'codifica numa worktree isolada; se um portão reprovar, recebe a falha e corrige' }) },
-  { who: 'tester', text: tx({ en: 'covers the plan\'s test scenarios', pt: 'cobre os cenários de teste do plano' }) },
-  { who: 'reviewer', text: tx({ en: 'reviews bugs and criteria, in parallel with Security; a serious finding goes back for a fix', pt: 'revisa bugs e critérios, em paralelo com o Security; achado grave volta para correção' }) },
-  { who: 'documenter', text: tx({ en: 'updates the docs and writes the MR description; you review everything and decide', pt: 'atualiza a documentação e escreve a descrição do MR; você revisa tudo e decide' }) },
+  { who: 'tester', text: tx({ en: 'writes at least one test per acceptance criterion; runs again after every fix', pt: 'escreve pelo menos um teste por critério de aceite; roda de novo depois de cada correção' }) },
+  { who: 'documenter', text: tx({ en: 'updates the docs and writes the MR description, before the review reads them', pt: 'atualiza a documentação e escreve a descrição do MR, antes da revisão ler' }) },
+  { who: 'reviewer', text: tx({ en: 'reviews bugs and criteria, in parallel with Security and the installed security tools; a serious finding goes back for a fix', pt: 'revisa bugs e critérios, em paralelo com o Security e as ferramentas de segurança instaladas; achado grave volta para correção' }) },
+  { who: 'verifier', text: tx({ en: 'tries to refute each blocking finding; you see what blocks and what needs a look, and decide', pt: 'tenta refutar cada achado bloqueante; você vê o que bloqueia e o que pede atenção, e decide' }) },
 ] as const
 
 // Guided first task: explains the pipeline, checks the machine and the repo, and writes the
@@ -40,6 +41,8 @@ export function FactoryWizard({ onClose, onStarted }: { onClose: () => void; onS
   const [repoPath, setRepoPath] = useState('')
   const [baseBranch, setBaseBranch] = useState('')
   const [verifyCommand, setVerifyCommand] = useState('')
+  const [smokeCommand, setSmokeCommand] = useState('')
+  const [autoMr, setAutoMr] = useState(false)
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
   const [issue, setIssue] = useState<Issue | null>(null)
@@ -100,6 +103,8 @@ export function FactoryWizard({ onClose, onStarted }: { onClose: () => void; onS
         baseBranch: baseBranch.trim() || undefined,
         provider,
         verifyCommand: verifyCommand.trim() || undefined,
+        smokeCommand: smokeCommand.trim() || undefined,
+        autoMr,
         budgetUsd: budget.trim() || undefined,
         agentModels: split && provider === 'claude' ? CLAUDE_SPLIT : undefined,
         source: issue
@@ -141,8 +146,8 @@ export function FactoryWizard({ onClose, onStarted }: { onClose: () => void; onS
             <div className="stack" style={{ gap: 12 }}>
               <p style={{ margin: 0 }}>
                 {tx({
-                  en: 'You describe what you need; seven specialized agents turn it into reviewed code, in an isolated copy of the repository. Your checkout is never changed, and nothing reaches the remote Git without your approval.',
-                  pt: 'Você descreve o que precisa; sete agentes especializados transformam isso em código revisado, numa cópia isolada do repositório. O seu checkout nunca é alterado, e nada vai para o Git remoto sem a sua aprovação.',
+                  en: 'You describe what you need; eight specialized agents turn it into reviewed code, in an isolated copy of the repository. Your checkout is never changed, and nothing reaches the remote Git without your approval.',
+                  pt: 'Você descreve o que precisa; oito agentes especializados transformam isso em código revisado, numa cópia isolada do repositório. O seu checkout nunca é alterado, e nada vai para o Git remoto sem a sua aprovação.',
                 })}
               </p>
               <ol className="fx-flow">
@@ -214,9 +219,14 @@ export function FactoryWizard({ onClose, onStarted }: { onClose: () => void; onS
                       onChange={e => setVerifyCommand(e.target.value)} />
                     <span className="muted" style={{ fontSize: 12 }}>
                       {repo.verifyCommand
-                        ? tx({ en: `Detected: ${repo.verifyCommand}. Leave empty to use it, or combine it with lint and typecheck.`, pt: `Detectado: ${repo.verifyCommand}. Deixe vazio para usar ele, ou combine com lint e typecheck.` })
-                        : tx({ en: 'Without a command nothing checks that the code compiles: the gates only check that something changed.', pt: 'Sem comando, nada verifica se o código compila: os portões só conferem que algo mudou.' })}
+                        ? tx({ en: `Detected: ${repo.verifyCommand}. Each step runs on its own; leave empty to use them.`, pt: `Detectado: ${repo.verifyCommand}. Cada etapa roda separada; deixe vazio para usar.` })
+                        : tx({ en: 'Without a command nothing is verified, and the delivery is blocked until you say why it goes anyway.', pt: 'Sem comando, nada é verificado, e a entrega fica bloqueada até você dizer por que ela segue mesmo assim.' })}
                     </span>
+                  </label>
+                  <label className="stack" style={{ gap: 4 }}>
+                    <span className="eyebrow">{tx({ en: 'Smoke command (optional)', pt: 'Comando de smoke (opcional)' })}</span>
+                    <input className="input mono" value={smokeCommand} onChange={e => setSmokeCommand(e.target.value)} />
+                    <span className="muted" style={{ fontSize: 12 }}>{tx({ en: 'Runs last, in the same sandbox: start the app, hit it, stop it. e.g. npm run dev & sleep 5; curl -fs localhost:5173 >/dev/null', pt: 'Roda por último, no mesmo sandbox: sobe a aplicação, chama, derruba. Ex.: npm run dev & sleep 5; curl -fs localhost:5173 >/dev/null' })}</span>
                   </label>
                 </>
               )}
@@ -260,6 +270,13 @@ export function FactoryWizard({ onClose, onStarted }: { onClose: () => void; onS
 
           {step === 4 && (
             <div className="stack" style={{ gap: 14 }}>
+              <label className="row" style={{ gap: 10, alignItems: 'flex-start' }}>
+                <input type="checkbox" checked={autoMr} onChange={e => setAutoMr(e.target.checked)} style={{ marginTop: 3 }} />
+                <span className="stack" style={{ gap: 4 }}>
+                  <b>{tx({ en: 'Open the MR by itself when everything is verified', pt: 'Abrir o MR sozinho quando tudo estiver verificado' })}</b>
+                  <span className="muted" style={{ fontSize: 12 }}>{tx({ en: 'Only when nothing blocks and nothing needs a look (tests per criterion, no sensitive paths, no refuted finding, security tools installed). Otherwise it waits for you as usual.', pt: 'Só quando nada bloqueia e nada pede atenção (teste por critério, nenhum caminho sensível, nenhum achado refutado, ferramentas de segurança instaladas). Senão, espera por você como sempre.' })}</span>
+                </span>
+              </label>
               {provider === 'claude' ? (
                 <label className="row" style={{ gap: 10, alignItems: 'flex-start' }}>
                   <input type="checkbox" checked={split} onChange={e => setSplit(e.target.checked)} style={{ marginTop: 3 }} />
@@ -291,6 +308,8 @@ export function FactoryWizard({ onClose, onStarted }: { onClose: () => void; onS
               <dt>{tx({ en: 'Verification', pt: 'Verificação' })}</dt><dd className="mono">{verifyCommand || (repo?.ok && repo.verifyCommand) || tx({ en: 'none', pt: 'nenhuma' })}</dd>
               <dt>{tx({ en: 'Request', pt: 'Demanda' })}</dt><dd>{title}{issue && <span className="muted"> ({issue.repo}#{issue.number})</span>}</dd>
               <dt>{tx({ en: 'Provider', pt: 'Provedor' })}</dt><dd>{PROVIDER_LABEL[provider]}{provider === 'claude' && split ? tx({ en: ' (opus judges, sonnet builds)', pt: ' (opus julga, sonnet constrói)' }) : ''}</dd>
+              {smokeCommand && <><dt>Smoke</dt><dd className="mono">{smokeCommand}</dd></>}
+              <dt>{tx({ en: 'At the end', pt: 'No fim' })}</dt><dd>{autoMr ? tx({ en: 'MR opens by itself if everything is verified', pt: 'MR abre sozinho se tudo estiver verificado' }) : tx({ en: 'waits for your review', pt: 'espera a sua revisão' })}</dd>
               <dt>{tx({ en: 'Cap', pt: 'Teto' })}</dt><dd className="mono">{budget ? `US$ ${budget}` : tx({ en: 'no cap', pt: 'sem teto' })}</dd>
               <dt>{tx({ en: 'On create', pt: 'Ao criar' })}</dt><dd>{tx({ en: 'The Analyst and the Architect start right away. You follow the run live on the timeline.', pt: 'O Analyst e o Architect começam já. Você acompanha a execução ao vivo na linha do tempo.' })}</dd>
             </dl>

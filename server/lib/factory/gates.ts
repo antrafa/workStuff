@@ -10,6 +10,7 @@ import { spawn } from 'node:child_process'
 import { run } from '../run.ts'
 import { jail, withSandbox } from './runner.ts'
 import { GIT_NO_HOOKS, uncommittedFiles } from './worktree.ts'
+import type { CriterionCoverage, CriterionTests, VerifyStep } from './types.ts'
 import { say } from '../i18n.ts'
 
 export type DiffGateResult = {
@@ -27,7 +28,9 @@ export type ArtifactsGateResult = {
 
 export type TestsGateResult = {
   passed: boolean
+  // Every step joined with &&, for display; each one ran on its own
   command?: string
+  steps?: VerifyStep[]
   output: string
   exitCode: number
   durationMs: number
@@ -125,43 +128,78 @@ const throwawayCaches = (tmpDir: string): Record<string, string> => ({
   PIP_CACHE_DIR: join(tmpDir, 'pip'),
 })
 
-export function detectVerifyCommand(worktreePath: string): string | null {
+// Every check the project has, not just the first one found: `npm test` passing says nothing about
+// lint, typecheck or build. Run in this order, cheapest feedback first.
+const NPM_STEPS = ['lint', 'typecheck', 'test', 'check', 'build']
+
+export function detectVerifyCommands(worktreePath: string): string[] {
   const pkgJsonPath = join(worktreePath, 'package.json')
   if (existsSync(pkgJsonPath)) {
     try {
       const scripts = JSON.parse(readFileSync(pkgJsonPath, 'utf-8')).scripts ?? {}
-      if (scripts.test && !scripts.test.includes('no test specified')) return 'npm test'
-      // The project's own "everything green" script (this repo's), ahead of a bare typecheck
-      if (scripts.check) return 'npm run check'
-      // No tests: at least prove it compiles, or the gate only checks that something changed
-      if (scripts.typecheck) return 'npm run typecheck'
-      if (scripts.build) return 'npm run build'
+      const steps = NPM_STEPS.filter(name => scripts[name] && !String(scripts[name]).includes('no test specified'))
+      if (steps.length) return steps.map(name => (name === 'test' ? 'npm test' : `npm run ${name}`))
     } catch {
       // unreadable package.json: fall through to the other build files
     }
   }
-  if (existsSync(join(worktreePath, 'pom.xml'))) return 'mvn -q test'
-  if (existsSync(join(worktreePath, 'gradlew'))) return './gradlew test'
-  if (existsSync(join(worktreePath, 'pytest.ini')) || existsSync(join(worktreePath, 'pyproject.toml'))) return 'pytest'
-  if (existsSync(join(worktreePath, 'go.mod'))) return 'go test ./...'
-  return null
+  // verify runs tests plus the plugins bound to the build (checkstyle, spotbugs); gradle build includes check
+  if (existsSync(join(worktreePath, 'pom.xml'))) return ['mvn -q verify']
+  if (existsSync(join(worktreePath, 'gradlew'))) return ['./gradlew build']
+  if (existsSync(join(worktreePath, 'pytest.ini')) || existsSync(join(worktreePath, 'pyproject.toml'))) return ['pytest']
+  if (existsSync(join(worktreePath, 'go.mod'))) return ['go vet ./...', 'go test ./...']
+  return []
 }
 
+// The task's own command replaces the detected ones; the smoke command always runs last.
+// Nothing to run is "not verified", never a pass. Stops at the first failing step: its output is
+// what the Implementer needs, and the next steps would mostly repeat it.
 export async function gateTestsPass(
   worktreePath: string,
-  opts: { command?: string; timeoutMs?: number; signal?: AbortSignal } = {},
+  opts: { command?: string; smokeCommand?: string; timeoutMs?: number; signal?: AbortSignal } = {},
+): Promise<TestsGateResult> {
+  const own = opts.command?.trim()
+  const commands = [...(own ? [own] : detectVerifyCommands(worktreePath)), ...(opts.smokeCommand?.trim() ? [opts.smokeCommand.trim()] : [])]
+  if (commands.length === 0) {
+    const reason = say({ en: 'No verification command detected in the repository: nothing was verified.', pt: 'Nenhum comando de verificação detectado no repositório: nada foi verificado.' })
+    return { passed: false, skipped: true, output: reason, exitCode: -1, durationMs: 0, reason }
+  }
+  const command = commands.join(' && ')
+  const t0 = Date.now()
+  const steps: VerifyStep[] = []
+  const outputs: string[] = []
+  for (const step of commands) {
+    const result = await runJailed(worktreePath, 'sh', ['-c', step], opts)
+    if (result.skipped) return { ...result, command }
+    steps.push({ command: step, passed: result.passed, exitCode: result.exitCode, durationMs: result.durationMs })
+    outputs.push(`$ ${step}\n${result.output}`)
+    if (!result.passed) {
+      return { ...result, command, steps, output: clip(outputs.join('\n\n')), durationMs: Date.now() - t0, reason: `${step}: ${result.reason}` }
+    }
+  }
+  return { passed: true, command, steps, output: clip(outputs.join('\n\n')), exitCode: 0, durationMs: Date.now() - t0 }
+}
+
+// The tail carries the failure; the head of a long Maven log is download noise
+const clip = (output: string) => (output.length > MAX_OUTPUT ? `[...]\n${output.slice(-MAX_OUTPUT)}` : output)
+
+// Runs one program on the worktree inside the jail, with the build caches writable and a throwaway
+// HOME for tools that keep settings there. Without bwrap it does not run: it executes agent code.
+export async function runJailed(
+  worktreePath: string,
+  bin: string,
+  args: string[],
+  opts: { timeoutMs?: number; signal?: AbortSignal; env?: Record<string, string> } = {},
 ): Promise<TestsGateResult> {
   const t0 = Date.now()
-  const command = opts.command?.trim() || detectVerifyCommand(worktreePath)
-  if (!command) {
-    return { passed: true, skipped: true, output: say({ en: 'No verification command detected in the repository.', pt: 'Nenhum comando de verificação detectado no repositório.' }), exitCode: 0, durationMs: 0 }
-  }
+  const command = [bin, ...args].join(' ')
   return withSandbox([worktreePath, ...buildCacheDirs()], async sandbox => {
     if (!sandbox) {
       const reason = say({ en: 'bwrap (bubblewrap) is not installed: the suite does not run outside the sandbox because it executes code the agent wrote.', pt: 'bwrap (bubblewrap) não está instalado: a suíte não roda fora do sandbox porque executa código escrito pelo agente.' })
       return { passed: false, skipped: true, command, output: reason, exitCode: -1, durationMs: 0, reason }
     }
-    const jailed = jail({ ...sandbox, env: throwawayCaches(sandbox.tmpDir) }, worktreePath, 'sh', ['-c', command])
+    const env = { ...throwawayCaches(sandbox.tmpDir), ...opts.env }
+    const jailed = jail({ ...sandbox, env }, worktreePath, bin, args)
     return spawnVerify(jailed, command, worktreePath, t0, opts)
   })
 }
@@ -197,8 +235,7 @@ function spawnVerify(
       settled = true
       clearTimeout(timer)
       signal?.removeEventListener('abort', onAbort)
-      // The tail carries the failure; the head of a long Maven log is download noise
-      resolve({ ...result, output: result.output.length > MAX_OUTPUT ? `[...]\n${result.output.slice(-MAX_OUTPUT)}` : result.output })
+      resolve({ ...result, output: clip(result.output) })
     }
     const fail = (reason: string, extra: string) =>
       finish({ passed: false, command, output: output + extra, exitCode: -1, durationMs: Date.now() - t0, reason })
@@ -245,6 +282,25 @@ export async function docsCiting(worktreePath: string, files: string[]): Promise
   return out.split('\n').filter(f => f && DOC_FILE.test(f) && !files.includes(f))
 }
 
+// 5. Test files, by the usual conventions. A miss only asks for a human look (see readiness.ts).
+const TEST_FILE = /(^|\/)(tests?|__tests__|spec|e2e)\/|\.(test|spec)\.[^/]+$|_test\.(go|py)$|(^|\/)test_[^/]+\.py$|Tests?\.(java|kt|cs)$|(^|\/)scripts\/check-[^/]+$/i
+export const nonTestFiles = (files: string[]) => files.filter(f => !TEST_FILE.test(f))
+
+// 6. Gate: the Tester's mapping of criteria to tests, checked against the disk. A test file it names
+// must exist; a criterion it left out is "missing", one it explains is "untestable".
+export function checkCriteriaCoverage(worktreePath: string, criteriaIds: string[], claimed: CriterionTests[]): CriterionCoverage[] {
+  return criteriaIds.map(id => {
+    const entry = claimed.find(c => c.id.toUpperCase() === id)
+    if (!entry) return { id, status: 'missing', tests: [] }
+    const files = entry.tests.map(t => t.split('::')[0].trim().replace(/^(\.\/|\/)+/, '')).filter(Boolean)
+    const absent = files.filter(f => !existsSync(join(worktreePath, f)))
+    if (files.length && absent.length === 0) return { id, status: 'tested', tests: entry.tests }
+    if (entry.untestable && files.length === 0) return { id, status: 'untestable', tests: [], note: entry.untestable }
+    const note = absent.length ? say({ en: `test file not found: ${absent.join(', ')}`, pt: `arquivo de teste não encontrado: ${absent.join(', ')}` }) : undefined
+    return { id, status: 'missing', tests: entry.tests, note }
+  })
+}
+
 // Autoteste
 if (import.meta.main && process.argv.includes('--selfcheck')) {
   const tmp = mkdtempSync(join(tmpdir(), 'workstuff-gates-test-'))
@@ -264,20 +320,28 @@ if (import.meta.main && process.argv.includes('--selfcheck')) {
     assert.equal(artFail.passed, false)
     assert.deepEqual(artFail.missingFiles, ['missing.ts'])
 
-    // 2. Teste de testes skip
+    // 2. Nada para rodar não é aprovação
     const testSkip = await gateTestsPass(tmp)
-    assert.equal(testSkip.passed, true)
+    assert.equal(testSkip.passed, false, 'sem comando, nada foi verificado')
     assert.equal(testSkip.skipped, true)
 
     writeFileSync(join(tmp, 'package.json'), JSON.stringify({ scripts: { test: 'echo "Error: no test specified"', typecheck: 'tsc', build: 'vite build' } }))
-    assert.equal(detectVerifyCommand(tmp), 'npm run typecheck', 'sem teste, ao menos compila')
-    writeFileSync(join(tmp, 'package.json'), JSON.stringify({ scripts: { check: 'node x', typecheck: 'tsc' } }))
-    assert.equal(detectVerifyCommand(tmp), 'npm run check', 'check antes do typecheck')
+    assert.deepEqual(detectVerifyCommands(tmp), ['npm run typecheck', 'npm run build'], 'teste vazio fora, o resto entra')
+    writeFileSync(join(tmp, 'package.json'), JSON.stringify({ scripts: { build: 'b', lint: 'l', test: 't', check: 'c', typecheck: 'tc' } }))
+    assert.deepEqual(detectVerifyCommands(tmp), ['npm run lint', 'npm run typecheck', 'npm test', 'npm run check', 'npm run build'], 'todas as etapas, na ordem')
     rmSync(join(tmp, 'package.json'))
 
     writeFileSync(join(tmp, 'pom.xml'), '<project/>')
-    assert.equal(detectVerifyCommand(tmp), 'mvn -q test')
+    assert.deepEqual(detectVerifyCommands(tmp), ['mvn -q verify'])
     rmSync(join(tmp, 'pom.xml'))
+
+    // Etapas em sequência, parando na primeira que falha; o smoke roda por último
+    const multi = await gateTestsPass(tmp, { command: 'echo um', smokeCommand: 'exit 4' })
+    if (!multi.skipped) {
+      assert.equal(multi.passed, false)
+      assert.deepEqual(multi.steps?.map(s => [s.command, s.passed]), [['echo um', true], ['exit 4', false]], 'smoke depois da verificação')
+      assert.match(multi.output, /\$ echo um\num/)
+    }
 
     // Custom command runs jailed: writes inside the worktree work, outside are refused
     const outside = join(homedir(), `.workstuff-gate-escape-${process.pid}`)
@@ -293,6 +357,14 @@ if (import.meta.main && process.argv.includes('--selfcheck')) {
     if (!failing.skipped) assert.equal(failing.exitCode, 3)
 
     assert.deepEqual(nonDocFiles(['README.md', 'docs/api.yaml', 'src/a.ts', 'CHANGELOG']), ['src/a.ts'])
+    assert.deepEqual(nonTestFiles(['src/a.test.ts', 'tests/x.py', 'pkg/a_test.go', 'src/FooTest.java', 'scripts/check-nav.ts', 'src/a.ts']), ['src/a.ts'])
+
+    writeFileSync(join(tmp, 'a.test.ts'), 'x')
+    assert.deepEqual(checkCriteriaCoverage(tmp, ['CA1', 'CA2', 'CA3', 'CA4'], [
+      { id: 'ca1', tests: ['a.test.ts::soma dois números'] },
+      { id: 'CA2', tests: [], untestable: 'texto de ajuda' },
+      { id: 'CA3', tests: ['sumiu.test.ts'] },
+    ]).map(c => c.status), ['tested', 'untestable', 'missing', 'missing'], 'arquivo citado precisa existir; critério omitido falta')
 
     const repo = join(tmp, 'docs-repo')
     mkdirSync(repo)
