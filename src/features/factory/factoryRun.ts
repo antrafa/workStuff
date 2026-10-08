@@ -33,12 +33,13 @@ export const AGENT_UI: Record<SpecializedAgentId, { name: string; role: string; 
   reviewer: { name: 'Reviewer', role: tx({ en: 'Code and criteria review', pt: 'Revisão de código e critérios' }), color: 'var(--fx-reviewer)' },
   security: { name: 'Security', role: tx({ en: 'Security audit', pt: 'Auditoria de segurança' }), color: 'var(--fx-security)' },
   documenter: { name: 'Documenter', role: tx({ en: 'Docs and MR description', pt: 'Documentação e descrição do MR' }), color: 'var(--fx-documenter)' },
+  verifier: { name: 'Verifier', role: tx({ en: 'Tries to refute blocking findings', pt: 'Tenta refutar os achados bloqueantes' }), color: 'var(--fx-verifier)' },
 }
 export { AGENT_ORDER }
 
 // Claude only: judgment (spec, plan, review) on the strong model, typing (build, tests, docs) on the cheap one
 export const CLAUDE_SPLIT: Record<SpecializedAgentId, string> = {
-  analyst: 'opus', architect: 'opus', reviewer: 'opus', security: 'opus',
+  analyst: 'opus', architect: 'opus', reviewer: 'opus', security: 'opus', verifier: 'opus',
   implementer: 'sonnet', tester: 'sonnet', documenter: 'sonnet',
 }
 

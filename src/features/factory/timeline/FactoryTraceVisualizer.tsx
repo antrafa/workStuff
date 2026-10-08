@@ -13,6 +13,7 @@ import {
   User,
   Wrench,
   BookOpen,
+  SearchCheck,
   ClipboardList,
   ShieldAlert,
 } from 'lucide-react'
@@ -51,6 +52,7 @@ const AGENT_ICON: Record<SpecializedAgentId, typeof Cpu> = {
   reviewer: Eye,
   security: ShieldAlert,
   documenter: BookOpen,
+  verifier: SearchCheck,
 }
 
 

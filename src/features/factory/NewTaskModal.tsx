@@ -36,6 +36,8 @@ export function NewTaskModal({ open, onClose, onCreated }: Props) {
   const [repoPath, setRepoPath] = useState('')
   const [baseBranch, setBaseBranch] = useState('')
   const [verifyCommand, setVerifyCommand] = useState('')
+  const [smokeCommand, setSmokeCommand] = useState('')
+  const [autoMr, setAutoMr] = useState(false)
   const [budgetUsd, setBudgetUsd] = useState('')
   const [agentModels, setAgentModels] = useState<Partial<Record<SpecializedAgentId, string>>>({})
   const [defaultModel, setDefaultModel] = useState('')
@@ -119,6 +121,8 @@ export function NewTaskModal({ open, onClose, onCreated }: Props) {
         baseBranch: baseBranch.trim() || undefined,
         provider: provider ?? undefined,
         verifyCommand: verifyCommand.trim() || undefined,
+        smokeCommand: smokeCommand.trim() || undefined,
+        autoMr,
         budgetUsd: budgetUsd.trim() || undefined,
         agentModels,
         source: pickedIssue
@@ -131,6 +135,8 @@ export function NewTaskModal({ open, onClose, onCreated }: Props) {
       setDescription('')
       setRepoPath('')
       setVerifyCommand('')
+      setSmokeCommand('')
+      setAutoMr(false)
       setBudgetUsd('')
       setAgentModels({})
     } catch (err) {
@@ -250,12 +256,28 @@ export function NewTaskModal({ open, onClose, onCreated }: Props) {
               <span className="eyebrow">{tx({ en: 'Verification command (optional)', pt: 'Comando de verificação (opcional)' })}</span>
               <input
                 className="input mono"
-                placeholder={tx({ en: 'detected from the project: npm test, mvn -q test, go test ./...', pt: 'detectado pelo projeto: npm test, mvn -q test, go test ./...' })}
+                placeholder={tx({ en: 'detected from the project: lint, typecheck, test, build; mvn -q verify; go test ./...', pt: 'detectado pelo projeto: lint, typecheck, test, build; mvn -q verify; go test ./...' })}
                 value={verifyCommand}
                 onChange={e => setVerifyCommand(e.target.value)}
               />
               <span className="muted" style={{ fontSize: 12 }}>
                 {tx({ en: 'Runs after each Implementer delivery, inside the sandbox. e.g. npm run typecheck && npm test', pt: 'Roda depois de cada entrega do Implementer, dentro do sandbox. Ex.: npm run typecheck && npm test' })}
+              </span>
+            </label>
+
+            <label className="stack" style={{ gap: 4 }}>
+              <span className="eyebrow">{tx({ en: 'Smoke command (optional)', pt: 'Comando de smoke (opcional)' })}</span>
+              <input className="input mono" value={smokeCommand} onChange={e => setSmokeCommand(e.target.value)} />
+              <span className="muted" style={{ fontSize: 12 }}>
+                {tx({ en: 'Runs last, in the same sandbox: start the app, hit it, stop it. e.g. npm run dev & sleep 5; curl -fs localhost:5173 >/dev/null', pt: 'Roda por último, no mesmo sandbox: sobe a aplicação, chama, derruba. Ex.: npm run dev & sleep 5; curl -fs localhost:5173 >/dev/null' })}
+              </span>
+            </label>
+
+            <label className="row" style={{ gap: 10, alignItems: 'flex-start' }}>
+              <input type="checkbox" checked={autoMr} onChange={e => setAutoMr(e.target.checked)} style={{ marginTop: 3 }} />
+              <span className="stack" style={{ gap: 4 }}>
+                <b>{tx({ en: 'Open the MR by itself when everything is verified', pt: 'Abrir o MR sozinho quando tudo estiver verificado' })}</b>
+                <span className="muted" style={{ fontSize: 12 }}>{tx({ en: 'Only when nothing blocks and nothing needs a look (tests per criterion, no sensitive paths, no refuted finding, security tools installed). Otherwise it waits for you as usual.', pt: 'Só quando nada bloqueia e nada pede atenção (teste por critério, nenhum caminho sensível, nenhum achado refutado, ferramentas de segurança instaladas). Senão, espera por você como sempre.' })}</span>
               </span>
             </label>
 

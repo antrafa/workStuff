@@ -1,6 +1,7 @@
 // End-to-end check of the factory pipeline with a fake `claude` on PATH: no tokens, no real repo.
 // Covers: Analyst questions stop the run, correction loop after a failed gate, review squad
-// blocking finding + automatic fix round, Documenter gate discarding non-doc files.
+// blocking finding + automatic fix round, Verifier refuting a finding, Documenter gate discarding
+// non-doc files, readiness (blockers and attention), rebase and verification on a base that moved.
 // Run: node scripts/check-factory-pipeline.ts
 import assert from 'node:assert/strict'
 import { execFileSync } from 'node:child_process'
@@ -49,13 +50,15 @@ if (sys.includes('o Analyst')) {
   out = env({ changedFiles: ['feature.txt'], commitMessage: 'feat: feature', summary: 'feito' })
 } else if (sys.includes('o Tester')) {
   fs.writeFileSync('feature.test.txt', 'teste\\n')
-  out = env({ testSuitePassed: true, testsRan: ['t1'], details: 'cobertura ok' })
+  out = env({ testSuitePassed: true, testsRan: ['t1'], criteriaTests: [{ id: 'CA1', tests: ['feature.test.txt'] }], details: 'cobertura ok' })
+} else if (sys.includes('o Verifier')) {
+  out = env({ verdicts: [{ index: 1, holds: !prompt.includes('REFUTA'), reason: 'a entrada já é validada antes' }] })
 } else if (sys.includes('o Reviewer') && prompt.includes('PROSA')) {
   out = 'Revisei tudo e está certo.'
 } else if (sys.includes('o Reviewer')) {
-  const second = prompt.includes('rodada anterior') && !prompt.includes('TEIMOSO')
+  const second = prompt.includes('rodada anterior') && !prompt.includes('TEIMOSO') && !prompt.includes('REFUTA')
   out = env({ findings: second ? [] : [{ severity: 'high', confidence: 90, file: 'feature.txt', line: 1, description: 'falta X' }],
-    criteria: [{ criterion: 'Dado x, quando y, então ok', met: true, evidence: 'feature.txt' }], mrDescription: 'rascunho', summary: 'revisado' })
+    criteria: [{ id: 'CA1', criterion: 'Dado x, quando y, então ok', met: true, evidence: 'feature.txt' }], mrDescription: 'rascunho', summary: 'revisado' })
 } else if (sys.includes('o Security')) {
   out = env({ findings: [], summary: 'seguro' })
 } else if (sys.includes('o Documenter')) {
@@ -115,8 +118,16 @@ try {
   assert.equal(done.qaReport?.passed, true)
   assert.ok(existsSync(join(wt, 'README.md')) && !existsSync(join(wt, 'sneaky.ts')), 'Documenter só mexe em documentação')
   assert.equal(done.handoffs?.docs?.mrDescription, 'descrição final')
-  assert.equal(done.spans!.filter(s => s.agentId === 'security').length, 1, 'Security limpo na rodada 1 não roda de novo na correção')
+  assert.equal(done.spans!.filter(s => s.agentId === 'security').length, 2, 'Security audita a correção também')
   assert.equal(done.spans!.filter(s => s.agentId === 'reviewer').length, 2, 'Reviewer confere a correção')
+  assert.equal(done.spans!.filter(s => s.agentId === 'verifier').length, 1, 'Verifier só roda quando há achado bloqueante')
+  assert.equal(done.spans!.filter(s => s.agentId === 'tester').length, 2, 'Tester roda de novo depois da correção')
+  assert.ok(done.spans!.findIndex(s => s.agentId === 'documenter') < done.spans!.findIndex(s => s.agentId === 'reviewer'), 'revisão lê a documentação')
+  assert.deepEqual(done.qaReport?.criteria?.map(c => c.status), ['tested'], 'critério ligado a um arquivo de teste que existe')
+  assert.deepEqual(done.readiness?.blockers, [], 'nada bloqueia')
+  assert.ok(done.securityReport?.tools?.some(t => t.tool === 'gitleaks'), 'ferramentas de segurança registradas')
+  assert.equal(done.qaReport?.baseSync?.status, 'current')
+  assert.ok(done.verifiedBase, 'base verificada registrada')
   assert.ok(done.spans!.every(s => s.status !== 'running'))
   assert.ok(done.spans!.some(s => s.usage?.costUsd === 0.01), 'custo por agente registrado')
   const jailSeen = JSON.parse(readFileSync(`${wt}.agent-home/claude/jail-seen.json`, 'utf-8'))
@@ -128,6 +139,17 @@ try {
   assert.match(log, /^test: /m)
   assert.match(log, /^fix: address automatic review findings/m)
   assert.match(log, /^feat: feature/m)
+  // The base moved after the review: the finish rebases and verifies again before merging
+  const { reverifyOnNewBase } = await import('../server/lib/factory/pipeline.ts')
+  writeFileSync(join(repo, 'outro.txt'), 'base andou\n')
+  git('add', 'outro.txt')
+  git('commit', '-m', 'feat: base andou')
+  const moved = await reverifyOnNewBase(ctx, done)
+  assert.equal(moved.qaReport?.baseSync?.status, 'rebased')
+  assert.notEqual(moved.verifiedBase, done.verifiedBase)
+  assert.ok(existsSync(join(wt, 'outro.txt')), 'branch em cima da base nova')
+  assert.equal(moved.qaReport?.passed, true, 'verificação de novo sobre a base nova')
+  assert.equal(await reverifyOnNewBase(ctx, moved), moved, 'base parada, nada a refazer')
   await removeWorktree(repo, wt, done.branchName)
 
   // Model per agent: the override goes to its agent only, the others keep the task model
@@ -136,8 +158,8 @@ try {
   assert.deepEqual(modelOf('implementer'), new Set(['base-model']))
 
   // Failure paths that used to pass silently. Each builds a fresh task on the same repo.
-  const runCase = async (id: string, title: string) => {
-    const t: Task = { ...task, id, branchName: `factory/${id}`, title, spans: [] }
+  const runCase = async (id: string, title: string, patch: Partial<Task> = {}) => {
+    const t: Task = { ...task, id, branchName: `factory/${id}`, title, spans: [], ...patch }
     await store.saveTask(t)
     const c = { ...ctx, taskId: id }
     return { c, built: await buildTask(c, await planTask(c, t)) }
@@ -146,6 +168,18 @@ try {
   assert.equal(prose.built.securityReport?.passed, false, 'Reviewer sem envelope não aprova')
   assert.match(prose.built.securityReport!.findings[0].description, /Reviewer did not finish/)
   await removeWorktree(repo, prose.built.worktreePath!, prose.built.branchName)
+
+  const refuted = await runCase('fac-refuta', 'Feature REFUTA')
+  assert.equal(refuted.built.securityReport?.passed, true, 'achado refutado não bloqueia')
+  assert.equal(refuted.built.securityReport?.fixRounds, 0, 'nem gasta rodada de correção')
+  assert.ok(refuted.built.securityReport?.findings[0].refuted, 'refutação fica à mostra')
+  assert.ok(refuted.built.readiness?.attention.some(a => /refuted/.test(a)), 'e pede um olhar humano')
+  await removeWorktree(repo, refuted.built.worktreePath!, refuted.built.branchName)
+
+  const unverified = await runCase('fac-sem-verificacao', 'Feature', { verifyCommand: undefined })
+  assert.equal(unverified.built.qaReport?.passed, false, 'sem comando de verificação não há aprovação')
+  assert.match(unverified.built.readiness!.blockers[0], /Nothing was verified/)
+  await removeWorktree(repo, unverified.built.worktreePath!, unverified.built.branchName)
 
   const stubborn = await runCase('fac-stubborn', 'Feature TEIMOSO')
   assert.equal(stubborn.built.securityReport?.passed, false)

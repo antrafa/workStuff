@@ -16,11 +16,11 @@ export type FactoryTaskState =
 // types file so the web app can import it without pulling server code.
 export const RUNNING_STATES: FactoryTaskState[] = ['planning', 'building', 'qa_security']
 
-export type SpecializedAgentId = 'analyst' | 'architect' | 'implementer' | 'tester' | 'reviewer' | 'security' | 'documenter'
+export type SpecializedAgentId = 'analyst' | 'architect' | 'implementer' | 'tester' | 'documenter' | 'reviewer' | 'security' | 'verifier'
 
 // Pipeline order: the web app draws lanes and lists agents from this, so a new agent
 // shows up everywhere once it is added here and in agents.ts.
-export const AGENT_ORDER: SpecializedAgentId[] = ['analyst', 'architect', 'implementer', 'tester', 'reviewer', 'security', 'documenter']
+export const AGENT_ORDER: SpecializedAgentId[] = ['analyst', 'architect', 'implementer', 'tester', 'documenter', 'reviewer', 'security', 'verifier']
 
 // Tokens and cost the CLI reported for one agent run (only what the provider tells us).
 export type AgentUsage = {
@@ -85,15 +85,33 @@ export type BuildEnvelope = {
   summary: string
 }
 
+// Which tests the Tester says cover one acceptance criterion (CA1, CA2...), or why none can.
+export type CriterionTests = {
+  id: string
+  tests: string[]
+  untestable?: string
+}
+
 export type TestEnvelope = {
   status: 'ok' | 'error'
   testSuitePassed: boolean
   testsRan: string[]
+  criteriaTests: CriterionTests[]
   coverageNotes?: string
   details?: string
 }
 
+// The Tester's claim checked in code: every test file it names exists.
+export type CriterionCoverage = {
+  id: string
+  status: 'tested' | 'untestable' | 'missing'
+  tests: string[]
+  note?: string
+}
+
 export type CriterionCheck = {
+  // CA1, CA2...: matched against the spec, so a rephrased or dropped criterion is caught
+  id?: string
   criterion: string
   met: boolean
   evidence: string
@@ -123,11 +141,33 @@ export type TaskHandoffs = {
   docs?: DocsEnvelope
 }
 
+export type VerifyStep = {
+  command: string
+  passed: boolean
+  exitCode: number
+  durationMs: number
+}
+
 export type QaReport = {
   passed: boolean
   testsRan?: string
   output?: string
   summary: string
+  steps?: VerifyStep[]
+  criteria?: CriterionCoverage[]
+  // Non-test files the Tester changed: reviewed, but worth a human look
+  testerTouched?: string[]
+  // Rebase onto the newest base before the last verification
+  baseSync?: { status: 'current' | 'rebased' | 'conflict'; detail?: string }
+}
+
+// One security tool run on the diff (gitleaks, semgrep, npm audit). `missing`: not installed on
+// this machine, `error`: it could not finish (network, bad config).
+export type ScanToolResult = {
+  tool: string
+  status: 'passed' | 'failed' | 'missing' | 'error' | 'skipped'
+  output?: string
+  install?: string
 }
 
 export type SecurityFinding = {
@@ -139,6 +179,8 @@ export type SecurityFinding = {
   confidence?: number
   // Which reviewer of the squad raised it
   agentId?: SpecializedAgentId
+  // Set when the Verifier showed the failure cannot happen: kept for the human, never blocks
+  refuted?: string
 }
 
 // The verdict is computed in code from findings and criteria, never taken from the agent.
@@ -149,6 +191,15 @@ export type SecurityReport = {
   summary: string
   // Automatic fix-then-review rounds already spent on blocking findings
   fixRounds?: number
+  tools?: ScanToolResult[]
+}
+
+// What stands between the task and a merge, recomputed in code from the reports.
+// Blockers stop the finish unless the developer writes why; attention items only stop the
+// automatic MR, because they need a human eye but are not known to be wrong.
+export type Readiness = {
+  blockers: string[]
+  attention: string[]
 }
 
 export type DiffStat = {
@@ -182,6 +233,15 @@ export type FactoryTask = {
   clarifications?: string
   // Shell command that verifies the change (tests, lint, build); autodetected when empty
   verifyCommand?: string
+  // Runs after the verification, in the same jail: start the app, hit it, stop it
+  smokeCommand?: string
+  // Opens the MR by itself when nothing blocks and nothing needs attention
+  autoMr?: boolean
+  readiness?: Readiness
+  // Base commit the last verification ran on: a newer base means rebase and verify again
+  verifiedBase?: string
+  // Why the developer finished with blockers on, and which ones
+  finishOverride?: { reason: string; blockers: string[]; at: string }
   // Model per agent, overriding `model` (e.g. a frontier model to plan, a cheap one to build)
   agentModels?: Partial<Record<SpecializedAgentId, string>>
   // Spending cap for the whole task in USD; checked before each agent run
