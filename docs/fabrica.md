@@ -1,6 +1,6 @@
 # Fábrica de Software
 
-A Fábrica transforma uma demanda (texto livre ou issue do GitLab/GitHub) em código implementado, testado, revisado e documentado, pronto para virar MR. Sete agentes de IA especializados fazem o trabalho que exige leitura e julgamento; código determinístico faz o resto e decide se cada entrega passa. Tudo acontece numa cópia isolada do repositório, e nada vai para o Git remoto sem a aprovação de uma pessoa.
+A Fábrica transforma uma demanda (texto livre ou issue do GitLab/GitHub) em código implementado, testado, revisado e documentado, pronto para virar MR. Oito agentes de IA especializados fazem o trabalho que exige leitura e julgamento; código determinístico faz o resto e decide se cada entrega passa. Tudo acontece numa cópia isolada do repositório, e nada vai para o Git remoto sem a aprovação de uma pessoa.
 
 Este documento descreve como ela funciona por dentro. Para a visão do sistema inteiro, veja [arquitetura.md](arquitetura.md).
 
@@ -9,7 +9,7 @@ Este documento descreve como ela funciona por dentro. Para a visão do sistema i
 1. [Um exemplo do começo ao fim](#1-um-exemplo-do-começo-ao-fim)
 2. [Princípios](#2-princípios)
 3. [Conceitos](#3-conceitos)
-4. [Os sete agentes](#4-os-sete-agentes)
+4. [Os oito agentes](#4-os-oito-agentes)
 5. [A esteira passo a passo](#5-a-esteira-passo-a-passo)
 6. [Estados da tarefa](#6-estados-da-tarefa)
 7. [Portões](#7-portões)
@@ -39,17 +39,19 @@ Você pede: *"Mover Máquina e Perfil de equipe para o topo da seção Ferrament
 3. Você lê o plano na gaveta da tarefa, edita se quiser, e clica em **Aprovar e Construir**.
 4. A esteira cria uma worktree em `~/.workstuff/worktrees/workStuff/<id>` numa branch `factory/<id>`. O seu checkout não é tocado.
 5. O **Implementer** edita `nav.ts`. Os portões conferem que algo mudou, que o arquivo declarado existe e rodam `npm run typecheck` dentro do sandbox. Passou: commit `refactor(nav): ...`.
-6. O **Tester** escreve `scripts/check-nav.ts`. A esteira commita o teste e roda a verificação de novo.
-7. **Reviewer** e **Security** revisam o diff em paralelo. Se aparecer um achado grave, o Implementer recebe o achado e corrige sozinho, até duas rodadas.
-8. O **Documenter** atualiza a documentação afetada e escreve a descrição do MR.
-9. A tarefa chega em **aguardando revisão**. Você vê o diff, o relatório de QA, os achados e os critérios, pede ajuste se precisar, e escolhe **Criar MR/PR** ou **Merge Local**.
+6. O **Tester** escreve `scripts/check-nav.ts` e diz que ele cobre o critério CA1. A esteira commita o teste, roda a verificação de novo e confere que o arquivo citado existe.
+7. O **Documenter** atualiza a documentação afetada e escreve a descrição do MR.
+8. As ferramentas de segurança instaladas rodam sobre a branch. **Reviewer** e **Security** revisam o diff em paralelo. Se aparecer um achado grave, o **Verifier** tenta refutá-lo; se ele resiste, o Implementer corrige sozinho, o Tester cobre a correção, até duas rodadas.
+9. A branch é rebaseada sobre a base atual e verificada de novo.
+10. A tarefa chega em **aguardando revisão**. Você vê o que bloqueia a entrega e o que pede o seu olhar, o diff, o QA, os achados e os critérios, pede ajuste se precisar, e escolhe **Criar MR/PR** ou **Merge Local**. Com "Abrir o MR sozinho" ligado e nada a mostrar, o MR abre sem você.
 
 Durante tudo isso, o cartão da tarefa no Quadro mostra qual agente está trabalhando e em quê; clicar nele abre o trace, com a atividade ao vivo dos agentes e as raias por agente. Clicar numa fase abre um modal com o que ela produziu.
 
 ## 2. Princípios
 
 - **O agente propõe, o código decide.** Agentes escrevem e julgam. Comandos previsíveis (git, testes, build) rodam como código, e o veredito é calculado em código, nunca aceito da boca do agente.
-- **O humano decide nos pontos que importam.** Três paradas: responder às dúvidas do Analyst, aprovar o plano, aprovar a entrega.
+- **O humano decide nos pontos que importam.** Três paradas: responder às dúvidas do Analyst, aprovar o plano, aprovar a entrega. A última vira automática quando a tarefa pede e nada bloqueia nem pede atenção.
+- **Não verificado não é aprovado.** Sem comando de verificação, com a suíte falhando, com achado bloqueante ou critério não atendido, a entrega só segue com uma justificativa escrita.
 - **Isolamento por padrão.** Toda escrita acontece numa worktree; todo agente com escrita e toda execução de código escrito por agente rodam presos no `bwrap`.
 - **Contexto passa por contrato.** Cada agente devolve um envelope JSON tipado; o próximo agente recebe o envelope, não a conversa.
 - **Falha vira correção, não recomeço.** Portão reprovado devolve ao agente exatamente o que falhou, na mesma sessão quando possível.
@@ -69,17 +71,18 @@ Durante tudo isso, o cartão da tarefa no Quadro mostra qual agente está trabal
 | **Veredito** | A decisão, em código, se a revisão bloqueia a entrega (`computeVerdict`). |
 | **Execução** | Uma ação longa em andamento (planejar, construir, ajustar), registrada em memória com o seu `AbortController` (`server/lib/factory/executions.ts`). |
 
-## 4. Os sete agentes
+## 4. Os oito agentes
 
 | Agente | Quando roda | Modo | Onde roda | Entrega (envelope) | Quem confere |
 |---|---|---|---|---|---|
 | **Analyst** | Início do planejamento | leitura | seu repositório | `SpecEnvelope`: resumo, critérios de aceite, fora do escopo, dúvidas | Você, quando há dúvidas |
 | **Architect** | Depois do Analyst, se não houver dúvida | leitura | seu repositório | `PlanEnvelope`: plano em markdown, arquivos-alvo, riscos, cenários de teste | Você, ao aprovar |
 | **Implementer** | Construção, correções, ajustes | escrita | worktree, no sandbox | `BuildEnvelope`: arquivos alterados, mensagem de commit, resumo, ou bloqueio | Portões |
-| **Tester** | Depois do primeiro commit | escrita | worktree, no sandbox | `TestEnvelope`: testes executados, cobertura, parecer | Portão de verificação |
-| **Reviewer** | Revisão, em paralelo com Security | leitura | worktree | `ReviewEnvelope`: achados, checagem de cada critério, rascunho do MR | Veredito em código |
-| **Security** | Revisão, em paralelo com Reviewer; nas rodadas de correção, só se teve achados | leitura | worktree | `ReviewEnvelope`: achados de segurança | Veredito em código |
-| **Documenter** | Depois da revisão, se alguma documentação cita os arquivos alterados | escrita | worktree, no sandbox | `DocsEnvelope`: documentação alterada, descrição final do MR | Portão "só documentação" |
+| **Tester** | Depois do primeiro commit, de cada rodada de correção e de cada ajuste | escrita | worktree, no sandbox | `TestEnvelope`: testes, arquivo de teste por critério (`criteriaTests`), parecer | Portão de verificação e de cobertura por critério |
+| **Documenter** | Antes da revisão, se alguma documentação cita os arquivos alterados | escrita | worktree, no sandbox | `DocsEnvelope`: documentação alterada, descrição final do MR | Portão "só documentação" |
+| **Reviewer** | Revisão, em paralelo com Security | leitura | worktree | `ReviewEnvelope`: achados, checagem de cada critério por id, rascunho do MR | Veredito em código |
+| **Security** | Revisão, em paralelo com Reviewer, em toda rodada, depois das ferramentas de segurança | leitura | worktree | `ReviewEnvelope`: achados de segurança | Veredito em código |
+| **Verifier** | Só quando há achado bloqueante | leitura | worktree | `verdicts`: cada achado se sustenta ou não, com o motivo | Só "não se sustenta" com motivo refuta |
 
 Cada agente recebe o que precisa dos anteriores: os critérios do Analyst chegam ao Architect, ao Implementer, ao Tester e ao Reviewer; os cenários de teste do Architect chegam ao Tester; os achados da rodada anterior chegam aos revisores da rodada seguinte.
 
@@ -107,18 +110,24 @@ flowchart TD
   IM --> G1[Portões: alterou algo? arquivos existem? verificação]
   G1 -->|reprovou, até 3 tentativas| IM
   G1 --> C1[Código: commit]
-  C1 --> TE[Tester]
+  C1 --> TE[Tester: teste por critério]
   TE --> G2[Código: commit dos testes e nova verificação]
-  G2 --> RV[Reviewer e Security em paralelo]
-  RV --> V{Veredito em código}
-  V -->|bloqueio, até 2 rodadas| FX[Implementer corrige os achados]
-  FX --> RV
-  V --> DO[Documenter]
+  G2 --> DO[Documenter]
   DO --> G3[Portão: só documentação]
-  G3 --> H{{Você revisa}}
+  G3 --> SC[Ferramentas de segurança]
+  SC --> RV[Reviewer e Security em paralelo]
+  RV --> VF[Verifier tenta refutar os bloqueantes]
+  VF --> V{Veredito em código}
+  V -->|bloqueio ou suíte falhando, até 2 rodadas| FX[Implementer corrige]
+  FX --> TE2[Tester cobre a correção]
+  TE2 --> SC
+  V --> SY[Rebase na base atual e verificação]
+  SY --> R{Prontidão em código}
+  R -->|MR automático e nada a mostrar| F
+  R --> H{{Você revisa}}
   H -->|ajuste| AJ[Implementer ajusta]
-  AJ --> RV
-  H --> F[MR/PR ou merge local]
+  AJ --> TE2
+  H -->|bloqueio exige justificativa| F[MR/PR ou merge local]
 ```
 
 O código da esteira está em `server/lib/factory/pipeline.ts`. As rotas (`server/routes/factory.ts`) só cuidam de HTTP: validar o estado, abrir o stream e chamar a fase.
@@ -146,42 +155,69 @@ O código da esteira está em `server/lib/factory/pipeline.ts`. As rotas (`serve
 ### 5.3 Testes
 
 1. A tarefa vai para `qa_security`.
-2. O **Tester** recebe a demanda, os critérios, os cenários de teste do plano e a saída da última verificação, e escreve os testes que faltam.
+2. O **Tester** recebe a demanda, os critérios numerados (CA1, CA2...), os cenários de teste do plano e a saída da última verificação. Cada critério precisa de pelo menos um teste que falharia se ele deixasse de valer; no envelope, `criteriaTests` diz qual arquivo cobre cada critério, ou por que um critério não tem comportamento executável (`untestable`).
 3. Se ele alterou algo, a esteira commita (`test: cobre "..."`) e roda a verificação de novo. Quem decide se a suíte passa é esse resultado, não o relatório do Tester.
+4. No fim da esteira, `checkCriteriaCoverage` confere cada critério contra o disco: `tested` quando todo arquivo citado existe, `untestable` quando o Tester explicou, `missing` quando ele omitiu o critério ou citou um arquivo que não existe. Arquivos que não são de teste alterados pelo Tester ficam registrados em `qaReport.testerTouched`.
+5. O Tester roda de novo depois de cada rodada de correção e de cada ajuste, com o aviso de que o código mudou: os testes finais descrevem o código final.
 
-### 5.4 Revisão em dupla (`reviewAndFix`)
-
-1. **Reviewer** e **Security** recebem o diff completo contra a base (até 80.000 caracteres; acima disso o prompt avisa que o diff foi cortado) e rodam ao mesmo tempo. O Reviewer recebe também o comando, o código de saída e o final da saída da última verificação: ele só lê, então é esse resultado que comprova um critério como "o fluxo continua funcionando". Se um falhar, a esteira espera o outro terminar antes de marcar a falha, para nada continuar escrevendo depois.
-2. Os achados são fundidos: o mais grave primeiro, e o mesmo `arquivo:linha` apontado pelos dois fica uma vez só.
-3. O **veredito** é calculado em código ([seção 9](#9-o-veredito-da-revisão)).
-4. Com bloqueio, o Implementer recebe os achados bloqueantes e os critérios não atendidos e corrige, passando pelos mesmos portões. Commit `fix: corrige achados da revisão automática (rodada N)`. Na rodada seguinte, cada revisor recebe só os próprios achados anteriores e confere se foram resolvidos. O Security só roda de novo se tiver tido achados: uma auditoria limpa vale para a correção de um achado do Reviewer.
-5. Até **2 rodadas** automáticas. Depois disso, o que sobrou vai para você.
-6. Uma correção que não altera nenhum arquivo encerra as rodadas na hora: revisar o mesmo código de novo só traria os mesmos achados. A tarefa vai para você com um achado que diz isso.
-
-### 5.5 Documentação
+### 5.4 Documentação
 
 1. Antes, a esteira procura documentação versionada que cite pelo caminho algum arquivo alterado (`docsCiting`). Sem nenhuma, o Documenter não roda e a descrição do MR é o rascunho do Reviewer.
-2. O **Documenter** recebe a demanda, a especificação, os arquivos alterados e o rascunho do Reviewer.
+2. O **Documenter** recebe a demanda, a especificação, os arquivos alterados e o resumo do Implementer. Ele roda antes da revisão, para a revisão ler o que ele escreveu.
 3. O portão "só documentação" descarta qualquer alteração fora de documentação (`.md`, `.mdx`, `.rst`, `.adoc`, `.txt`, `docs/`, `README*`, `CHANGELOG*`, `CONTRIBUTING*`): arquivos rastreados voltam para o último commit e arquivos novos são apagados.
 4. Commit `docs: ...` do que sobrou.
 
-### 5.6 Revisão humana
+### 5.5 Revisão (`reviewAndFix`)
 
-A tarefa chega em `review` com o diff, as estatísticas, o relatório de QA, os achados, a checagem dos critérios e os envelopes. Na gaveta você pode:
+1. **Ferramentas de segurança** (`server/lib/factory/scanners.ts`) rodam no jail sobre a branch, cada uma só quando está instalada e tem o que olhar:
+   - `gitleaks detect --log-opts <base>..HEAD`: segredos nos commits da branch. Um achado vira achado `critical` com confiança 100, sem depender do agente.
+   - `semgrep scan --config p/default` nos arquivos de código alterados.
+   - `npm audit --audit-level=high --omit=dev` quando `package.json` ou `package-lock.json` mudou.
+   - Ferramenta ausente aparece como "não instalado", com o caminho de instalação, e pede atenção na entrega. A esteira nunca instala nada.
+2. **Reviewer** e **Security** recebem o diff completo contra a base (até 80.000 caracteres; acima disso o prompt avisa que o diff foi cortado) e rodam ao mesmo tempo. O Reviewer recebe também o resultado da última verificação; o Security recebe a saída das ferramentas como evidência. Se um falhar, a esteira espera o outro terminar antes de marcar a falha, para nada continuar escrevendo depois. O Security roda em toda rodada: uma correção pode abrir um buraco como qualquer outra mudança.
+3. Os achados são fundidos: o mais grave primeiro, e o mesmo `arquivo:linha` apontado pelos dois fica uma vez só.
+4. **Verifier.** Se algum achado bloquearia, o Verifier recebe só esses achados e tenta refutar cada um lendo o código. Um achado deixa de bloquear apenas com `holds: false` e um motivo; achado sem resposta, ou Verifier sem envelope, continua bloqueando. O refutado fica na tela, riscado, com o motivo.
+5. O **veredito** é calculado em código ([seção 9](#9-o-veredito-da-revisão)).
+6. Com bloqueio, ou com a verificação ainda falhando, o Implementer recebe os achados bloqueantes, os critérios não atendidos e a saída da falha, e corrige passando pelos mesmos portões. Commit `fix: address automatic review findings (round N)`, depois o Tester cobre a correção. Na rodada seguinte, cada revisor recebe só os próprios achados anteriores e confere se foram resolvidos.
+7. Até **2 rodadas** automáticas. Depois disso, o que sobrou vai para você.
+8. Uma correção que não altera nenhum arquivo encerra as rodadas na hora: revisar o mesmo código de novo só traria os mesmos achados.
+
+### 5.6 Base atual e prontidão
+
+1. **Sincronização** (`syncWithBase`): uma base remota (`origin/main`) é atualizada com `git fetch`, que nunca pede senha (falhou, vale a última base buscada). Se a base andou, a branch é rebaseada sobre ela e a verificação roda de novo; um conflito desfaz o rebase e vira bloqueio. O commit da base verificada fica em `task.verifiedBase`.
+2. **Prontidão** (`assessDelivery`, `server/lib/factory/readiness.ts`) é calculada em código a partir dos relatórios e gravada em `task.readiness`:
+
+| Bloqueia a entrega | Pede o seu olhar |
+|---|---|
+| Nenhum comando de verificação | Critério sem teste automatizado (`missing` ou `untestable`) |
+| Verificação falhando ou que não rodou (diz qual etapa) | Achado refutado pelo Verifier |
+| Conflito com a base atual | Achado `medium` |
+| Achado bloqueante que resistiu ao Verifier | Ferramenta de segurança não instalada ou que não concluiu |
+| Critério de aceite não atendido | Tester alterou arquivo que não é de teste |
+| Revisão que não rodou ou ficou incompleta | Mais de 400 linhas alteradas |
+| | Caminho sensível: CI, Docker, Helm, Terraform, migração, manifesto de dependências, nomes com auth, secret, token, crypt, permission |
+
+3. **MR automático** (`task.autoMr`): se a tarefa pediu e não há nenhum item em nenhuma das duas colunas, a esteira abre o MR sozinha no fim da construção ou do ajuste. Nunca faz merge local sozinha, porque ele escreve no seu checkout.
+
+### 5.7 Revisão humana
+
+A tarefa chega em `review` com o que bloqueia e o que pede atenção no topo da decisão, o diff, as estatísticas, o QA (etapas da verificação e teste por critério), os achados, as ferramentas de segurança, a checagem dos critérios e os envelopes. Na gaveta você pode:
 
 - **Pedir ajuste**: texto livre, ou o botão "Pedir correção" num achado, que preenche o pedido com ele.
 - **Abrir no editor**: abre a worktree no VS Code (ou no editor de `WORKSTUFF_EDITOR`).
 - **Criar MR/PR**: faz push de `factory/<id>` e abre o MR/PR pela conexão de Repositórios correspondente, com a descrição do Documenter e `Closes #<issue>` quando veio de issue. Se não houver conexão correspondente, a branch fica publicada e a tela avisa para abrir o MR à mão.
+- **Entregar com bloqueios**: os botões de MR e merge ficam travados até você escrever por que a entrega segue mesmo assim (pelo menos 10 caracteres). O servidor confere de novo; o motivo e os bloqueios ficam em `task.finishOverride` e entram na descrição do MR, em "Entregue com bloqueios".
+- **Base que andou depois da revisão**: ao finalizar, a esteira compara a base com `task.verifiedBase`; se ela andou, faz o rebase e a verificação de novo antes do MR ou do merge, e recalcula os bloqueios.
 - **Merge local**: exige o seu repositório sem alterações pendentes, faz checkout da branch base, `merge --no-ff`, e volta para a branch onde você estava. Não faz push.
 - **Descartar**: para qualquer execução, remove a worktree e a branch e apaga a tarefa.
 
 Ao concluir (MR ou merge), a worktree é removida; no merge local a branch também.
 
-### 5.7 Ajuste (`adjustTask`)
+### 5.8 Ajuste (`adjustTask`)
 
-O pedido de ajuste passa pelo mesmo caminho da construção: Implementer com laço de correção, commit, e a revisão em dupla com as rodadas automáticas. Um ajuste que falha ou é parado volta a worktree ao commit da última revisão (`resetWorktree`) e devolve a tarefa para `review`: a revisão na tela continua valendo para o código que está lá, e um merge não leva commit que ninguém revisou. O ajuste só pode ser pedido a partir de `review`.
+O pedido de ajuste passa pelo mesmo caminho da construção: Implementer com laço de correção, commit, Tester, revisão com Verifier e rodadas automáticas, sincronização com a base e prontidão. Um ajuste que falha ou é parado volta a worktree ao commit da última revisão (`resetWorktree`) e devolve a tarefa para `review`: a revisão na tela continua valendo para o código que está lá, e um merge não leva commit que ninguém revisou. O ajuste só pode ser pedido a partir de `review`.
 
-### 5.8 Branch base
+### 5.9 Branch base
 
 A branch base padrão é a do `origin/HEAD` do repositório, então costuma ser `origin/main`. A worktree parte dela, mas o MR e o merge local apontam para `main` (`targetBranchOf`).
 
@@ -233,23 +269,25 @@ stateDiagram-v2
 |---|---|---|
 | **Há alterações** | Algum arquivo mudou em relação à base (alterações não commitadas mais o diff da branch), ignorando os links de dependência. | Correção pelo Implementer; esgotado, interrompe. |
 | **Arquivos declarados existem** | Cada arquivo do `changedFiles` existe no disco ou está no diff (um arquivo apagado de propósito conta). | Correção; esgotado, interrompe. |
-| **Verificação do projeto** | O comando de verificação termina com código 0, dentro do sandbox. | Correção; esgotado, segue para você com a falha. |
+| **Verificação do projeto** | Cada etapa da verificação termina com código 0, dentro do sandbox, parando na primeira que falha. | Correção; esgotado, vai para as rodadas de revisão como bloqueio. |
+| **Cobertura por critério** | Cada critério tem um arquivo de teste que existe, ou uma explicação do Tester. | Pede o seu olhar; segura o MR automático. |
+| **Ferramentas de segurança** | gitleaks, semgrep e npm audit, quando instalados e aplicáveis. | Segredo vira achado `critical`; o resto é evidência para o Security. |
+| **Base atual** | A branch rebaseia sem conflito sobre a base mais nova e passa na verificação de novo. | Conflito bloqueia a entrega. |
 | **Documenter só altera documentação** | Nenhum arquivo fora de documentação mudou. | Descarta as alterações fora de documentação e segue. |
 
-**Comando de verificação.** Por tarefa (`verifyCommand`) ou detectado (`detectVerifyCommand`), nesta ordem:
+**Comando de verificação.** O da tarefa (`verifyCommand`) substitui os detectados; sem ele, `detectVerifyCommands` junta todas as etapas que o projeto tem, e cada uma roda separada:
 
-| Arquivo no repositório | Comando |
+| Arquivo no repositório | Etapas |
 |---|---|
-| `package.json` com `test` real | `npm test` |
-| `package.json` sem teste, com `check` | `npm run check` |
-| `package.json` sem teste, com `typecheck` | `npm run typecheck` |
-| `package.json` sem teste, com `build` | `npm run build` |
-| `pom.xml` | `mvn -q test` |
-| `gradlew` | `./gradlew test` |
+| `package.json` | `npm run lint`, `npm run typecheck`, `npm test` (se for real), `npm run check`, `npm run build`, nesta ordem, as que existirem |
+| `pom.xml` | `mvn -q verify` (testes e os plugins ligados ao build) |
+| `gradlew` | `./gradlew build` (inclui `check`) |
 | `pytest.ini` ou `pyproject.toml` | `pytest` |
-| `go.mod` | `go test ./...` |
+| `go.mod` | `go vet ./...`, `go test ./...` |
 
-Sem comando detectado, a verificação é pulada e conta como aprovada, e os portões só conferem que algo mudou. Por isso o modo guiado pede um comando quando não encontra nenhum. Limite de 10 minutos; a saída guardada é a cauda (últimos 30.000 caracteres), que é onde a falha aparece.
+O **comando de smoke** da tarefa (`smokeCommand`) roda por último, no mesmo jail: subir a aplicação, chamá-la e derrubá-la. O jail tem o próprio espaço de processos, então o que ficar rodando morre junto.
+
+Sem nenhum comando, nada é verificado: o QA fica reprovado e a entrega bloqueada. Limite de 10 minutos por etapa; a saída guardada é a cauda (últimos 30.000 caracteres), que é onde a falha aparece.
 
 ## 8. Envelopes de handoff
 
@@ -267,13 +305,18 @@ Cada agente termina a resposta com um bloco ```` ```json ```` no formato pedido.
 { "status": "ok", "changedFiles": ["src/a.ts"], "commitMessage": "feat: ...", "summary": "..." }
 
 // Tester -> TestEnvelope
-{ "status": "ok", "testSuitePassed": true, "testsRan": ["..."], "coverageNotes": "...", "details": "..." }
+{ "status": "ok", "testSuitePassed": true, "testsRan": ["..."],
+  "criteriaTests": [{ "id": "CA1", "tests": ["src/a.test.ts"] }, { "id": "CA2", "tests": [], "untestable": "texto de ajuda" }],
+  "coverageNotes": "...", "details": "..." }
 
 // Reviewer e Security -> ReviewEnvelope
 { "status": "ok",
   "findings": [{ "severity": "high", "confidence": 85, "file": "src/a.ts", "line": 42, "description": "..." }],
-  "criteria": [{ "criterion": "...", "met": true, "evidence": "src/a.ts:42" }],
+  "criteria": [{ "id": "CA1", "criterion": "...", "met": true, "evidence": "src/a.ts:42" }],
   "mrDescription": "...", "summary": "..." }
+
+// Verifier -> verdicts (um por achado, pelo número no prompt)
+{ "verdicts": [{ "index": 1, "holds": false, "reason": "a entrada já é validada em src/a.ts:10" }] }
 
 // Documenter -> DocsEnvelope
 { "status": "ok", "changedFiles": ["README.md"], "mrDescription": "..." }
@@ -285,9 +328,11 @@ Os tipos ficam em `server/lib/factory/types.ts`, os parsers e os formatadores de
 
 ```
 bloqueia se houver
-  achado com severidade high ou critical E confiança >= 75   (sem confiança informada conta como 75)
+  achado não refutado com severidade high ou critical E confiança >= 75   (sem confiança informada conta como 75)
   OU critério de aceite marcado como não atendido
 ```
+
+Todo achado começa pela falha concreta: a entrada, o estado ou a sequência que faz o código errar. Código que "poderia" falhar sem um caminho que chegue lá não é high nem critical; em arquivo de teste, só conta um teste quebrado.
 
 A régua de severidade é avaliada por consequência real e não por regra quebrada:
 
@@ -303,7 +348,7 @@ Cada revisor lista no máximo 12 achados, do mais grave ao menos grave, e é ins
 **Revisão incompleta bloqueia** (`incompleteReview`). Antes do veredito, a esteira confere se a revisão aconteceu de fato:
 
 - Reviewer ou Security sem envelope JSON, ou com `status: "error"`;
-- Reviewer que avaliou menos critérios do que a especificação tem (a contagem, não o texto: revisores reescrevem os critérios).
+- Reviewer que não devolveu algum id de critério da especificação (CA1, CA2...). O id, não o texto: revisores reescrevem os critérios, e trocar um critério por outro inventado não passa.
 
 Em qualquer desses casos a revisão não passa e não há rodada automática, porque o Implementer não tem o que corrigir: a tarefa vai para você com um achado `high` explicando o motivo.
 
@@ -339,12 +384,14 @@ flowchart LR
 - **Nada vai ao remoto sem você.** O push só acontece em "Criar MR/PR".
 - **Validação na fronteira.** Provedor, modelo, modelos por agente, teto e branch base são validados ao criar ou editar a tarefa, porque viram argumentos de linha de comando.
 - **Só o localhost chama a API.** Uma requisição cujo `Host` ou `Origin` não seja `localhost`, `127.0.0.1` ou `[::1]` recebe 403 (`server/lib/localOrigin.ts`): sem isso, uma página aberta no navegador dispararia ações da Fábrica.
-- **Processos sem shell**, com uma exceção: o comando de verificação roda como `sh -c`, dentro do jail, porque é o seu comando.
+- **Processos sem shell**, com uma exceção: os comandos de verificação e de smoke rodam como `sh -c`, dentro do jail, porque são seus.
+- **Ferramentas de segurança no jail.** gitleaks, semgrep e npm audit leem código que o agente escreveu, então rodam no mesmo jail da verificação, com uma `HOME` descartável. Só rodam se você as instalou.
+- **`git fetch` sem pergunta.** A atualização da base roda com `core.askPass=true` e `ssh -o BatchMode=yes`: precisando de senha, falha e a última base buscada vale.
 
 ## 11. Modelos, custo e teto
 
 - **Custo e tokens** de cada execução de agente vêm da linha final do CLI (Claude informa tokens e custo em US$; Codex informa tokens; Antigravity não informa nada). Ficam em `span.usage` e são somados na tarefa (`taskUsage`).
-- **Modelo por agente** (`task.agentModels`) substitui o modelo da tarefa para um agente. O atalho "opus para julgar, sonnet para construir" usa opus em Analyst, Architect, Reviewer e Security e sonnet em Implementer, Tester e Documenter. Cada span registra o modelo com que rodou.
+- **Modelo por agente** (`task.agentModels`) substitui o modelo da tarefa para um agente. O atalho "opus para julgar, sonnet para construir" usa opus em Analyst, Architect, Reviewer, Security e Verifier e sonnet em Implementer, Tester e Documenter. Cada span registra o modelo com que rodou.
 - **Teto de custo** (`task.budgetUsd`) é conferido **antes** de cada agente, somando o custo de todos os spans da tarefa, inclusive tentativas anteriores. Atingido, a execução para com erro e você aumenta o teto na gaveta.
   - O custo só chega quando uma execução termina, então a última pode passar do teto.
   - Provedor que não informa custo nunca é barrado.
@@ -373,7 +420,7 @@ Prefixo `/api/factory`, em `server/routes/factory.ts`. As ações longas respond
 | Método e caminho | O que faz |
 |---|---|
 | `GET /tasks` | Lista as tarefas, já reconciliadas (estado de execução sem execução viva vira `error`). |
-| `POST /tasks` | Cria uma tarefa: título, descrição, repositório, base, provedor, modelo, modelos por agente, teto, comando de verificação, issue de origem. |
+| `POST /tasks` | Cria uma tarefa: título, descrição, repositório, base, provedor, modelo, modelos por agente, teto, comando de verificação, comando de smoke, MR automático (`autoMr`), issue de origem. |
 | `GET /tasks/:id` | Uma tarefa. |
 | `PATCH /tasks/:id` | Edita título, descrição, provedor, modelo, modelos por agente, teto, comando de verificação. |
 | `DELETE /tasks/:id` | Para a execução, remove worktree e branch, apaga a tarefa e a sessão. Responde 409 se a execução não parar em 5 s, para ela não regravar a tarefa apagada. |
@@ -385,7 +432,7 @@ Prefixo `/api/factory`, em `server/routes/factory.ts`. As ações longas respond
 | `POST /tasks/:id/cancel` | Para a execução em andamento. |
 | `GET /tasks/:id/diff` | Diff e estatísticas da worktree. |
 | `POST /tasks/:id/open-editor` | Abre a worktree no editor. |
-| `POST /tasks/:id/finish` | `mode: "mr"` (push e MR/PR) ou `"local_merge"`; outro valor responde 400. Registrado como execução: um segundo clique recebe 409 em vez de fazer um segundo merge. |
+| `POST /tasks/:id/finish` | `mode: "mr"` (push e MR/PR) ou `"local_merge"`; outro valor responde 400. Se a base andou, rebase e verificação antes. Com bloqueios, exige `override` (o motivo, 10 caracteres ou mais) e senão responde 409 com `blockers`. Registrado como execução: um segundo clique recebe 409 em vez de fazer um segundo merge. |
 | `POST /agents/run` | Executa um agente avulso, em modo leitura (SSE). |
 | `GET /preflight` | Para o modo guiado: `bwrap`, CLIs instalados, configurações e, com `repoPath`, branch, base, pendências e comando de verificação detectado. |
 | `GET /issues` | Issues abertas das conexões de Repositórios (até 30 por conexão). |
@@ -416,12 +463,14 @@ Tudo em `src/features/factory/`.
 | Arquivo | Responsabilidade |
 |---|---|
 | `server/lib/factory/types.ts` | Tipos e constantes compartilhados com a interface: estados, agentes e ordem (`AGENT_ORDER`), envelopes, spans, `taskUsage`. Sem import de `node:`, para o frontend poder importar. |
-| `server/lib/factory/agents.ts` | Os sete agentes: papel, modo e prompt de sistema, com a régua de achados compartilhada pelos revisores. |
+| `server/lib/factory/agents.ts` | Os oito agentes: papel, modo e prompt de sistema, com a régua de achados compartilhada pelos revisores. |
 | `server/lib/factory/pipeline.ts` | A esteira: `planTask`, `buildTask`, `adjustTask`, o laço de correção, a revisão em dupla, o Documenter, o teto de custo. |
 | `server/lib/factory/envelopes.ts` | Prompts de cada passo, leitura dos envelopes, `computeVerdict`, `mergeFindings`. |
-| `server/lib/factory/gates.ts` | Portões, detecção do comando de verificação, execução no jail. |
+| `server/lib/factory/gates.ts` | Portões, detecção das etapas de verificação, execução no jail (`runJailed`), cobertura por critério. |
+| `server/lib/factory/scanners.ts` | gitleaks, semgrep e npm audit no jail; segredo encontrado vira achado. |
+| `server/lib/factory/readiness.ts` | `assessDelivery`: o que bloqueia e o que pede atenção; `canAutoMr`. |
 | `server/lib/factory/runner.ts` | Argumentos de cada CLI por modo, jail `bwrap` (`jail`, `withSandbox`), `--resume`. |
-| `server/lib/factory/worktree.ts` | Criar, commitar, comparar, descartar arquivos, publicar, mesclar e remover worktrees. |
+| `server/lib/factory/worktree.ts` | Criar, commitar, comparar, descartar arquivos, rebasear sobre a base (`syncWithBase`), publicar, mesclar e remover worktrees. |
 | `server/lib/factory/store.ts` | `tasks.json`, spans, chamadas de ferramenta e a sessão JSONL com assinantes ao vivo. |
 | `server/lib/factory/executions.ts` | Registro em memória das execuções, cancelamento, estado de retorno após parada. |
 | `server/routes/factory.ts` | Rotas HTTP, guardas de estado, validação de entrada, streams SSE, MR/PR. |
@@ -434,13 +483,15 @@ Todos entram no `npm run check`:
 | Teste | Cobre |
 |---|---|
 | `node server/lib/factory/store.ts --selfcheck` | Tarefas, spans, ferramentas, sessão, assinantes. |
-| `node server/lib/factory/worktree.ts --selfcheck` | Worktree, link de dependências fora do commit (com `.gitignore` com e sem barra), descarte seletivo, merge com repositório sujo. |
+| `node server/lib/factory/worktree.ts --selfcheck` | Worktree, link de dependências fora do commit (com `.gitignore` com e sem barra), descarte seletivo, rebase sobre base que andou e conflito desfeito, merge com repositório sujo. |
 | `node server/lib/factory/agents.ts --selfcheck` | Todo agente da ordem tem definição; modos de leitura e escrita. |
 | `node server/lib/factory/runner.ts --selfcheck` | Argumentos por provedor e modo; escrita só no jail; `--resume`. |
-| `node server/lib/factory/gates.ts --selfcheck` | Portões, detecção do comando, jail de verdade (escrita fora da worktree barrada). |
-| `node server/lib/factory/envelopes.ts --selfcheck` | Leitura dos envelopes, veredito, fusão de achados, conteúdo dos prompts. |
+| `node server/lib/factory/gates.ts --selfcheck` | Portões, detecção das etapas, etapas em sequência com smoke por último, "nada para rodar" reprova, jail de verdade (escrita fora da worktree barrada), cobertura por critério. |
+| `node server/lib/factory/scanners.ts --selfcheck` | Ferramenta ausente sugerida e não instalada, códigos de saída, segredo vira achado. |
+| `node server/lib/factory/readiness.ts --selfcheck` | Cada bloqueio e cada ponto de atenção; MR automático só com tudo limpo. |
+| `node server/lib/factory/envelopes.ts --selfcheck` | Leitura dos envelopes, veredito, refutação do Verifier, critérios por id, fusão de achados, conteúdo dos prompts. |
 | `node server/lib/factory/executions.ts --selfcheck` | Registro, cancelamento, limpeza atrasada. |
-| `node scripts/check-factory-pipeline.ts` | A esteira inteira, com um `claude` falso no `PATH`: dúvida do Analyst, correção após portão, achado bloqueante corrigido na rodada automática, Documenter barrado, modelo por agente, teto de custo. Não gasta tokens. |
+| `node scripts/check-factory-pipeline.ts` | A esteira inteira, com um `claude` falso no `PATH`: dúvida do Analyst, correção após portão, achado bloqueante corrigido na rodada automática, achado refutado pelo Verifier, Tester depois da correção, Documenter barrado, sem verificação bloqueia, rebase quando a base anda, modelo por agente, teto de custo. Não gasta tokens. |
 
 ## 18. Como estender
 
@@ -463,6 +514,11 @@ O selfcheck de `agents.ts` falha se um agente da ordem ficar sem definição, e 
 - **Cache dentro de `node_modules`**: o `node_modules` é um link somente leitura para o seu repositório, então uma ferramenta que grava cache dentro dele (como o vitest) falha na verificação. Configure o comando da tarefa para contornar.
 - **Teto de custo**: conferido entre execuções, não no meio; sem efeito para provedores que não informam custo.
 - **Revisão de rodada 2 em diante** recebe o diff completo, não só o que mudou desde a rodada anterior.
+- **O Verifier só lê.** Ele refuta lendo o código, não executando; rodar um caso que prove a falha pediria uma worktree descartável.
+- **Cobertura por critério confere o arquivo, não o teste.** A esteira sabe que o arquivo citado existe e que a suíte passou, não que aquele teste exercita o critério; isso continua com o Reviewer.
+- **Caminhos sensíveis por nome**: `auth` também pega `author`. Falso positivo só segura o MR automático.
+- **Nova verificação no finish** acontece dentro da requisição: se a base andou, o clique em MR ou merge pode levar minutos.
+- **Ferramentas de segurança** dependem do que está instalado; `semgrep --config p/default` e `npm audit` precisam de rede.
 - **`tasks.json` é reescrito a cada evento de span**: suficiente para um usuário; com muitas tarefas paralelas, trocar por banco.
 - **MR/PR** depende de uma conexão em Repositórios com o mesmo host do `origin` do projeto e cujo grupo base contenha o projeto (`sourceForRemote`).
 - **`bwrap` só existe no Linux**: no macOS e no Windows, agentes com escrita e Antigravity não rodam, e a verificação não executa.
@@ -476,7 +532,8 @@ O selfcheck de `agents.ts` falha se um agente da ordem ficar sem definição, e 
 | A correção foi enviada, mas o erro continua igual | O `node --watch` não reiniciou o servidor. | Pare o `npm run dev` com Ctrl+C e suba de novo. |
 | QA reprovado com "bwrap (bubblewrap) não está instalado" | Sem `bwrap`, a verificação não roda fora do sandbox. | Instale o pacote `bubblewrap` (a tela Máquina mostra o comando). |
 | "o agente com escrita só roda dentro do bwrap" / "o Codex com escrita só roda dentro do bwrap" | Agente com escrita sem `bwrap`. | Instale o `bubblewrap` (a tela Máquina mostra o comando). |
-| Verificação passa em 0 s | Nenhum comando detectado. | Informe o comando de verificação da tarefa. |
+| Entrega bloqueada com "Nada foi verificado" | Nenhum comando detectado. | Informe o comando de verificação da tarefa, ou escreva por que entrega sem ele. |
+| "gitleaks não está instalado" pedindo atenção | Ferramenta ausente na máquina. | Instale pelo caminho indicado; sem ela, o MR automático não abre. |
 | "Teto de custo atingido" | O gasto somado chegou ao teto. | Aumente o teto na gaveta e tente de novo. |
 | Tarefa em "falhou" com "o servidor foi reiniciado" | O servidor caiu ou recarregou no meio da execução. | "Tentar novamente". |
 | "Falha de autenticação do provedor" | Sessão do CLI expirada. | `claude login` ou `codex login` no terminal, ou troque o provedor na gaveta. |
@@ -496,6 +553,9 @@ Os [runbooks de dev da Fábrica](../dev-runbooks/factory/) cobrem os procediment
 | Trace em raias por agente | super-simple-software-factory |
 | Especificação com critérios de aceite antes do plano; dúvidas que param a esteira | projeto de referência (triage e concept) |
 | Revisão em paralelo por especialistas; severidade por consequência; confiança mínima de 75; veredito em código | projeto de referência (review squad) |
+| Achado começa pela falha concreta; teste só conta se a asserção pode falhar; "não audite o arquivo inteiro" | projeto de referência (`REVIEW_FINDING_BAR`) |
+| Critério por id conferido contra a especificação; teste que prova comportamento | projeto de referência (sdd-compliance-reviewer e test-reviewer) |
+| Verifier adversarial, ferramentas de segurança, prontidão em código e MR automático | workStuff |
 | Até 3 tentativas de build e 2 rodadas automáticas de revisão | projeto de referência (`max_dev_retries`, `max_auto_rounds`) |
 | Worktree isolada, sandbox `bwrap`, aprovação local antes do MR | workStuff |
 

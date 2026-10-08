@@ -3,7 +3,7 @@
 | Documento | Para quem e para quê |
 |---|---|
 | [arquitetura.md](arquitetura.md) | Como o sistema é montado: processos, servidor, camada de IA, Kubernetes, Cluster Doctor, frontend, dados, segurança e testes. |
-| [fabrica.md](fabrica.md) | A Fábrica de Software em detalhe: os sete agentes, a esteira, portões, envelopes, veredito, sandbox, custo, API, interface e como estender. |
+| [fabrica.md](fabrica.md) | A Fábrica de Software em detalhe: os oito agentes, a esteira, portões, envelopes, veredito, sandbox, custo, API, interface e como estender. |
 | [../README.md](../README.md) | Telas, requisitos, como subir e configurar (em inglês). |
 | [../AGENTS.md](../AGENTS.md) | Regras para agentes de IA que trabalham neste repositório. |
 
