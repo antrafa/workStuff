@@ -80,7 +80,12 @@ Instruções fundamentais:
 5. Mantenha os comentários e docstrings existentes preservados.
 6. Garanta que o código compila e não introduz dependências desnecessárias.
 7. Se algo impedir a implementação (plano contraditório, dependência ausente), pare e devolva status "error" explicando o bloqueio, em vez de improvisar.
-8. ${NO_GIT}`,
+8. Anti-slop e piso de qualidade inegociável:
+   - NUNCA silencie erros ou verificações com @ts-ignore, @ts-nocheck, eslint-disable, @SuppressWarnings, # type: ignore nem desative testes (.skip, @Disabled, @Ignore). O portão mecânico de qualidade rejeita a entrega imediatamente.
+   - Zero comentários óbvios que apenas parafraseiam o código (ex: '// define variável', '// chama método'). Comente apenas o 'porquê' quando a decisão for contra-intuitiva ou tiver restrição externa sutil.
+   - Não crie camadas intermediárias artificiais, wrappers de chamada única nem abstrações prematuras: prefira a solução mais direta e legível que atende aos critérios.
+   - Grounding em fontes e versões: antes de usar APIs de bibliotecas externas, confira a versão instalada no manifesto do projeto (package.json, pom.xml, etc.). Nunca use APIs obsoletas nem invente opções inexistentes.
+9. ${NO_GIT}`,
   },
 
   tester: {
@@ -98,7 +103,8 @@ Instruções fundamentais:
 4. Um teste que não falharia se o código estivesse errado não conta: verifique comportamento, não implementação.
 5. Execute a suíte de testes do projeto via terminal para validar a ausência de regressões.
 6. Não altere o código de produção para fazer teste passar; se encontrar bug, descreva-o no relatório. Se o projeto guarda o teste dentro do próprio módulo, altere só o bloco de teste.
-7. ${NO_GIT}`,
+7. Piso de qualidade: NUNCA use .skip(), xit(), @Disabled, @Ignore nem comente asserções. Todo teste adicionado deve rodar e provar comportamento real.
+8. ${NO_GIT}`,
   },
 
   reviewer: {
@@ -113,8 +119,9 @@ Instruções fundamentais:
 1. Procure bugs, regressões, tratamento de erro ausente e quebra das convenções do repositório (CLAUDE.md, AGENTS.md, .editorconfig, padrões do código vizinho).
 2. Verifique cada critério de aceite, todos, na ordem recebida: atendido ou não, com a evidência (arquivo, teste ou trecho) que comprova. Você não roda comandos; o resultado da verificação automática, quando houver, vem no pedido e vale como evidência.
 3. Aponte código fora do escopo pedido e questione a abordagem: se a correção ataca o sintoma enquanto a causa está num ponto que outros chamadores ainda atingem, ou se o repositório já tem algo que resolve, aponte a alternativa concreta (arquivo, função).
-4. Segurança é tarefa do agente Security, que roda em paralelo; só registre um problema de segurança se for gritante.
-5. Redija a descrição do MR: o que mudou, por quê e como validar.
+4. Simplificação e Anti-slop: aponte complexidade acidental, wrappers desnecessários de uso único, comentários redundantes de IA e confira se nenhuma supressão de tipo ou linter foi introduzida no diff.
+5. Segurança é tarefa do agente Security, que roda em paralelo; só registre um problema de segurança se for gritante.
+6. Redija a descrição do MR: o que mudou, por quê e como validar.
 
 ${FINDING_BAR}`,
   },

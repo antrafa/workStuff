@@ -3,7 +3,7 @@
 // Autoteste: node server/lib/factory/gates.ts --selfcheck
 
 import assert from 'node:assert/strict'
-import { existsSync, mkdirSync, readdirSync, readFileSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { homedir, tmpdir } from 'node:os'
 import { spawn } from 'node:child_process'
@@ -301,6 +301,132 @@ export function checkCriteriaCoverage(worktreePath: string, criteriaIds: string[
   })
 }
 
+// 7. Gate: Quality floor (Constraint-Driven Development).
+// Bars suppression of types/linting, skipped tests, or disabled assertions in new code.
+export type DegradationViolation = {
+  file: string
+  line: number
+  rule: string
+  snippet: string
+}
+
+export type QualityDegradationResult = {
+  passed: boolean
+  violations: DegradationViolation[]
+  reason?: string
+}
+
+const DEGRADATION_RULES: Array<{ rule: string; pattern: RegExp }> = [
+  { rule: 'ts-ignore', pattern: /\/\/\s*@ts-ignore|\/\*\s*@ts-ignore/ },
+  { rule: 'ts-nocheck', pattern: /\/\/\s*@ts-nocheck|\/\*\s*@ts-nocheck/ },
+  { rule: 'eslint-disable', pattern: /eslint-disable/ },
+  { rule: 'test-skip', pattern: /\b(it|test|describe|context)\.skip\s*\(|\b(xit|xtest|xdescribe|fit|fdescribe)\s*\(|@Disabled\b|@Ignore\b|@pytest\.mark\.skip\b/ },
+  { rule: 'suppress-warnings', pattern: /@SuppressWarnings\b/ },
+  { rule: 'python-type-ignore', pattern: /#\s*type:\s*ignore\b/ },
+  { rule: 'python-noqa', pattern: /#\s*noqa\b/ },
+]
+
+export function detectQualityDegradation(diffText: string): DegradationViolation[] {
+  const violations: DegradationViolation[] = []
+  if (!diffText) return violations
+
+  const lines = diffText.split('\n')
+  let currentFile = ''
+  let currentLine = 0
+  let isDoc = false
+
+  for (const line of lines) {
+    if (line.startsWith('diff --git ')) {
+      const match = line.match(/^diff --git a\/.+ b\/(.+)$/)
+      currentFile = match ? match[1].trim() : ''
+      isDoc = currentFile ? DOC_FILE.test(currentFile) : false
+      continue
+    }
+    if (line.startsWith('+++ b/')) {
+      currentFile = line.slice(6).trim()
+      isDoc = currentFile ? DOC_FILE.test(currentFile) : false
+      continue
+    }
+    if (line.startsWith('@@ ')) {
+      const match = line.match(/^@@\s+-\d+(?:,\d+)?\s+\+(\d+)(?:,\d+)?\s+@@/)
+      if (match) {
+        currentLine = parseInt(match[1], 10) - 1
+      }
+      continue
+    }
+
+    if (isDoc) continue
+
+    if (line.startsWith('+') && !line.startsWith('+++')) {
+      currentLine++
+      const content = line.slice(1)
+      for (const { rule, pattern } of DEGRADATION_RULES) {
+        if (pattern.test(content)) {
+          violations.push({
+            file: currentFile,
+            line: currentLine,
+            rule,
+            snippet: content.trim(),
+          })
+          break
+        }
+      }
+    } else if (line.startsWith(' ')) {
+      currentLine++
+    }
+  }
+
+  return violations
+}
+
+export async function gateNoQualityDegradation(
+  worktreePath: string,
+  baseBranch = 'main',
+): Promise<QualityDegradationResult> {
+  try {
+    let diff = await run('git', [...GIT_NO_HOOKS, '-C', worktreePath, 'diff', '-U0', '--end-of-options', baseBranch]).catch(() => '')
+
+    // Also inspect untracked files not yet in git diff
+    const uncommitted = await uncommittedFiles(worktreePath).catch(() => [])
+    for (const file of uncommitted) {
+      if (DOC_FILE.test(file)) continue
+      const tracked = await run('git', [...GIT_NO_HOOKS, '-C', worktreePath, 'ls-files', '--error-unmatch', '--', file]).then(() => true, () => false)
+      if (!tracked) {
+        const fullPath = join(worktreePath, file)
+        if (existsSync(fullPath) && !lstatSync(fullPath).isDirectory()) {
+          const content = readFileSync(fullPath, 'utf-8')
+          const fileLines = content.split('\n')
+          const syntheticDiff = `\ndiff --git a/${file} b/${file}\n--- /dev/null\n+++ b/${file}\n@@ -0,0 +1,${fileLines.length} @@\n` + fileLines.map(l => '+' + l).join('\n')
+          diff += syntheticDiff
+        }
+      }
+    }
+
+    const violations = detectQualityDegradation(diff)
+    if (violations.length === 0) {
+      return { passed: true, violations: [] }
+    }
+    const details = violations.map(v => `${v.file}:${v.line} (${v.rule}: "${v.snippet}")`).join(', ')
+    return {
+      passed: false,
+      violations,
+      reason: say({
+        en: `Quality floor violated: ${details}`,
+        pt: `Piso de qualidade violado: ${details}`,
+      }),
+    }
+  } catch (err) {
+    return {
+      passed: false,
+      violations: [],
+      reason: say({
+        en: `Failed to inspect quality floor: ${(err as Error).message}`,
+        pt: `Falha ao inspecionar piso de qualidade: ${(err as Error).message}`,
+      }),
+    }
+  }
+}
+
 // Autoteste
 if (import.meta.main && process.argv.includes('--selfcheck')) {
   const tmp = mkdtempSync(join(tmpdir(), 'workstuff-gates-test-'))
@@ -369,9 +495,12 @@ if (import.meta.main && process.argv.includes('--selfcheck')) {
     const repo = join(tmp, 'docs-repo')
     mkdirSync(repo)
     await run('git', ['-C', repo, 'init', '-q'])
+    await run('git', ['-C', repo, 'config', 'user.name', 'Test'])
+    await run('git', ['-C', repo, 'config', 'user.email', 'test@test.com'])
     writeFileSync(join(repo, 'README.md'), 'Veja src/nav.ts\n')
     writeFileSync(join(repo, 'other.ts'), 'src/nav.ts\n')
     await run('git', ['-C', repo, 'add', '.'])
+    await run('git', ['-C', repo, 'commit', '-m', 'init', '-q'])
     assert.deepEqual(await docsCiting(repo, ['src/nav.ts']), ['README.md'], 'só documentação conta, código que cita não')
     assert.deepEqual(await docsCiting(repo, ['src/outro.ts']), [], 'nenhuma doc cita: Documenter pulado')
 
@@ -381,6 +510,57 @@ if (import.meta.main && process.argv.includes('--selfcheck')) {
     writeFileSync(join(fakeHome, '.gradle', 'gradle.properties'), '')
     assert.deepEqual(buildCacheDirs(fakeHome), [join(fakeHome, '.m2', 'repository'), join(fakeHome, '.m2', 'wrapper'), join(fakeHome, '.gradle', 'caches')],
       'só pastas de cache graváveis: init.d, gradle.properties e settings.xml ficam de fora')
+
+    // 7. Teste de detecção de degradação de qualidade (Anti-slop / Constraint-driven)
+    const cleanDiff = `diff --git a/src/app.ts b/src/app.ts
+--- a/src/app.ts
++++ b/src/app.ts
+@@ -1,3 +1,4 @@
+ export const a = 1
++export const b = 2
+`
+    assert.deepEqual(detectQualityDegradation(cleanDiff), [], 'diff limpo não tem violações')
+
+    const badDiff = `diff --git a/src/app.ts b/src/app.ts
+--- a/src/app.ts
++++ b/src/app.ts
+@@ -10,3 +10,6 @@
+ context line
++// @ts-ignore: bypass type error
++/* eslint-disable-next-line */
++it.skip("should work", () => {})
+-old deleted line
+diff --git a/src/Service.java b/src/Service.java
+--- a/src/Service.java
++++ b/src/Service.java
+@@ -5,1 +5,2 @@
++@SuppressWarnings("unchecked")
+diff --git a/README.md b/README.md
+--- a/README.md
++++ b/README.md
+@@ -1,2 +1,3 @@
++# Documentação com @ts-ignore explicativo
+`
+    const violations = detectQualityDegradation(badDiff)
+    assert.equal(violations.length, 4, 'detecta exatamente as 4 violações em código, ignorando markdown e linhas antigas')
+    assert.equal(violations[0].rule, 'ts-ignore')
+    assert.equal(violations[0].file, 'src/app.ts')
+    assert.equal(violations[0].line, 11)
+    assert.equal(violations[1].rule, 'eslint-disable')
+    assert.equal(violations[2].rule, 'test-skip')
+    assert.equal(violations[3].rule, 'suppress-warnings')
+    assert.equal(violations[3].file, 'src/Service.java')
+
+    // Teste de gateNoQualityDegradation no repositório de teste
+    writeFileSync(join(repo, 'bad.ts'), '// @ts-ignore\nconst err = 1\n')
+    const degResultUntracked = await gateNoQualityDegradation(repo, 'HEAD')
+    assert.equal(degResultUntracked.passed, false, 'gate rejeita arquivo untracked com @ts-ignore')
+    assert.match(degResultUntracked.reason!, /ts-ignore/)
+
+    await run('git', ['-C', repo, 'add', '.'])
+    const degResult = await gateNoQualityDegradation(repo, 'HEAD')
+    assert.equal(degResult.passed, false, 'gate rejeita repositório com @ts-ignore')
+    assert.match(degResult.reason!, /ts-ignore/)
 
     console.log('factory gates selfcheck: ok')
   } finally {

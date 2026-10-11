@@ -269,6 +269,7 @@ stateDiagram-v2
 |---|---|---|
 | **Há alterações** | Algum arquivo mudou em relação à base (alterações não commitadas mais o diff da branch), ignorando os links de dependência. | Correção pelo Implementer; esgotado, interrompe. |
 | **Arquivos declarados existem** | Cada arquivo do `changedFiles` existe no disco ou está no diff (um arquivo apagado de propósito conta). | Correção; esgotado, interrompe. |
+| **Piso de qualidade (sem supressões)** | Rejeita diffs que adicionem supressões de tipo ou linter (`@ts-ignore`, `@ts-nocheck`, `eslint-disable`, `@SuppressWarnings`, `# type: ignore`) ou testes pulados (`.skip()`, `@Disabled`, `@Ignore`). | Correção pelo Implementer; esgotado, interrompe. |
 | **Verificação do projeto** | Cada etapa da verificação termina com código 0, dentro do sandbox, parando na primeira que falha. | Correção; esgotado, vai para as rodadas de revisão como bloqueio. |
 | **Cobertura por critério** | Cada critério tem um arquivo de teste que existe, ou uma explicação do Tester. | Pede o seu olhar; segura o MR automático. |
 | **Ferramentas de segurança** | gitleaks, semgrep e npm audit, quando instalados e aplicáveis. | Segredo vira achado `critical`; o resto é evidência para o Security. |

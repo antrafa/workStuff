@@ -5,7 +5,7 @@
 import { defaultFactoryStore as store } from './store.ts'
 import { commitWorktree, createWorktree, discardFiles, fetchBase, getWorktreeDiff, headOf, resetWorktree, syncWithBase, uncommittedFiles, type BaseSync } from './worktree.ts'
 import { runFactoryAgent } from './runner.ts'
-import { checkCriteriaCoverage, docsCiting, gateArtifactsExist, gateDiffNotEmpty, gateTestsPass, nonDocFiles, nonTestFiles, type TestsGateResult } from './gates.ts'
+import { checkCriteriaCoverage, docsCiting, gateArtifactsExist, gateDiffNotEmpty, gateNoQualityDegradation, gateTestsPass, nonDocFiles, nonTestFiles, type TestsGateResult } from './gates.ts'
 import { runSecurityScans, scanFindings } from './scanners.ts'
 import { assessDelivery } from './readiness.ts'
 import { ExecutionCancelledError, throwIfCancelled } from './executions.ts'
@@ -169,6 +169,13 @@ async function checkBuildGates(ctx: ExecContext, task: FactoryTask, worktreePath
     )
     if (!artifacts.passed) return { failure: artifacts.reason, fatal: true, tests: skippedTests }
   }
+
+  const quality = await codeStep(
+    ctx, 'gate', { name: say({ en: 'Gate: quality floor (no suppressions)', pt: 'Portão: piso de qualidade (sem supressões)' }), phase: 'qa_security' },
+    () => gateNoQualityDegradation(worktreePath, task.baseBranch),
+    r => r.reason,
+  )
+  if (!quality.passed) return { failure: quality.reason, fatal: true, tests: skippedTests }
 
   const tests = await runTests(ctx, task, worktreePath, say({ en: 'Gate: project verification', pt: 'Portão: verificação do projeto' }))
   // A suite that could not run (no command, no bwrap) is reported to the human, not "fixed" by the agent
