@@ -15,6 +15,7 @@ type Props = {
 export function ProjectHeader({ project, taskCount, onChanged, onRemoved }: Props) {
   const toast = useToast()
   const [confirming, setConfirming] = useState(false)
+  const [discardTasks, setDiscardTasks] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   const adopt = async () => {
@@ -30,7 +31,7 @@ export function ProjectHeader({ project, taskCount, onChanged, onRemoved }: Prop
   const remove = async () => {
     setConfirming(false)
     try {
-      await api.delete(`/factory/projects/${project.id}`)
+      await api.delete(`/factory/projects/${project.id}${discardTasks ? '?tasks=discard' : ''}`)
       onRemoved()
     } catch (e) {
       setError((e as Error).message)
@@ -69,14 +70,26 @@ export function ProjectHeader({ project, taskCount, onChanged, onRemoved }: Prop
           icon={Trash2}
           action={tx({ en: 'remove project', pt: 'excluir projeto' })}
           effects={[
-            tx({ en: `Its ${taskCount} task(s) become loose tasks; worktrees and branches stay.`, pt: `As ${taskCount} tarefa(s) dele viram avulsas; worktrees e branches ficam.` }),
+            discardTasks
+              ? tx({ en: `Its ${taskCount} task(s) are discarded: runs stopped, worktrees and branches removed.`, pt: `As ${taskCount} tarefa(s) dele são descartadas: execuções paradas, worktrees e branches removidas.` })
+              : tx({ en: `Its ${taskCount} task(s) become loose tasks; worktrees and branches stay.`, pt: `As ${taskCount} tarefa(s) dele viram avulsas; worktrees e branches ficam.` }),
             tx({ en: 'The folder on disk is not touched.', pt: 'A pasta no disco não é tocada.' }),
           ]}
-          losses={[tx({ en: 'The ideas of the project, with their conversations and plans.', pt: 'As ideias do projeto, com conversas e planos.' })]}
+          losses={[
+            tx({ en: 'The ideas of the project, with their conversations and plans.', pt: 'As ideias do projeto, com conversas e planos.' }),
+            ...(discardTasks ? [tx({ en: 'The code of those tasks that did not become an MR or a merge.', pt: 'O código dessas tarefas que não virou MR nem merge.' })] : []),
+          ]}
           typeToConfirm={project.name}
           onConfirm={remove}
           onClose={() => setConfirming(false)}
-        />
+        >
+          {taskCount > 0 && (
+            <label className="row" style={{ gap: 8 }}>
+              <input type="checkbox" checked={discardTasks} onChange={e => setDiscardTasks(e.target.checked)} />
+              <span>{tx({ en: `Also discard its ${taskCount} task(s)`, pt: `Descartar também as ${taskCount} tarefa(s) dele` })}</span>
+            </label>
+          )}
+        </ConfirmModal>
       )}
     </div>
   )

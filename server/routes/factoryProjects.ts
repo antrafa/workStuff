@@ -4,6 +4,9 @@ import { Router, type Response } from 'express'
 import { isProviderId } from '../lib/aiProviders.ts'
 import { adoptableTasks, createProjectFolder, defaultProjectStore, ProjectError } from '../lib/factory/projects.ts'
 import { defaultFactoryStore } from '../lib/factory/store.ts'
+import { discardTask } from '../lib/factory/discard.ts'
+import { defaultIdeaStore } from '../lib/ideation/store.ts'
+import { stopRun } from '../lib/ideation/flow.ts'
 import type { FactoryProject } from '../lib/factory/types.ts'
 import { say } from '../lib/i18n.ts'
 
@@ -68,14 +71,20 @@ factoryProjectsRouter.patch('/:id', (req, res) => {
   }
 })
 
-// The project's tasks become loose again; their worktrees and branches are left alone.
+// ?tasks=discard also discards the project's tasks (worktrees and branches included); otherwise
+// they become loose again, untouched.
 factoryProjectsRouter.delete('/:id', async (req, res) => {
   try {
-    defaultProjectStore.remove(req.params.id)
-    for (const task of await defaultFactoryStore.getTasks()) {
-      if (task.projectId === req.params.id) await defaultFactoryStore.saveTask({ ...task, projectId: undefined })
+    const project = defaultProjectStore.get(req.params.id)
+    const tasks = (await defaultFactoryStore.getTasks()).filter(t => t.projectId === project.id)
+    for (const task of tasks) {
+      if (req.query.tasks === 'discard') await discardTask(task.id)
+      else await defaultFactoryStore.saveTask({ ...task, projectId: undefined })
     }
-    res.json({ ok: true })
+    // An agent still running for one of its ideas would write the idea back after the removal
+    for (const idea of defaultIdeaStore.list(project.id)) stopRun(idea.id)
+    defaultProjectStore.remove(project.id)
+    res.json({ ok: true, tasks: tasks.length })
   } catch (e) {
     fail(res, e)
   }

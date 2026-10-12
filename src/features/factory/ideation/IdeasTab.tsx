@@ -1,6 +1,6 @@
 import { useState } from 'react'
-import { Lightbulb, Plus } from 'lucide-react'
-import { Async, Empty, Modal } from '@/ui'
+import { Lightbulb, Plus, Trash2 } from 'lucide-react'
+import { Async, ConfirmModal, Empty, Modal } from '@/ui'
 import { api } from '@/lib/api'
 import { useAsync } from '@/lib/useAsync'
 import { tx } from '@/lib/i18n'
@@ -19,6 +19,19 @@ export function IdeasTab({ project, tasks, onTasksChanged }: Props) {
   const ideas = useAsync(() => api.get<IdeaView[]>(ideasPath(project.id)), [project.id])
   const [openId, setOpenId] = useState<string | null>(null)
   const [creating, setCreating] = useState(false)
+  const [deleting, setDeleting] = useState<IdeaView | null>(null)
+  const [error, setError] = useState<string | null>(null)
+
+  const remove = async (idea: IdeaView) => {
+    setDeleting(null)
+    setError(null)
+    try {
+      await api.delete(ideasPath(project.id, idea.id))
+      ideas.reload()
+    } catch (e) {
+      setError((e as Error).message)
+    }
+  }
 
   if (openId) {
     return (
@@ -54,21 +67,41 @@ export function IdeasTab({ project, tasks, onTasksChanged }: Props) {
           ) : (
             <div className="stack" style={{ gap: 6 }}>
               {list.map(idea => (
-                <button key={idea.id} type="button" className="card card-pad interactive row" style={{ textAlign: 'left', gap: 12 }} onClick={() => setOpenId(idea.id)}>
-                  <Lightbulb size={16} />
-                  <span className="stack" style={{ gap: 2, flex: 1 }}>
-                    <b>{idea.title}</b>
-                    <span className="muted" style={{ fontSize: 12 }}>{PHASE_UI[idea.phase].hint}</span>
-                  </span>
-                  {idea.executing && <span className="live-dot" title={tx({ en: 'an agent is running', pt: 'um agente está rodando' })} />}
-                  <span className={`badge ${idea.phase === 'dispatched' ? 'badge-ok' : idea.phase === 'dropped' ? 'badge-warn' : 'badge-info'}`}>{PHASE_UI[idea.phase].label}</span>
-                  <span className="muted mono" style={{ fontSize: 11 }}>{idea.updatedAt.slice(0, 10)}</span>
-                </button>
+                <div key={idea.id} className="row" style={{ gap: 6 }}>
+                  <button type="button" className="card card-pad interactive row" style={{ textAlign: 'left', gap: 12, flex: 1 }} onClick={() => setOpenId(idea.id)}>
+                    <Lightbulb size={16} />
+                    <span className="stack" style={{ gap: 2, flex: 1 }}>
+                      <b>{idea.title}</b>
+                      <span className="muted" style={{ fontSize: 12 }}>{PHASE_UI[idea.phase].hint}</span>
+                    </span>
+                    {idea.executing && <span className="live-dot" title={tx({ en: 'an agent is running', pt: 'um agente está rodando' })} />}
+                    <span className={`badge ${idea.phase === 'dispatched' ? 'badge-ok' : idea.phase === 'dropped' ? 'badge-warn' : 'badge-info'}`}>{PHASE_UI[idea.phase].label}</span>
+                    <span className="muted mono" style={{ fontSize: 11 }}>{idea.updatedAt.slice(0, 10)}</span>
+                  </button>
+                  <button type="button" className="btn btn-ghost btn-sm btn-icon" title={tx({ en: 'Delete idea', pt: 'Excluir ideia' })} aria-label={tx({ en: `Delete ${idea.title}`, pt: `Excluir ${idea.title}` })} onClick={() => setDeleting(idea)}>
+                    <Trash2 size={14} />
+                  </button>
+                </div>
               ))}
             </div>
           )
         }
       </Async>
+
+      {error && <div className="callout callout-crit">{error}</div>}
+
+      {deleting && (
+        <ConfirmModal
+          title={tx({ en: `Delete the idea "${deleting.title}"?`, pt: `Excluir a ideia "${deleting.title}"?` })}
+          confirmLabel={tx({ en: 'Delete idea', pt: 'Excluir ideia' })}
+          icon={Trash2}
+          action={tx({ en: 'delete idea', pt: 'excluir ideia' })}
+          effects={[tx({ en: 'Stops its agent, if one is running. Tasks already sent to the factory stay on the board.', pt: 'Para o agente dela, se houver um rodando. Tarefas já enviadas à fábrica continuam no quadro.' })]}
+          losses={[tx({ en: 'The conversation, the living document, the plan and the split.', pt: 'A conversa, o documento vivo, o plano e o split.' })]}
+          onConfirm={() => remove(deleting)}
+          onClose={() => setDeleting(null)}
+        />
+      )}
 
       {creating && (
         <NewIdeaModal

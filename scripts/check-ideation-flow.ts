@@ -58,6 +58,7 @@ const { defaultIdeaStore } = await import('../server/lib/ideation/store.ts')
 const { defaultFactoryStore } = await import('../server/lib/factory/store.ts')
 const { pendingDependencies } = await import('../server/lib/factory/types.ts')
 const flow = await import('../server/lib/ideation/flow.ts')
+const { discardTask } = await import('../server/lib/factory/discard.ts')
 
 try {
   const project = defaultProjectStore.create({ name: 'Custos', rootPath: root, provider: 'claude' })
@@ -122,6 +123,11 @@ try {
   assert.equal(pendingDependencies(second, all).length, 1, 'M2.T1 espera M1.T1')
   await defaultFactoryStore.saveTask({ ...first, state: 'done' })
   assert.equal(pendingDependencies(second, await defaultFactoryStore.getTasks()).length, 0)
+
+  // Discarding a task: the one that depended on it stops waiting
+  await discardTask(first.id)
+  assert.equal((await defaultFactoryStore.getTasks()).length, 1)
+  assert.equal(pendingDependencies(second, await defaultFactoryStore.getTasks()).length, 0, 'dependência descartada não segura mais')
 
   // A killed idea, then reopened
   let other = defaultIdeaStore.create(project.id, 'Outra', 'x')

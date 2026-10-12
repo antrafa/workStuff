@@ -1,8 +1,10 @@
-import { AlertTriangle, CheckCircle2, GitBranch, Hourglass, Lightbulb, ShieldAlert, AlertCircle } from 'lucide-react'
+import { useState } from 'react'
+import { AlertTriangle, CheckCircle2, GitBranch, Hourglass, Lightbulb, ShieldAlert, AlertCircle, Trash2 } from 'lucide-react'
 import { pendingDependencies, type FactoryTask, type FactoryTaskState } from '../../../server/lib/factory/types.ts'
 import { AGENT_ORDER, AGENT_UI, currentSpan, fmtDuration, isTaskRunning, taskUsage } from './factoryRun'
 import { FactoryStatusChip } from './timeline/FactoryStatusChip'
 import { TaskActions } from './TaskActions'
+import { DiscardTaskModal } from './DiscardTaskModal'
 import { tx } from '@/lib/i18n'
 
 type Props = {
@@ -177,6 +179,8 @@ function TaskCard({ task, waitingOn, onOpenTrace, onOpenReview, onUpdate }: { ta
   const failed = task.state === 'error'
   const waiting = task.state === 'waiting_approval' || task.state === 'waiting_clarification' || task.state === 'review'
   const usage = taskUsage(task)
+  const [discarding, setDiscarding] = useState(false)
+  const [discardError, setDiscardError] = useState<string | null>(null)
   return (
     <div
       role="button"
@@ -200,6 +204,19 @@ function TaskCard({ task, waitingOn, onOpenTrace, onOpenReview, onUpdate }: { ta
         <div className="row mono" style={{ gap: 8, fontSize: 11 }}>
           {task.diffStat && <span style={{ color: 'var(--ok)' }}>+{task.diffStat.insertions}/-{task.diffStat.deletions}</span>}
           {usage.costUsd !== null && <span style={{ color: 'var(--muted)' }} title={tx({ en: 'Cost summed over the agents', pt: 'Custo somado dos agentes' })}>US$ {usage.costUsd.toFixed(2)}</span>}
+          <button
+            type="button"
+            className="btn btn-ghost btn-sm btn-icon"
+            title={tx({ en: 'Discard task', pt: 'Descartar tarefa' })}
+            aria-label={tx({ en: `Discard ${task.title}`, pt: `Descartar ${task.title}` })}
+            onClick={e => {
+              e.stopPropagation()
+              setDiscarding(true)
+            }}
+            onKeyDown={e => e.stopPropagation()}
+          >
+            <Trash2 size={13} />
+          </button>
         </div>
       </div>
 
@@ -243,7 +260,16 @@ function TaskCard({ task, waitingOn, onOpenTrace, onOpenReview, onUpdate }: { ta
         </div>
       )}
 
+      {discardError && <div className="callout callout-crit" style={{ fontSize: 11 }}>{discardError}</div>}
+
       <TaskActions task={task} running={running} onOpenReview={onOpenReview} onChanged={onUpdate} block />
+
+      {discarding && (
+        // The modal sits inside the clickable card: its clicks must not open the timeline
+        <div onClick={e => e.stopPropagation()} onKeyDown={e => e.stopPropagation()}>
+          <DiscardTaskModal task={task} onDiscarded={onUpdate} onError={setDiscardError} onClose={() => setDiscarding(false)} />
+        </div>
+      )}
     </div>
   )
 }
