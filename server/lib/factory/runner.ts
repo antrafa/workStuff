@@ -19,7 +19,9 @@ const READ_TOOLS = ['Read', 'Grep', 'Glob']
 const WRITE_TOOLS = ['Read', 'Edit', 'Write', 'Glob', 'Grep', 'Bash']
 
 export type FactoryRunOptions = {
-  agentId: SpecializedAgentId
+  agentId?: SpecializedAgentId
+  // An agent outside the pipeline (ideation), given whole instead of looked up by id
+  agent?: { mode: 'read' | 'write'; systemPrompt: string }
   prompt: string
   cwd: string
   provider?: ProviderId
@@ -159,7 +161,8 @@ export async function runFactoryAgent(options: FactoryRunOptions): Promise<RunRe
   const provider = options.provider ?? settings.provider
   const model = options.model || settings.model
   const effort = options.effort || settings.effort
-  const agent = SPECIALIZED_AGENTS[options.agentId]
+  const agent = options.agent ?? (options.agentId && SPECIALIZED_AGENTS[options.agentId])
+  if (!agent) throw new Error(say({ en: 'factory run without an agent', pt: 'execução da fábrica sem agente' }))
   const mode = options.readOnly ? 'read' : agent.mode
 
   const needsJail = provider === 'agy' || mode === 'write'
