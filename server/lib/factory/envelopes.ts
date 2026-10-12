@@ -67,6 +67,9 @@ function demandBlock(task: FactoryTask): string {
     `Título: ${task.title}`,
     `Descrição:\n${task.description || 'Sem descrição adicional.'}`,
     task.clarifications ? `Respostas do desenvolvedor às dúvidas anteriores:\n${task.clarifications}` : '',
+    task.givenCriteria?.length
+      ? `Critérios de aceite já decididos na ideação (Gherkin). Eles são CA1..CA${task.givenCriteria.length}, nesta ordem: copie-os literalmente no início de acceptanceCriteria, sem reescrever nem remover. Você pode acrescentar critérios técnicos depois deles. Não abra dúvida de escopo: só dúvida técnica que o código não responde.\n${task.givenCriteria.map((c, i) => `CA${i + 1}:\n${c}`).join('\n\n')}`
+      : '',
     task.source.issueUrl ? `Issue original: ${task.source.issueUrl}` : '',
   ].filter(Boolean).join('\n\n')
 }
@@ -109,6 +112,16 @@ export function formatSpecPrompt(task: FactoryTask): string {
       openQuestions: [],
     }),
   ].join('\n\n')
+}
+
+// The criteria decided in ideation stay first and verbatim, whatever the Analyst wrote: a rephrased
+// or dropped one would be checked against a different promise than the one the developer approved.
+export function withGivenCriteria(spec: SpecEnvelope, given: string[] = []): SpecEnvelope {
+  if (!given.length) return spec
+  const norm = (s: string) => s.toLowerCase().replace(/\s+/g, ' ').trim()
+  const givenSet = new Set(given.map(norm))
+  const extra = spec.acceptanceCriteria.filter(c => !givenSet.has(norm(c)))
+  return { ...spec, acceptanceCriteria: [...given, ...extra] }
 }
 
 // 1. Envelope de Planejamento (Architect -> Implementer)
@@ -512,6 +525,10 @@ if (import.meta.main && process.argv.includes('--selfcheck')) {
   assert.ok(formatCorrectionPrompt(task, 'boom', true).includes('boom'))
   assert.ok(!formatCorrectionPrompt(task, 'boom', true).includes('Demanda'), 'sessão retomada não repete a demanda')
   assert.ok(formatDocsPrompt(task, ['a.ts']).includes('Closes #7'))
+
+  const given = withGivenCriteria({ status: 'ok', summary: '', acceptanceCriteria: ['Técnico extra', 'cenário  A reescrito?', 'cenário a'], outOfScope: [], openQuestions: [] }, ['Cenário A', 'Cenário B'])
+  assert.deepEqual(given.acceptanceCriteria, ['Cenário A', 'Cenário B', 'Técnico extra', 'cenário  A reescrito?'], 'critérios dados primeiro e literais; duplicata removida')
+  assert.ok(formatSpecPrompt({ ...task, givenCriteria: ['Cenário A'] }).includes('CA1:\nCenário A'))
 
   console.log('factory envelopes selfcheck: ok')
 }

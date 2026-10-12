@@ -16,7 +16,7 @@ import { SPECIALIZED_AGENTS } from '../lib/factory/agents.ts'
 import { runFactoryAgent } from '../lib/factory/runner.ts'
 import { adjustTask, buildTask, planTask, reverifyOnNewBase, type ExecContext } from '../lib/factory/pipeline.ts'
 import { assessDelivery, canAutoMr } from '../lib/factory/readiness.ts'
-import { AGENT_ORDER, type FactoryTask, type FactoryTaskState, type SpecializedAgentId } from '../lib/factory/types.ts'
+import { AGENT_ORDER, pendingDependencies, type FactoryTask, type FactoryTaskState, type SpecializedAgentId } from '../lib/factory/types.ts'
 import { listSources, resolveToken } from '../lib/repos/sources.ts'
 import { call, type Conn } from '../lib/repos/providers.ts'
 import { readSettings } from '../lib/settingsStore.ts'
@@ -427,6 +427,12 @@ factoryRouter.post('/tasks/:id/plan', async (req, res) => {
     return
   }
   if (refuseState(res, task, ['intake', 'waiting_clarification', 'waiting_approval', 'error'], { en: 'plan', pt: 'planejar' })) return
+  const waiting = pendingDependencies(task, await defaultFactoryStore.getTasks())
+  if (waiting.length) {
+    const names = waiting.map(t => t.origin?.taskKey ?? t.title).join(', ')
+    res.status(409).json({ error: say({ en: `this task waits for ${names}: finish (and merge) it first`, pt: `esta tarefa espera ${names}: conclua (e faça o merge) antes` }) })
+    return
+  }
   const answers = String(req.body?.answers ?? '').trim()
   if (task.state === 'waiting_clarification' && !answers) {
     res.status(400).json({ error: say({ en: "answer the Analyst's questions before planning again", pt: "responda às dúvidas do Analyst antes de planejar de novo" }) })

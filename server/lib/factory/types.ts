@@ -255,12 +255,19 @@ export type FactoryTask = {
   title: string
   description: string
   source: {
-    type: 'gitlab' | 'github' | 'manual'
+    type: 'gitlab' | 'github' | 'manual' | 'idea'
     repoPath: string
     remoteUrl?: string
     issueIid?: number
     issueUrl?: string
   }
+  // Set when the task came from an ideation split
+  origin?: { ideaId: string; masterKey: string; taskKey: string }
+  // Acceptance criteria decided before the task existed (the idea's Gherkin): the Analyst keeps
+  // them as CA1..n and may only add to them
+  givenCriteria?: string[]
+  // Tasks that must be done before this one may start
+  dependsOn?: string[]
   state: FactoryTaskState
   // Not persisted: filled by the API from the in-memory execution registry
   executing?: boolean
@@ -314,4 +321,10 @@ export function taskUsage(task: Pick<FactoryTask, 'spans'>): { costUsd: number |
     tokens += (s.usage?.inputTokens ?? 0) + (s.usage?.outputTokens ?? 0)
   }
   return { costUsd: priced ? costUsd : null, tokens }
+}
+
+// Dependencies not done yet. A dependency that was deleted no longer holds the task back.
+// Shared by the plan route, which refuses to start, and the board, which shows why.
+export function pendingDependencies(task: Pick<FactoryTask, 'dependsOn'>, all: Pick<FactoryTask, 'id' | 'title' | 'state' | 'origin'>[]) {
+  return (task.dependsOn ?? []).flatMap(id => all.filter(t => t.id === id && t.state !== 'done'))
 }
