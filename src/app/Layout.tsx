@@ -1,7 +1,7 @@
-import { AlertTriangle, ChevronRight, FlaskConical, Languages, Menu, Moon, Power, Search, Settings, Star, Sun } from 'lucide-react'
+import { AlertTriangle, ChevronRight, FlaskConical, Menu, Moon, Power, Search, Settings, Star, Sun } from 'lucide-react'
 import { Suspense, useEffect, useState } from 'react'
 import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router'
-import { EnvStamp, PageHelpContext, SkeletonRows, useToast } from '@/ui'
+import { EnvStamp, PageHelpContext, Segmented, SkeletonRows, useToast } from '@/ui'
 import { favoriteAt, recordVisit, toggleFavorite, toggleGroup, useFavorites, useHiddenPaths, useOpenGroups } from './menu'
 import { NAV, findNav, type NavItem } from './nav'
 import { CommandPalette } from './CommandPalette'
@@ -13,6 +13,7 @@ import { setTheme, useTheme } from './theme'
 import { refreshSession, useClusterShared } from '@/features/cluster/api'
 import { changeLanguage } from '@/features/settings/api'
 import { language, tx } from '@/lib/i18n'
+import type { Lang } from '../../server/lib/lang.ts'
 
 // What the frame says in each environment; an unclassified one counts as PRO.
 const FRAME_TAG: Record<string, string> = {
@@ -128,13 +129,13 @@ export function Layout() {
           >
             {dark ? <Sun size={16} /> : <Moon size={16} />}
           </button>
-          <button
-            className="btn btn-ghost btn-sm"
-            onClick={() => changeLanguage(language() === 'pt' ? 'en' : 'pt').catch((e: Error) => toast(e.message))}
-            title={tx({ en: 'Language: English. Click for Português', pt: 'Idioma: Português. Clique para English' })}
-          >
-            <Languages size={15} /> {language().toUpperCase()}
-          </button>
+          <div className="lang-switch" title={tx({ en: 'Interface language', pt: 'Idioma da interface' })}>
+            <Segmented<Lang>
+              options={[{ id: 'en', label: 'EN' }, { id: 'pt', label: 'PT' }]}
+              value={language()}
+              onChange={lang => changeLanguage(lang).catch((e: Error) => toast(e.message))}
+            />
+          </div>
           <button
             className="btn btn-ghost btn-icon"
             onClick={() => setShutdownOpen(true)}
