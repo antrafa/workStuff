@@ -316,14 +316,18 @@ export type QualityDegradationResult = {
   reason?: string
 }
 
+// Directives only count in comment position and test calls only at the start of a statement, with
+// one-line string literals blanked first: text that names them (and `model.fit(`) does not trip the gate.
+// ponytail: line heuristic, no parser; a directive inside a multi-line string still matches.
+const STRING_LITERAL = /(["'`])(?:\\.|(?!\1).)*\1/g
 const DEGRADATION_RULES: Array<{ rule: string; pattern: RegExp }> = [
-  { rule: 'ts-ignore', pattern: /\/\/\s*@ts-ignore|\/\*\s*@ts-ignore/ },
-  { rule: 'ts-nocheck', pattern: /\/\/\s*@ts-nocheck|\/\*\s*@ts-nocheck/ },
-  { rule: 'eslint-disable', pattern: /eslint-disable/ },
-  { rule: 'test-skip', pattern: /\b(it|test|describe|context)\.skip\s*\(|\b(xit|xtest|xdescribe|fit|fdescribe)\s*\(|@Disabled\b|@Ignore\b|@pytest\.mark\.skip\b/ },
-  { rule: 'suppress-warnings', pattern: /@SuppressWarnings\b/ },
-  { rule: 'python-type-ignore', pattern: /#\s*type:\s*ignore\b/ },
-  { rule: 'python-noqa', pattern: /#\s*noqa\b/ },
+  { rule: 'ts-ignore', pattern: /(^|\s)(\/\/|\/\*)\s*@ts-ignore\b/ },
+  { rule: 'ts-nocheck', pattern: /(^|\s)(\/\/|\/\*)\s*@ts-nocheck\b/ },
+  { rule: 'eslint-disable', pattern: /(^|\s)(\/\/|\/\*)\s*eslint-disable/ },
+  { rule: 'test-skip', pattern: /^\s*((it|test|describe|context)\.skip|xit|xtest|xdescribe|fit|fdescribe)\s*\(|^\s*@(Disabled|Ignore)\b|^\s*@pytest\.mark\.skip\b/ },
+  { rule: 'suppress-warnings', pattern: /^\s*@SuppressWarnings\b/ },
+  { rule: 'python-type-ignore', pattern: /(^|\s)#\s*type:\s*ignore\b/ },
+  { rule: 'python-noqa', pattern: /(^|\s)#\s*noqa\b/ },
 ]
 
 export function detectQualityDegradation(diffText: string): DegradationViolation[] {
@@ -360,8 +364,9 @@ export function detectQualityDegradation(diffText: string): DegradationViolation
     if (line.startsWith('+') && !line.startsWith('+++')) {
       currentLine++
       const content = line.slice(1)
+      const code = content.replace(STRING_LITERAL, '""')
       for (const { rule, pattern } of DEGRADATION_RULES) {
-        if (pattern.test(content)) {
+        if (pattern.test(code)) {
           violations.push({
             file: currentFile,
             line: currentLine,
@@ -384,10 +389,12 @@ export async function gateNoQualityDegradation(
   baseBranch = 'main',
 ): Promise<QualityDegradationResult> {
   try {
-    let diff = await run('git', [...GIT_NO_HOOKS, '-C', worktreePath, 'diff', '-U0', '--end-of-options', baseBranch]).catch(() => '')
+    // Against the fork point, not the base tip: what the base changed since then is not the agent's
+    const forkPoint = (await run('git', [...GIT_NO_HOOKS, '-C', worktreePath, 'merge-base', '--end-of-options', baseBranch, 'HEAD'])).trim()
+    let diff = await run('git', [...GIT_NO_HOOKS, '-C', worktreePath, 'diff', '-U0', '--end-of-options', forkPoint])
 
     // Also inspect untracked files not yet in git diff
-    const uncommitted = await uncommittedFiles(worktreePath).catch(() => [])
+    const uncommitted = await uncommittedFiles(worktreePath)
     for (const file of uncommitted) {
       if (DOC_FILE.test(file)) continue
       const tracked = await run('git', [...GIT_NO_HOOKS, '-C', worktreePath, 'ls-files', '--error-unmatch', '--', file]).then(() => true, () => false)
@@ -540,7 +547,7 @@ if (import.meta.main && process.argv.includes('--selfcheck')) {
 
     const repo = join(tmp, 'docs-repo')
     mkdirSync(repo)
-    await run('git', ['-C', repo, 'init', '-q'])
+    await run('git', ['-C', repo, 'init', '-q', '-b', 'main'])
     await run('git', ['-C', repo, 'config', 'user.name', 'Test'])
     await run('git', ['-C', repo, 'config', 'user.email', 'test@test.com'])
     writeFileSync(join(repo, 'README.md'), 'Veja src/nav.ts\n')
@@ -597,6 +604,16 @@ diff --git a/README.md b/README.md
     assert.equal(violations[3].rule, 'suppress-warnings')
     assert.equal(violations[3].file, 'src/Service.java')
 
+    const lookalikes = `diff --git a/src/train.py b/src/train.py
++++ b/src/train.py
+@@ -1,0 +1,4 @@
++model.fit(X, y)
++prompt = "NUNCA use xit(), // @ts-ignore nem eslint-disable"
++xit('pula', () => {})
+`
+    const lookalikeHits = detectQualityDegradation(lookalikes)
+    assert.deepEqual(lookalikeHits.map(v => v.line), [3], 'chamada de método e texto citando as diretivas não contam; xit( no início conta')
+
     // Teste de gateNoQualityDegradation no repositório de teste
     writeFileSync(join(repo, 'bad.ts'), '// @ts-ignore\nconst err = 1\n')
     const degResultUntracked = await gateNoQualityDegradation(repo, 'HEAD')
@@ -607,6 +624,19 @@ diff --git a/README.md b/README.md
     const degResult = await gateNoQualityDegradation(repo, 'HEAD')
     assert.equal(degResult.passed, false, 'gate rejeita repositório com @ts-ignore')
     assert.match(degResult.reason!, /ts-ignore/)
+
+    // A base que andou depois do fork não é culpa do agente
+    await run('git', ['-C', repo, 'commit', '-qam', 'bad'])
+    await run('git', ['-C', repo, 'branch', 'base-fork'])
+    writeFileSync(join(repo, 'bad.ts'), 'const err = 1\n')
+    await run('git', ['-C', repo, 'commit', '-qam', 'base remove a supressão'])
+    await run('git', ['-C', repo, 'checkout', '-q', '-b', 'task', 'base-fork'])
+    writeFileSync(join(repo, 'ok.ts'), 'export const ok = 1\n')
+    await run('git', ['-C', repo, 'add', '.'])
+    await run('git', ['-C', repo, 'commit', '-qm', 'task'])
+    assert.equal((await gateNoQualityDegradation(repo, 'main')).passed, true, 'linha mudada só na base não reprova a tarefa')
+    assert.equal((await gateNoQualityDegradation(repo, 'nao-existe')).passed, false, 'base inexistente reprova em vez de passar sem olhar')
+    await run('git', ['-C', repo, 'checkout', '-q', 'main'])
 
     // 8. Teste de computeBlastRadius (Raio de impacto de arquivos alterados)
     writeFileSync(join(repo, 'math.ts'), 'export const sum = (a: number, b: number) => a + b\n')
