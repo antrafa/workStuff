@@ -55,6 +55,8 @@ async function stream(req: Request<Params>, res: Response, work: (ctx: FlowConte
   const sse = openSse(res)
   try {
     const out = await work({ signal, send: sse.send }, loaded.project, loaded.idea)
+    // Released before the final view, which would otherwise still say "running"
+    endRun(loaded.idea.id)
     sse.send({ type: 'done', idea: viewOf(out.idea, loaded.project), errors: out.errors ?? [] })
   } catch (e) {
     sse.send({ type: 'error', message: (e as Error).message })
