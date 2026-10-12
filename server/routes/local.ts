@@ -5,6 +5,8 @@ import {
   removeContainer, removeImage, removeVolume,
 } from '../lib/local/services.ts'
 import { say } from '../lib/i18n.ts'
+import { openSse } from '../lib/sse.ts'
+import { apps, checkInput } from '../lib/local/apps.ts'
 
 export const localRouter = Router()
 
@@ -97,4 +99,78 @@ localRouter.delete('/volumes/:name', async (req, res) => {
   } catch (e) {
     fail(res, e)
   }
+})
+
+// ── Aplicações cadastradas ──
+// O estado cruza o PID gravado no start com as portas em escuta: porta ocupada por outro PID
+// é a aplicação subida fora do painel (ou outra coisa no lugar dela).
+localRouter.get('/apps', async (_req, res) => {
+  try {
+    const ports = await listPorts()
+    res.json(apps.list().map(app => {
+      const pid = apps.pidOf(app.id)
+      const owner = app.port ? ports.find(p => p.port === app.port) : undefined
+      return { ...app, pid, portOpen: Boolean(owner), portPid: owner?.pid ?? null }
+    }))
+  } catch (e) {
+    res.status(500).json({ error: (e as Error).message })
+  }
+})
+
+localRouter.post('/apps', (req, res) => {
+  try {
+    res.json(apps.create(checkInput(req.body)))
+  } catch (e) {
+    res.status(400).json({ error: (e as Error).message })
+  }
+})
+
+localRouter.put('/apps/:id', (req, res) => {
+  try {
+    res.json(apps.update(String(req.params.id), checkInput(req.body)))
+  } catch (e) {
+    res.status(400).json({ error: (e as Error).message })
+  }
+})
+
+localRouter.delete('/apps/:id', (req, res) => {
+  try {
+    apps.remove(String(req.params.id))
+    console.log(`[apps] excluída ${req.params.id}`)
+    res.json({ ok: true })
+  } catch (e) {
+    res.status(400).json({ error: (e as Error).message })
+  }
+})
+
+localRouter.post('/apps/:id/:action', async (req, res) => {
+  const id = String(req.params.id)
+  try {
+    if (req.params.action === 'start') return res.json({ pid: await apps.start(id) })
+    if (req.params.action === 'restart') return res.json({ pid: await apps.restart(id) })
+    if (req.params.action === 'stop') return res.json(await apps.stop(id, req.body?.force === true))
+    res.status(400).json({ error: say({ en: 'invalid action', pt: 'ação inválida' }) })
+  } catch (e) {
+    res.status(400).json({ error: (e as Error).message })
+  }
+})
+
+// Segue o log: manda o fim do arquivo e depois o que for acrescentado, conferindo a cada segundo.
+localRouter.get('/apps/:id/logs', (req, res) => {
+  const id = String(req.params.id)
+  try {
+    apps.find(id)
+  } catch (e) {
+    return res.status(404).json({ error: (e as Error).message })
+  }
+  const sse = openSse(res)
+  const tail = apps.readLog(id)
+  let offset = tail.offset
+  sse.send({ type: 'chunk', text: tail.text, reset: true })
+  const timer = setInterval(() => {
+    const next = apps.readLog(id, offset)
+    offset = next.offset
+    if (next.text || next.reset) sse.send({ type: 'chunk', text: next.text, reset: next.reset })
+  }, 1000)
+  sse.signal.addEventListener('abort', () => clearInterval(timer))
 })

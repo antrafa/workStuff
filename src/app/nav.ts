@@ -34,7 +34,7 @@ export const NAV: NavGroup[] = [
       { path: '/maquina', label: tx({ en: 'Machine', pt: 'Máquina' }), hint: tx({ en: 'What is missing to get work done', pt: 'O que falta instalar para trabalhar' }), icon: Stethoscope },
       { path: '/perfil', label: tx({ en: 'Team profile', pt: 'Perfil de equipe' }), hint: tx({ en: 'Exports and imports the setup for someone else', pt: 'Exporta e importa a configuração para outra pessoa' }), icon: Users },
       { path: '/conversores', label: tx({ en: 'Converters', pt: 'Conversores' }), hint: tx({ en: 'JWT, base64, URL, timestamp, UUID, cron, JSON, diff, regex, hash', pt: 'JWT, base64, URL, timestamp, UUID, cron, JSON, diff, regex, hash' }), icon: Wrench },
-      { path: '/servicos', label: tx({ en: 'Local services', pt: 'Serviços locais' }), hint: tx({ en: 'Listening ports, containers and compose projects', pt: 'Portas em escuta, containers e projetos compose' }), icon: Server },
+      { path: '/servicos', label: tx({ en: 'Local services', pt: 'Serviços locais' }), hint: tx({ en: 'Listening ports, containers, compose projects and your local applications', pt: 'Portas em escuta, containers, projetos compose e suas aplicações locais' }), icon: Server },
       { path: '/agenda', label: tx({ en: 'Scheduled checks', pt: 'Verificações agendadas' }), hint: tx({ en: 'Alerts when a pipeline, certificate or pods change state', pt: 'Avisa quando pipeline, certificado ou pods mudam de estado' }), icon: BellRing },
       { path: '/gerador', label: tx({ en: 'Data generator', pt: 'Gerador de dados' }), hint: tx({ en: 'Test CPF, CNPJ, person and company', pt: 'CPF, CNPJ, pessoa e empresa de teste' }), icon: Dices },
     ],

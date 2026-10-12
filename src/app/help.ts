@@ -491,12 +491,13 @@ export const HELP: Record<string, Pair<Help>> = {
   },
   '/servicos': {
     en: {
-      purpose: 'Shows what is running on this machine: listening ports with the owning process, and Docker containers, images, volumes and compose projects. From here you can free a port by ending its process and clean up what Docker has piled up.',
+      purpose: 'Shows what is running on this machine: listening ports with the owning process, and Docker containers, images, volumes and compose projects. From here you can free a port by ending its process, clean up what Docker has piled up, and start the local applications you register.',
       steps: [
         'Filter the ports by number, process or PID to find who holds a port.',
         'To free the port, click "Stop" and confirm the command; tick "Force" only if a normal stop does not work.',
         'For Docker, use the Containers, Images, Volumes and Compose tabs.',
         'Start, stop or restart containers and compose projects; delete stopped containers and images and volumes that are not in use.',
+        'In the Applications tab, register a folder and a command ("New application"), then start, stop, restart and follow its log from here.',
       ],
       notes: [
         'The command shown in the confirmation is your system\'s: kill on Linux and macOS, taskkill on Windows.',
@@ -504,15 +505,17 @@ export const HELP: Record<string, Pair<Help>> = {
         'Deleting a volume deletes its data for good. Docker itself refuses an image or volume that a container is using.',
         'The "network" mark means the port is open to other machines, not only to this one.',
         'The process shows without its arguments, which may contain a password. "Other user" is a system or root process your user cannot end.',
+        'Applications run without a shell, one argument per line; to chain commands, point to a script. Stop ends the whole process group, children included. "Port taken" means another process, not started here, holds the application\'s port.',
       ],
     },
     pt: {
-      purpose: 'Mostra o que está rodando nesta máquina: portas em escuta com o processo dono, e containers, imagens, volumes e projetos compose do Docker. Daqui dá para liberar uma porta encerrando o processo e limpar o que o Docker acumulou.',
+      purpose: 'Mostra o que está rodando nesta máquina: portas em escuta com o processo dono, e containers, imagens, volumes e projetos compose do Docker. Daqui dá para liberar uma porta encerrando o processo, limpar o que o Docker acumulou e subir as aplicações locais que você cadastra.',
       steps: [
         'Filtre as portas por número, processo ou PID para achar quem ocupa uma porta.',
         'Para liberar a porta, clique em "Encerrar" e confirme o comando; marque "Forçar" só se o encerramento normal não resolver.',
         'No Docker, use as abas Containers, Imagens, Volumes e Compose.',
         'Inicie, pare ou reinicie containers e projetos compose; apague containers parados, imagens e volumes que não estão em uso.',
+        'Na aba Aplicações, cadastre uma pasta e um comando ("Nova aplicação") e depois inicie, pare, reinicie e acompanhe o log por aqui.',
       ],
       notes: [
         'O comando mostrado na confirmação é o do seu sistema: kill no Linux e no macOS, taskkill no Windows.',
@@ -520,6 +523,7 @@ export const HELP: Record<string, Pair<Help>> = {
         'Apagar volume apaga os dados dele para sempre. Imagem ou volume em uso por algum container é recusado pelo próprio Docker.',
         'A marca "rede" indica porta aberta para outras máquinas, e não só para esta.',
         'O processo aparece sem os argumentos, que podem ter senha. "Outro usuário" é processo do sistema ou de root, que o seu usuário não consegue encerrar.',
+        'As aplicações rodam sem shell, um argumento por linha; para encadear comandos, aponte para um script. Parar encerra o grupo de processos inteiro, filhos incluídos. "Porta ocupada" indica que outro processo, não iniciado por aqui, está na porta da aplicação.',
       ],
     },
   },

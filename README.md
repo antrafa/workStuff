@@ -57,7 +57,7 @@ The menu is split into four groups.
 | Page | Route | What it does |
 |---|---|---|
 | **Converters** (Conversores) | `/conversores` | JWT decoding with an expiry check, Base64/base64url, URL encoding, timestamp conversion, UUID v4, cron next-run preview, JSON format/minify/validate (with line and column of the error), JSON ↔ YAML, line diff, regex tester and SHA hashes. Runs in the browser. |
-| **Local services** (Serviços locais) | `/servicos` | Listening ports with the owning process (flagging the ones open to the network), Docker containers and compose projects, with start, stop and restart behind a confirmation that shows the exact command. |
+| **Local services** (Serviços locais) | `/servicos` | Listening ports with the owning process (flagging the ones open to the network), Docker containers and compose projects, with start, stop and restart behind a confirmation that shows the exact command. An Applications tab registers local apps (folder, command, port, URL) to start, stop, restart and follow their log; the registry lives in `~/.workstuff/apps/`. |
 | **Scheduled checks** (Verificações agendadas) | `/agenda` | While the server is running, periodically checks what you register (a broken pipeline, a certificate close to expiry, pods in a critical state, critical vulnerabilities in a project) and sends a desktop notification only when the state changes. |
 | **Data generator** (Gerador de dados) | `/gerador` | Generates Brazilian test data: people, CPF, CNPJ (including the new alphanumeric format), names, addresses and companies, with an optional state (UF) filter. Runs in the browser. |
 
@@ -85,6 +85,7 @@ workStuff runs commands on your machine and against real clusters, so its defaul
 
 - **Local only.** The API listens on `127.0.0.1` and must not be exposed to a network. Requests whose `Host` or `Origin` is not localhost get 403, so a web page open in the browser cannot drive it.
 - **No shell.** Processes are started directly. The only exception is the Machine page's automatic fixes, which come from a fixed table on the server and never from the request.
+- **Registered applications run what you typed.** The Local services page starts the command you registered, as your user, without a shell. Only the local API can register or start one (see *Local only*).
 - **Read-only AI agents.** No provider runs with auto-approve:
   - `claude` gets only the `Read`, `Grep` and `Glob` tools, with `--strict-mcp-config`.
   - `codex` runs with `-s read-only`.

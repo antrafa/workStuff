@@ -28,3 +28,17 @@ export const killCommand = (os: Os, pid: number, force: boolean) =>
   os === 'win32' ? `taskkill /PID ${pid}${force ? ' /F' : ''}` : `kill ${force ? '-KILL' : '-TERM'} ${pid}`
 
 export const imageRef = (i: Image) => (i.tag && i.tag !== '<none>' ? `${i.repository}:${i.tag}` : i.id)
+
+export type App = { id: string; name: string; cwd: string; cmd: string; args: string[]; env: Record<string, string>; port: number | null; url: string | null }
+export type AppInput = Omit<App, 'id'>
+// pid: the process the panel started, if alive; portPid: who listens on the app's port now.
+export type AppStatus = App & { pid: number | null; portOpen: boolean; portPid: number | null }
+
+export const fetchApps = () => api.get<AppStatus[]>('/local/apps')
+export const saveApp = (input: AppInput, id?: string) => (id ? api.put<App>(`/local/apps/${encodeURIComponent(id)}`, input) : api.post<App>('/local/apps', input))
+export const deleteApp = (id: string) => api.delete(`/local/apps/${encodeURIComponent(id)}`)
+export const appAction = (id: string, action: Action, force = false) => api.post<{ stillAlive?: boolean }>(`/local/apps/${encodeURIComponent(id)}/${action}`, { force })
+export const appLogsUrl = (id: string) => `/api/local/apps/${encodeURIComponent(id)}/logs`
+
+// Shown in the card and in the confirmation: arguments with spaces go between quotes.
+export const commandLine = (a: Pick<App, 'cmd' | 'args'>) => [a.cmd, ...a.args].map(s => (/\s/.test(s) ? `"${s}"` : s)).join(' ')
