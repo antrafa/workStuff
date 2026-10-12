@@ -580,6 +580,7 @@ export const HELP: Record<string, Pair<Help>> = {
       purpose: 'Runs the development cycle with eight AI agents (Analyst, Architect, Implementer, Tester, Documenter, Reviewer, Security and Verifier) in isolated Git worktrees, with gates checked by code and human approval before anything is sent.',
       steps: [
         'Group the work in projects: "New project" takes an existing folder or creates a new one (optionally with git init). The repositories inside it are found by themselves, and the chips above the board filter by project; "Loose" holds the tasks with no project, which "Bring loose tasks" moves into the project open.',
+        'With a project open, the Ideas tab turns an idea into tasks: a facilitator conducts rounds of up to three questions, each with a recommended answer, over a living document (Explore, then Refine); in Challenge a red team attacks and a blue team defends while you decide each attack; the Planner writes master tasks, the walking skeleton first, and the Splitter breaks each one into tasks of one repository and one stack. Each phase only closes when its gate, checked in code, is open, and "Send to the factory" puts the tasks on the board with their order and their Gherkin criteria.',
         'First time? "Guided mode" checks bwrap and the CLIs, reads the repository, helps you write the request and picks models and a cost cap. To create directly, use "New task" (imports a GitLab or GitHub issue, or a manual task).',
         'On the Board, each card shows every agent\'s progress, the step running now with who runs it and for how long, and the cost so far. Click the card to open the timeline: one lane per agent and the live activity, with what each agent writes and every tool it calls.',
         'The Analyst writes the acceptance criteria. If there is a business question, the task stops at "waiting for answers" until you reply.',
@@ -598,12 +599,14 @@ export const HELP: Record<string, Pair<Help>> = {
         'Cost cap: checked before each agent, adding up every run of the task. When it is reached, the task stops with an error; raise the cap on the task itself and try again. One run can go a little over the cap, because the cost only arrives when it ends.',
         'Model per agent: in "New task", choose a strong model to specify, plan and review and a cheaper one to build, test and document.',
         'You can also call any of the agents on its own in the Specialized agents tab, always in read-only mode.',
+        'A task that came from an idea shows its key (M1.T2) and, while a task it depends on is not done, "waits for": planning only starts after that. Its Gherkin criteria reach the Analyst as CA1..n, kept first and verbatim. Ideation agents only read the project folder.',
       ],
     },
     pt: {
       purpose: 'Orquestra o ciclo de desenvolvimento com oito agentes de IA (Analyst, Architect, Implementer, Tester, Documenter, Reviewer, Security e Verifier) em Git Worktrees isoladas, com portões verificados por código e aprovação humana antes de qualquer envio.',
       steps: [
         'Agrupe o trabalho em projetos: "Novo projeto" usa uma pasta existente ou cria uma nova (com git init, se quiser). Os repositórios dentro dela são encontrados sozinhos, e os chips acima do quadro filtram por projeto; "Avulsas" reúne as tarefas sem projeto, que "Trazer tarefas avulsas" move para o projeto aberto.',
+        'Com um projeto aberto, a aba Ideias transforma uma ideia em tarefas: um facilitador conduz rodadas de até três perguntas, cada uma com a resposta recomendada, sobre um documento vivo (Explorar, depois Refinar); em Desafiar um red team ataca e um blue team defende enquanto você decide cada ataque; o Planner escreve as tarefas master, o walking skeleton primeiro, e o Splitter quebra cada uma em tarefas de um repositório e uma stack. Cada fase só fecha com o portão, conferido em código, aberto, e "Enviar à fábrica" põe as tarefas no quadro com a ordem e os critérios em Gherkin.',
         'Primeira vez? "Modo guiado" confere bwrap e CLIs, lê o repositório, ajuda a escrever a demanda e escolhe modelos e teto de custo. Para criar direto, use "Nova Tarefa" (importa issue do GitLab ou GitHub, ou tarefa manual).',
         'No Quadro, cada cartão mostra o andamento de cada agente, a etapa de agora com quem a executa e há quanto tempo, e o custo até aqui. Clique no cartão para abrir a linha do tempo: as raias por agente e a atividade ao vivo, com o que cada agente escreve e cada ferramenta que chama.',
         'O Analyst escreve os critérios de aceite. Se houver dúvida de negócio, a tarefa para em "aguardando respostas" até você responder.',
@@ -622,6 +625,7 @@ export const HELP: Record<string, Pair<Help>> = {
         'Teto de custo: conferido antes de cada agente, somando todas as execuções da tarefa. Ao atingir, a tarefa para com erro; aumente o teto na própria tarefa e tente de novo. Uma execução pode passar um pouco do teto, porque o custo só chega quando ela termina.',
         'Modelo por agente: em "Nova Tarefa", escolha um modelo forte para especificar, planejar e revisar e um mais barato para construir, testar e documentar.',
         'Você também pode acionar qualquer um dos agentes de forma independente na aba de Agentes Especializados, sempre em modo leitura.',
+        'Uma tarefa que veio de uma ideia mostra a chave (M1.T2) e, enquanto uma tarefa de que depende não estiver concluída, "aguarda": o planejamento só começa depois disso. Os critérios em Gherkin chegam ao Analyst como CA1..n, mantidos primeiro e literais. Os agentes de ideação só leem a pasta do projeto.',
       ],
     },
   },

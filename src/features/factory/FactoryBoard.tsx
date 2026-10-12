@@ -1,5 +1,5 @@
-import { AlertTriangle, CheckCircle2, GitBranch, ShieldAlert, AlertCircle } from 'lucide-react'
-import type { FactoryTask, FactoryTaskState } from '../../../server/lib/factory/types.ts'
+import { AlertTriangle, CheckCircle2, GitBranch, Hourglass, Lightbulb, ShieldAlert, AlertCircle } from 'lucide-react'
+import { pendingDependencies, type FactoryTask, type FactoryTaskState } from '../../../server/lib/factory/types.ts'
 import { AGENT_ORDER, AGENT_UI, currentSpan, fmtDuration, isTaskRunning, taskUsage } from './factoryRun'
 import { FactoryStatusChip } from './timeline/FactoryStatusChip'
 import { TaskActions } from './TaskActions'
@@ -115,7 +115,7 @@ export function FactoryBoard({ tasks, onOpenTrace, onOpenReview, onUpdate }: Pro
                   </div>
                 ) : (
                   col.items.map(task => (
-                    <TaskCard key={task.id} task={task} onOpenTrace={onOpenTrace} onOpenReview={onOpenReview} onUpdate={onUpdate} />
+                    <TaskCard key={task.id} task={task} waitingOn={pendingDependencies(task, tasks)} onOpenTrace={onOpenTrace} onOpenReview={onOpenReview} onUpdate={onUpdate} />
                   ))
                 )}
               </div>
@@ -172,7 +172,7 @@ function NowLine({ task, running }: { task: FactoryTask; running: boolean }) {
   )
 }
 
-function TaskCard({ task, onOpenTrace, onOpenReview, onUpdate }: { task: FactoryTask } & Omit<Props, 'tasks'>) {
+function TaskCard({ task, waitingOn, onOpenTrace, onOpenReview, onUpdate }: { task: FactoryTask; waitingOn: FactoryTask[] } & Omit<Props, 'tasks'>) {
   const running = isTaskRunning(task)
   const failed = task.state === 'error'
   const waiting = task.state === 'waiting_approval' || task.state === 'waiting_clarification' || task.state === 'review'
@@ -204,6 +204,17 @@ function TaskCard({ task, onOpenTrace, onOpenReview, onUpdate }: { task: Factory
       </div>
 
       <div style={{ fontWeight: 600, fontSize: 13, lineHeight: 1.35, color: 'var(--ink)' }}>{task.title}</div>
+
+      {(task.origin || waitingOn.length > 0) && (
+        <div className="row" style={{ gap: 6, fontSize: 11, flexWrap: 'wrap' }}>
+          {task.origin && <span className="badge" title={tx({ en: 'Came from an idea of the project', pt: 'Veio de uma ideia do projeto' })}><Lightbulb size={11} /> {task.origin.taskKey}</span>}
+          {waitingOn.length > 0 && (
+            <span className="badge badge-warn" title={tx({ en: 'Planning starts once these are done', pt: 'O planejamento começa quando estas estiverem concluídas' })}>
+              <Hourglass size={11} /> {tx({ en: 'waits for', pt: 'aguarda' })} {waitingOn.map(t => t.origin?.taskKey ?? t.title).join(', ')}
+            </span>
+          )}
+        </div>
+      )}
 
       <AgentProgress task={task} />
       <NowLine task={task} running={running} />

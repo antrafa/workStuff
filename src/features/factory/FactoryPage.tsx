@@ -14,6 +14,7 @@ import { useAsync } from '@/lib/useAsync'
 import type { FactoryProjectView, FactoryTask } from '../../../server/lib/factory/types.ts'
 import { NewProjectModal } from './projects/NewProjectModal'
 import { ProjectHeader } from './projects/ProjectHeader'
+import { IdeasTab } from './ideation/IdeasTab'
 import { FactoryBoard } from './FactoryBoard'
 import { NewTaskModal } from './NewTaskModal'
 import { TaskReviewDrawer } from './TaskReviewDrawer'
@@ -32,7 +33,7 @@ function wizardSeen(): boolean {
 }
 
 export default function FactoryPage() {
-  const [activeTab, setActiveTab] = useState<'board' | 'agents'>('board')
+  const [activeTab, setActiveTab] = useState<'board' | 'ideas' | 'agents'>('board')
   const [modalOpen, setModalOpen] = useState(false)
   // The drawer reads the task from the polled list by id, so it never shows a stale copy
   const [selectedId, setSelectedId] = useState<string | null>(null)
@@ -156,6 +157,7 @@ export default function FactoryPage() {
               <Segmented
                 options={[
                   { id: 'board', label: tx({ en: `Board (${tasks.length})`, pt: `Quadro (${tasks.length})` }) },
+                  ...(project ? [{ id: 'ideas' as const, label: tx({ en: 'Ideas', pt: 'Ideias' }) }] : []),
                   { id: 'agents', label: tx({ en: 'Specialized agents', pt: 'Agentes Especializados' }) },
                 ]}
                 value={activeTab}
@@ -199,6 +201,13 @@ export default function FactoryPage() {
                   )
                 )}
               </Async>
+            )}
+
+            {activeTab === 'ideas' && project && (
+              <IdeasTab key={project.id} project={project} tasks={allTasks} onTasksChanged={handleRefresh} />
+            )}
+            {activeTab === 'ideas' && !project && (
+              <p className="muted">{tx({ en: 'Ideas live in a project: pick one in the chips above or create one.', pt: 'Ideias vivem num projeto: escolha um nos chips acima ou crie um.' })}</p>
             )}
 
             {activeTab === 'agents' && (

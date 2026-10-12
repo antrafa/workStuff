@@ -325,6 +325,6 @@ export function taskUsage(task: Pick<FactoryTask, 'spans'>): { costUsd: number |
 
 // Dependencies not done yet. A dependency that was deleted no longer holds the task back.
 // Shared by the plan route, which refuses to start, and the board, which shows why.
-export function pendingDependencies(task: Pick<FactoryTask, 'dependsOn'>, all: Pick<FactoryTask, 'id' | 'title' | 'state' | 'origin'>[]) {
+export function pendingDependencies<T extends Pick<FactoryTask, 'id' | 'state'>>(task: Pick<FactoryTask, 'dependsOn'>, all: T[]): T[] {
   return (task.dependsOn ?? []).flatMap(id => all.filter(t => t.id === id && t.state !== 'done'))
 }
