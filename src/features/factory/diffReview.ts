@@ -33,17 +33,17 @@ export const CATEGORY_INFO: Record<DiffCategory, { label: Pair; hint: Pair; colo
   core: {
     label: { en: 'Core logic', pt: 'Lógica central' },
     hint: { en: 'Domain models, business logic and core rules', pt: 'Modelos de domínio, regras de negócio e lógica central' },
-    colorToken: 'var(--fx-code, #60a5fa)',
+    colorToken: 'var(--fx-code)',
   },
   wiring: {
     label: { en: 'Wiring & API', pt: 'Integração & API' },
     hint: { en: 'Endpoints, routes, pipelines and configuration wiring', pt: 'Endpoints, rotas, pipelines e amarração de APIs' },
-    colorToken: 'var(--fx-gates, #facc15)',
+    colorToken: 'var(--fx-gates)',
   },
   tests: {
     label: { en: 'Tests', pt: 'Testes' },
     hint: { en: 'Unit, integration and verification suites', pt: 'Suítes unitárias, integração e verificação' },
-    colorToken: 'var(--fx-tester, #4ade80)',
+    colorToken: 'var(--fx-tester)',
   },
   docs_meta: {
     label: { en: 'Docs & Meta', pt: 'Docs & Metadados' },

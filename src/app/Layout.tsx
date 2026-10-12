@@ -131,7 +131,7 @@ export function Layout() {
             onClick={() => setShutdownOpen(true)}
             title={tx({ en: 'Shut down workStuff', pt: 'Encerrar o workStuff' })}
             aria-label={tx({ en: 'Shut down workStuff', pt: 'Encerrar o workStuff' })}
-            style={{ color: 'var(--crit, #ef4444)' }}
+            style={{ color: 'var(--crit)' }}
           >
             <Power size={16} />
           </button>

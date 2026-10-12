@@ -325,7 +325,7 @@ export function CognitiveDiffViewer({ diffContent, diffStat, blastRadius }: Prop
                               })
                         }
                       >
-                        ⚡ {blast.dependents.length} callers {blast.testFiles.length === 0 ? tx({ en: '(uncovered)', pt: '(sem testes)' }) : tx({ en: `(${blast.testFiles.length} tests)`, pt: `(${blast.testFiles.length} testes)` })}
+                        <Zap size={10} style={{ verticalAlign: '-1px' }} /> {blast.dependents.length} {tx({ en: 'callers', pt: 'chamadores' })} {blast.testFiles.length === 0 ? tx({ en: '(uncovered)', pt: '(sem testes)' }) : tx({ en: `(${blast.testFiles.length} tests)`, pt: `(${blast.testFiles.length} testes)` })}
                       </span>
                     )}
                   </div>

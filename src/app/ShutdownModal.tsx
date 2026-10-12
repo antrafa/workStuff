@@ -44,7 +44,7 @@ export function ShutdownModal({ onClose }: Props) {
         }
       >
         <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', alignItems: 'center', textAlign: 'center', padding: '16px 8px' }}>
-          <div style={{ color: 'var(--ok, #10b981)', display: 'grid', placeItems: 'center' }}>
+          <div style={{ color: 'var(--ok)', display: 'grid', placeItems: 'center' }}>
             <CheckCircle2 size={44} />
           </div>
           <h3 style={{ margin: 0 }}>
@@ -68,7 +68,7 @@ export function ShutdownModal({ onClose }: Props) {
     <Modal
       title={
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <Power size={16} style={{ color: 'var(--crit, #ef4444)' }} />
+          <Power size={16} style={{ color: 'var(--crit)' }} />
           <span>{tx({ en: 'Shut down workStuff', pt: 'Encerrar o workStuff' })}</span>
         </div>
       }
