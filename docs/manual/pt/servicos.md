@@ -145,4 +145,4 @@ Excluir apaga só o cadastro e o último log. A pasta e o código do projeto nã
 - **A aplicação mostra porta ocupada.** Outro processo está na porta dela, talvez uma cópia que você subiu pelo terminal. Libere a porta na aba **Portas e Docker** e clique em **Iniciar**.
 - **"pasta não encontrada".** A pasta cadastrada não existe mais. Edite a aplicação e corrija o campo **Pasta**.
 - **"não foi possível iniciar".** O comando não foi achado. Confira o campo **Comando**. No Windows, `npm` e `npx` não funcionam sem shell: cadastre `node` como comando e o script como argumento.
-- **"ainda não parou; tente de novo em alguns segundos".** Alguns programas demoram para desligar. Espere e clique em **Parar** de novo.
+- **"não parou. Clique em Forçar parada…".** Alguns programas demoram para desligar ou ignoram o pedido. O botão **Parar** daquela aplicação vira **Forçar parada**: clique nele para encerrar o processo na hora. O que ele não salvou se perde.

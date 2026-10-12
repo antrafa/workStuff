@@ -28,6 +28,8 @@ export function AppsTab() {
   const [removing, setRemoving] = useState<AppStatus | null>(null)
   const [logsOf, setLogsOf] = useState<string | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
+  // Apps a plain Stop did not end: their Stop button becomes Force stop (KILL)
+  const [stuck, setStuck] = useState<Set<string>>(new Set())
   const toast = useToast()
 
   // Status changes on its own (an app crashes, a port opens): keep polling while the tab is visible.
@@ -36,11 +38,21 @@ export function AppsTab() {
     return () => clearInterval(id)
   }, [state.reload])
 
-  const act = async (app: AppStatus, action: Action) => {
+  const act = async (app: AppStatus, action: Action, force = false) => {
     setBusy(app.id)
     try {
-      const r = await appAction(app.id, action)
-      if (r.stillAlive) toast(tx({ en: `${app.name} did not stop yet; try again in a few seconds`, pt: `${app.name} ainda não parou; tente de novo em alguns segundos` }))
+      const r = await appAction(app.id, action, force)
+      setStuck(s => {
+        const next = new Set(s)
+        if (r.stillAlive) next.add(app.id)
+        else next.delete(app.id)
+        return next
+      })
+      if (r.stillAlive) {
+        toast(force
+          ? tx({ en: `${app.name} is still alive even after Force stop; check it in Listening ports`, pt: `${app.name} continua vivo mesmo depois de Forçar parada; confira em Portas em escuta` })
+          : tx({ en: `${app.name} did not stop. Click Force stop to end it at once (unsaved work in it is lost).`, pt: `${app.name} não parou. Clique em Forçar parada para encerrar de vez (o que não foi salvo nele se perde).` }))
+      }
       if (action !== 'stop') setLogsOf(app.id)
     } catch (e) {
       toast((e as Error).message)
@@ -87,7 +99,11 @@ export function AppsTab() {
                         <div className="row" style={{ ['--gap' as string]: '6px', flexWrap: 'nowrap', justifyContent: 'flex-end' }}>
                           {a.pid ? (
                             <>
-                              <button className="btn btn-sm" disabled={busy === a.id} onClick={() => act(a, 'stop')}><Square size={12} /> {tx({ en: 'Stop', pt: 'Parar' })}</button>
+                              {stuck.has(a.id) ? (
+                                <button className="btn btn-sm btn-danger" disabled={busy === a.id} onClick={() => act(a, 'stop', true)} title={tx({ en: 'Ends the process at once (KILL), without letting it close on its own', pt: 'Encerra o processo na hora (KILL), sem esperar que ele feche sozinho' })}><Square size={12} /> {tx({ en: 'Force stop', pt: 'Forçar parada' })}</button>
+                              ) : (
+                                <button className="btn btn-sm" disabled={busy === a.id} onClick={() => act(a, 'stop')}><Square size={12} /> {tx({ en: 'Stop', pt: 'Parar' })}</button>
+                              )}
                               <button className="btn btn-sm" disabled={busy === a.id} onClick={() => act(a, 'restart')}><RotateCw size={12} /> {tx({ en: 'Restart', pt: 'Reiniciar' })}</button>
                             </>
                           ) : (

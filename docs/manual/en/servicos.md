@@ -145,4 +145,4 @@ Deleting removes only the registration and the last log. The project's folder an
 - **The application shows port taken.** Another process is on its port, maybe a copy you started from the terminal. Free the port on the **Ports and Docker** tab and click **Start**.
 - **"folder not found".** The registered folder no longer exists. Edit the application and fix the **Folder** field.
 - **"could not start".** The command was not found. Check the **Command** field. On Windows, `npm` and `npx` do not work without a shell: register `node` as the command and the script as an argument.
-- **"did not stop yet; try again in a few seconds".** Some programs take a while to shut down. Wait and click **Stop** again.
+- **"did not stop. Click Force stop…".** Some programs take a while to shut down or ignore the request. That application's **Stop** button becomes **Force stop**: click it to end the process at once. Anything it has not saved is lost.

@@ -167,7 +167,7 @@ export function createAppsStore(dir: string = dataFile('apps')) {
   }
 
   async function restart(id: string) {
-    if (pidOf(id) && (await stop(id)).stillAlive) throw new Error(say({ en: 'the process did not stop; use Stop with Force', pt: 'o processo não parou; use Parar com Forçar' }))
+    if (pidOf(id) && (await stop(id)).stillAlive) throw new Error(say({ en: 'the process did not stop; click Stop and then Force stop', pt: 'o processo não parou; clique em Parar e depois em Forçar parada' }))
     return start(id)
   }
 
