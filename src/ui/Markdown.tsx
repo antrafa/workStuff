@@ -1,7 +1,8 @@
 import './markdown.css'
 import './code.css'
 import { CopyButton } from './CopyButton'
-import { useEffect, useId, useState, type ReactElement, type ReactNode } from 'react'
+import { Children, isValidElement, useEffect, useId, useState, type ReactElement, type ReactNode } from 'react'
+import { Link } from 'react-router'
 import ReactMarkdown, { type Components } from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { tx } from '@/lib/i18n'
@@ -18,12 +19,27 @@ export function Markdown({ children }: { children: string }) {
   )
 }
 
+// Anchor of a heading, shared with whoever lists the headings (the manual's "On this page")
+export const headingId = (text: string) =>
+  text.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
+
+const textOf = (node: ReactNode): string =>
+  Children.toArray(node).map(child => (typeof child === 'string' || typeof child === 'number' ? String(child) : isValidElement<{ children?: ReactNode }>(child) ? textOf(child.props.children) : '')).join('')
+
 const COMPONENTS: Components = {
-  a: ({ href, children }) => (
-    <a href={href} target="_blank" rel="noopener noreferrer">
-      {children}
-    </a>
-  ),
+  // A path inside the panel navigates in place; anything else opens outside it
+  a: ({ href, children }) =>
+    href?.startsWith('/') ? (
+      <Link to={href}>{children}</Link>
+    ) : href?.startsWith('#') ? (
+      <a href={href}>{children}</a>
+    ) : (
+      <a href={href} target="_blank" rel="noopener noreferrer">
+        {children}
+      </a>
+    ),
+  h2: ({ children }) => <h2 id={headingId(textOf(children))}>{children}</h2>,
+  h3: ({ children }) => <h3 id={headingId(textOf(children))}>{children}</h3>,
   // Bloco de código: o <pre> recebe o <code> do react-markdown e desenha ele mesmo o conteúdo,
   // então o override de `code` abaixo só é usado para código inline.
   pre: ({ children }) => {

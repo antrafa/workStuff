@@ -1,0 +1,131 @@
+/* Documentation: sections on the left, the page in the middle, its headings on the right */
+.manual {
+  display: grid;
+  grid-template-columns: 230px minmax(0, 1fr) 200px;
+  gap: 28px;
+  align-items: start;
+}
+.manual-nav,
+.manual-toc {
+  position: sticky;
+  top: 0;
+  max-height: calc(100vh - 140px);
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.manual-nav .search {
+  margin-bottom: 10px;
+}
+.manual-group {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  margin-bottom: 14px;
+}
+.manual-group .eyebrow {
+  margin-bottom: 4px;
+}
+.manual-link,
+.manual-toc-link {
+  display: block;
+  padding: 4px 10px;
+  border-radius: var(--r);
+  color: var(--ink-2);
+  font-size: 13px;
+  text-decoration: none;
+  line-height: 1.35;
+}
+.manual-link:hover,
+.manual-toc-link:hover {
+  color: var(--ink);
+  background: var(--surface-2);
+}
+.manual-link.active {
+  color: var(--signal);
+  background: var(--signal-soft);
+  font-weight: 600;
+}
+.manual-none {
+  font-size: 12.5px;
+  padding: 0 10px;
+}
+.manual-toc {
+  border-left: 1px solid var(--line);
+  padding-left: 6px;
+}
+.manual-toc .eyebrow {
+  padding: 0 10px 4px;
+}
+.manual-toc-link {
+  font-size: 12.5px;
+}
+.manual-toc-link.level-3 {
+  padding-left: 22px;
+}
+.manual-body {
+  min-width: 0;
+  position: relative;
+}
+.manual-open {
+  float: right;
+  margin-left: 12px;
+}
+.manual-body .md {
+  font-size: 14.5px;
+}
+.manual-pager {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 36px;
+  padding-top: 16px;
+  border-top: 1px solid var(--line);
+}
+.manual-pager-link {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 10px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  color: var(--ink);
+  text-decoration: none;
+  font-weight: 600;
+  font-size: 13.5px;
+}
+.manual-pager-link:hover {
+  border-color: var(--signal);
+}
+.manual-pager-link .eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.manual-pager-link.is-next {
+  text-align: right;
+  align-items: flex-end;
+}
+
+@media (max-width: 1180px) {
+  .manual {
+    grid-template-columns: 210px minmax(0, 1fr);
+  }
+  .manual-toc {
+    display: none;
+  }
+}
+@media (max-width: 760px) {
+  .manual {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .manual-nav {
+    position: static;
+    max-height: none;
+  }
+  .manual-open {
+    float: none;
+    margin: 0 0 12px;
+  }
+}

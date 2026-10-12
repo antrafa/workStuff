@@ -1,28 +1,27 @@
-import { Modal } from '@/ui'
+import { BookMarked } from 'lucide-react'
+import { Link } from 'react-router'
+import { Async, Markdown, Modal } from '@/ui'
+import { useAsync } from '@/lib/useAsync'
 import { tx } from '@/lib/i18n'
-import { helpFor } from './help'
+import { loadManualPage } from '@/features/manual/content'
+import { manualPath } from './manual'
 
-// Purpose and walkthrough of the current screen, opened by the "?" and the title's help link.
-export function HelpModal({ pathname, title, onClose }: { pathname: string; title: string; onClose: () => void }) {
-  const help = helpFor(pathname)
-  if (!help) return null
+// The screen's page of the manual, opened by the "?" and the title's help link.
+export function HelpModal({ slug, title, onClose }: { slug: string; title: string; onClose: () => void }) {
+  const text = useAsync(() => loadManualPage(slug), [slug])
   return (
-    <Modal title={tx({ en: `How to use · ${title}`, pt: `Como usar · ${title}` })} width={620} onClose={onClose}>
-      <div className="stack help">
-        <section>
-          <div className="eyebrow">{tx({ en: 'What it is for', pt: 'Para que serve' })}</div>
-          <p>{help.purpose}</p>
-        </section>
-        <section>
-          <div className="eyebrow">{tx({ en: 'How to use', pt: 'Como usar' })}</div>
-          <ol>{help.steps.map(s => <li key={s}>{s}</li>)}</ol>
-        </section>
-        {help.notes.length > 0 && (
-          <section>
-            <div className="eyebrow">{tx({ en: 'Good to know', pt: 'Bom saber' })}</div>
-            <ul>{help.notes.map(n => <li key={n}>{n}</li>)}</ul>
-          </section>
-        )}
+    <Modal
+      title={tx({ en: `How to use · ${title}`, pt: `Como usar · ${title}` })}
+      width={820}
+      onClose={onClose}
+      footer={
+        <Link to={manualPath(slug)} className="btn btn-primary" onClick={onClose}>
+          <BookMarked size={14} /> {tx({ en: 'Open in the documentation', pt: 'Abrir na documentação' })}
+        </Link>
+      }
+    >
+      <div className="help-doc">
+        <Async state={text}>{md => <Markdown>{md}</Markdown>}</Async>
       </div>
     </Modal>
   )

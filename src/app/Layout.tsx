@@ -8,7 +8,7 @@ import { CommandPalette } from './CommandPalette'
 import { HelpModal } from './HelpModal'
 import { ShutdownModal } from './ShutdownModal'
 import { StatusBar } from './StatusBar'
-import { helpFor } from './help'
+import { manualSlugFor } from './manual'
 import { setTheme, useTheme } from './theme'
 import { refreshSession, useClusterShared } from '@/features/cluster/api'
 import { tx } from '@/lib/i18n'
@@ -36,8 +36,8 @@ export function Layout() {
   const [helpOpen, setHelpOpen] = useState(false)
   const [paletteOpen, setPaletteOpen] = useState(false)
   const [shutdownOpen, setShutdownOpen] = useState(false)
-  const help = helpFor(pathname)
-  const pageHelp = help ? { purpose: help.purpose, open: () => setHelpOpen(true) } : null
+  const helpSlug = manualSlugFor(pathname)
+  const pageHelp = helpSlug ? { open: () => setHelpOpen(true) } : null
 
   // The frame only shows on screens that act on the connected cluster; the rest is this machine.
   const onCluster = current?.group.id === 'kubernetes' && cluster.session
@@ -153,7 +153,7 @@ export function Layout() {
               <Outlet />
             </Suspense>
           </PageHelpContext.Provider>
-          {helpOpen && <HelpModal pathname={pathname} title={current?.item.label ?? SETTINGS} onClose={() => setHelpOpen(false)} />}
+          {helpOpen && helpSlug && <HelpModal slug={helpSlug} title={current?.item.label ?? SETTINGS} onClose={() => setHelpOpen(false)} />}
         </main>
         <StatusBar />
       </div>

@@ -558,9 +558,9 @@ kbd {
   text-transform: uppercase;
   vertical-align: 1px;
 }
-.help p { margin: 4px 0 0; line-height: 1.55; }
-.help ol, .help ul { margin: 6px 0 0; padding-left: 20px; display: flex; flex-direction: column; gap: 6px; line-height: 1.5; }
-/* Ajuda da tela, junto ao título: o "?" mostra o propósito no tooltip; o link abre o passo a passo. */
+/* Ajuda da tela, junto ao título: o "?" e o link abrem a página da tela no manual. */
+/* No popup, o título do modal já nomeia a tela */
+.help-doc .md > h1:first-child { display: none; }
 .page-head h1 {
   display: flex;
   align-items: center;

@@ -242,7 +242,7 @@ Executores de procedimento compartilham o mesmo desenho: um Markdown com blocos 
 ### 8.2 Menu e ajuda: fonte única
 
 - `src/app/nav.ts` (`NAV`) é a única definição do menu: o menu lateral, o breadcrumb, a busca Ctrl K e a configuração de itens ocultos leem daqui. `scripts/check-nav.ts` trava a ordem.
-- `src/app/help.ts` tem o texto de ajuda de cada tela (para que serve, passos, limites), aberto pelo `?` ao lado do título. `scripts/check-help.ts` falha se uma tela do menu não tiver ajuda.
+- `src/app/manual.ts` organiza o manual do usuário (seções e páginas, uma por tela do menu); o texto de cada página está em `docs/manual/{en,pt}/<página>.md`. A tela Documentação (`/documentacao`) mostra o manual inteiro, e o `?` ao lado do título de cada tela abre a página dela num popup. `scripts/check-manual.ts` falha se uma tela do menu não tiver página, se faltar um idioma ou se um link interno estiver quebrado.
 - `src/app/menu.ts` guarda no navegador os itens ocultos, os favoritos (até 9), as telas recentes e os grupos abertos.
 
 ### 8.3 Dados

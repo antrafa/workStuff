@@ -1,5 +1,5 @@
 import {
-  Activity, ArrowUpCircle, BellRing, BookOpen, Bot, Cpu, Dices, Factory, FileSearch, GitBranch, GitCompare, GitPullRequest, History, LayoutDashboard, ScrollText, Server, ServerCog, ShieldAlert, Sparkles, Stethoscope, Terminal, Users, Workflow, Wrench,
+  Activity, ArrowUpCircle, BellRing, BookMarked, BookOpen, Bot, Cpu, Dices, Factory, FileSearch, GitBranch, GitCompare, GitPullRequest, History, LayoutDashboard, ScrollText, Server, ServerCog, ShieldAlert, Sparkles, Stethoscope, Terminal, Users, Workflow, Wrench,
   type LucideIcon,
 } from 'lucide-react'
 // Relative, not '@/': scripts/check-nav.ts imports this file in Node
@@ -17,6 +17,7 @@ export const NAV: NavGroup[] = [
     label: tx({ en: 'Overview', pt: 'Visão Geral' }),
     items: [
       { path: '/', label: tx({ en: 'Home', pt: 'Início' }), hint: tx({ en: 'Consolidated view of the environment, the cluster and the factory agents', pt: 'Painel consolidado do ambiente, cluster e agentes da fábrica' }), icon: LayoutDashboard },
+      { path: '/documentacao', label: tx({ en: 'Documentation', pt: 'Documentação' }), hint: tx({ en: 'Step by step guide to every screen, with the terms explained', pt: 'Guia passo a passo de todas as telas, com os termos explicados' }), icon: BookMarked },
     ],
   },
   {

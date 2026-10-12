@@ -31,7 +31,7 @@ A new module with real logic adds its selfcheck to `check`. Flows that span modu
 - UI text is bilingual: English (the default) and pt-BR with full accents, written where it is used as a pair, `tx({ en, pt })` in the web app (`src/lib/i18n.ts`) and `say({ en, pt })` for server messages a screen shows (`server/lib/i18n.ts`). The language is chosen in Configurações. A module-level `tx()` is fine in anything loaded through the router (it is imported after the language is known), never in `src/app/theme.ts` or `src/main.tsx`. New text always goes in as a pair. AI prompt text and Markdown content (runbooks, playbooks) stay in Portuguese for now.
 - Code, identifiers, comments and commit messages are English. Commits follow Conventional Commits.
 - Screens are built from `@/ui` (`Page`, `Async`, `Empty`, `Modal`, `Markdown`, `Chips`, ...) and the classes and tokens in `src/styles/` (`card`, `btn`, `badge`, `callout`, `input`, `var(--ok)`...). A new color becomes a token in `tokens.css` or a `--fx-*` variable in `factory.css`.
-- A new menu entry goes in `src/app/nav.ts` (the single source for sidebar, breadcrumb and palette) and needs its help text in `src/app/help.ts`; `check-help` fails without it.
+- A new menu entry goes in `src/app/nav.ts` (the single source for sidebar, breadcrumb and palette) and needs its page of the user manual in `docs/manual/en/` and `docs/manual/pt/` (how to write it: `docs/manual/README.md`); `check-manual` fails without it. A change to what a screen does updates its manual page in the same commit.
 
 ## Safety rails that cost investigation
 

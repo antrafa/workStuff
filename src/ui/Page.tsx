@@ -14,7 +14,7 @@ export function Page({ title, hint, actions, children }: Props) {
           <h1>
             {title}
             {help && (
-              <button className="page-help-icon" onClick={help.open} title={`${help.purpose}\n\n${tx({ en: 'Click to see how to use this screen.', pt: 'Clique para ver como usar esta tela.' })}`} aria-label={tx({ en: 'Help for this screen', pt: 'Ajuda desta tela' })}>
+              <button className="page-help-icon" onClick={help.open} title={tx({ en: 'Click to see how to use this screen, step by step.', pt: 'Clique para ver como usar esta tela, passo a passo.' })} aria-label={tx({ en: 'Help for this screen', pt: 'Ajuda desta tela' })}>
                 <CircleHelp size={18} />
               </button>
             )}

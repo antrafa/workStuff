@@ -8,7 +8,7 @@ import { NAV, findNav } from '../src/app/nav.ts'
 const layout = Object.fromEntries(NAV.map(g => [g.id, g.items.map(i => i.path)]))
 assert.deepEqual(Object.keys(layout), ['overview', 'development', 'tools', 'deploy', 'kubernetes', 'ai'])
 assert.deepEqual(layout, {
-  overview: ['/'],
+  overview: ['/', '/documentacao'],
   development: ['/fabrica', '/dev-runbooks'],
   tools: ['/maquina', '/perfil', '/conversores', '/servicos', '/agenda', '/gerador'],
   deploy: ['/repositorios', '/pipelines', '/revisao', '/vulnerabilidades'],

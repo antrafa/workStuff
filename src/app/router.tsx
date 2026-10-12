@@ -18,6 +18,7 @@ export const router = createBrowserRouter([
         children: [
           { index: true, element: page(() => import('@/features/dashboard/DashboardPage')) },
           { path: 'inicio', element: <Navigate to="/" replace /> },
+          { path: 'documentacao/:slug?', element: page(() => import('@/features/manual/ManualPage')) },
           { path: 'dashboard', element: <Navigate to="/" replace /> },
           { path: 'maquina', element: page(() => import('@/features/doctor/DoctorPage')) },
           { path: 'perfil', element: page(() => import('@/features/profile/ProfilePage')) },
