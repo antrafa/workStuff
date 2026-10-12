@@ -48,7 +48,7 @@ export function DiffTool() {
         <>
           <small className="muted">
             {changes
-              ? tx({ en: `${changes} different line(s).`, pt: `${changes} linha(s) diferente(s)` })
+              ? tx({ en: `${changes} different line(s).`, pt: `${changes} linha(s) diferente(s).` })
               : tx({ en: 'The two texts are the same.', pt: 'Os dois textos são iguais.' })}{' '}
             {tx({ en: `Up to ${MAX_DIFF_LINES} lines on each side.`, pt: `Até ${MAX_DIFF_LINES} linhas de cada lado.` })}
           </small>
