@@ -184,9 +184,10 @@ function PlaybookDocView({ file }: { file: string }) {
     }
   }
 
-  const runStep = async (stepId: number, customPreviousOutput?: string) => {
+  // The step's output, or null when it failed or was stopped: the sequence stops there
+  const runStep = async (stepId: number, customPreviousOutput?: string): Promise<string | null> => {
     const step = steps.find(s => s.id === stepId)
-    if (!step) return ''
+    if (!step) return null
 
     // Previous step output, when not given
     let prevOut = customPreviousOutput
@@ -205,6 +206,7 @@ function PlaybookDocView({ file }: { file: string }) {
 
     const t0 = Date.now()
     let accumulated = ''
+    let failed = false
 
     try {
       await streamPost<{ type: string; text?: string; message?: string; ok?: boolean; durationMs?: number }>(
@@ -228,6 +230,7 @@ function PlaybookDocView({ file }: { file: string }) {
             }))
           }
           if (event.type === 'error') {
+            failed = true
             setStepsState(prev => ({
               ...prev,
               [stepId]: {
@@ -241,7 +244,7 @@ function PlaybookDocView({ file }: { file: string }) {
         ac.signal,
         { file, step: stepId, values, previousOutput: prevOut },
       )
-      return accumulated
+      return failed || ac.signal.aborted ? null : accumulated
     } catch (e) {
       if ((e as Error).name !== 'AbortError') {
         setStepsState(prev => ({
@@ -253,7 +256,7 @@ function PlaybookDocView({ file }: { file: string }) {
           },
         }))
       }
-      return accumulated
+      return null
     }
   }
 
@@ -273,8 +276,9 @@ function PlaybookDocView({ file }: { file: string }) {
   const runAllSequentially = async () => {
     let lastOut = ''
     for (const step of steps) {
-      lastOut = await runStep(step.id, lastOut)
-      if (stepsState[step.id]?.status === 'error') break
+      const out = await runStep(step.id, lastOut)
+      if (out === null) break
+      lastOut = out
     }
   }
 

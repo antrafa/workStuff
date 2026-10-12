@@ -47,7 +47,7 @@ The bundled playbooks are written in Portuguese, so their variable names are too
 ### Run all the steps at once
 
 1. Fill in the parameters.
-2. Click **Run all in sequence**. The steps run one after the other, and each one gets the previous answer.
+2. Click **Run all in sequence**. The steps run one after the other, and each one gets the previous answer. If a step fails or you stop it, the sequence stops there: the next steps do not run on an incomplete answer.
 
 ### Stop or repeat a step
 

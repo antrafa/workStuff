@@ -45,7 +45,7 @@ Veja também [Conceitos e termos](/documentacao/conceitos).
 ### Executar todos os passos de uma vez
 
 1. Preencha os parâmetros.
-2. Clique em **Executar todos em sequência**. Os passos rodam um depois do outro, e cada um recebe a resposta do anterior.
+2. Clique em **Executar todos em sequência**. Os passos rodam um depois do outro, e cada um recebe a resposta do anterior. Se um passo falhar ou você o interromper, a sequência para ali: os passos seguintes não rodam sobre uma resposta incompleta.
 
 ### Interromper ou repetir um passo
 
