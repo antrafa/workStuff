@@ -452,8 +452,12 @@ export async function computeBlastRadius(
     const base = basename(file).replace(/\.[a-zA-Z0-9_-]+$/, '')
     if (!base || base.length < 2) continue
 
-    const pattern = `(import|from|require).*([\"'/]${base}(\\.[a-zA-Z0-9_-]+)?[\"';]|\\b${base}\\b)`
-    const out = await run('git', [...GIT_NO_HOOKS, '-C', worktreePath, 'grep', '-l', '-E', pattern]).catch(() => '')
+    // A quoted path ending in the file ('./math', "../lib/run.ts") or a dotted module (Python, Java).
+    // The basename is escaped: `[id].tsx` is a file name, not a character class.
+    const name = base.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+    const pattern = `(import|from|require).*["'/]${name}(\\.[A-Za-z0-9_-]+)?["']|^[[:space:]]*(import|from)[[:space:]]+([A-Za-z0-9_.]*\\.)?${name}([[:space:];]|$)`
+    // git grep exits 1 when nothing matches
+    const out = await run('git', [...GIT_NO_HOOKS, '-C', worktreePath, 'grep', '-l', '-E', '-e', pattern]).catch(() => '')
     const matched = out.split('\n').map(l => l.trim()).filter(Boolean)
 
     const dependents: string[] = []
@@ -649,6 +653,16 @@ diff --git a/README.md b/README.md
     assert.equal(br.totalDependents, 1, 'calc.ts é o único dependente de produção fora do diff')
     assert.deepEqual(br.files[0].dependents, ['calc.ts'])
     assert.deepEqual(br.files[0].testFiles, ['math.test.ts'])
+
+    writeFileSync(join(repo, 'run.ts'), 'export const run = () => 1\n')
+    writeFileSync(join(repo, 'cli.ts'), 'import { x } from "./other"\nrun()\n')
+    writeFileSync(join(repo, '[id].tsx'), 'export default 1\n')
+    writeFileSync(join(repo, 'page.ts'), 'import Page from "./[id].tsx"\n')
+    writeFileSync(join(repo, 'util.py'), 'from pkg.run import go\n')
+    await run('git', ['-C', repo, 'add', '.'])
+    await run('git', ['-C', repo, 'commit', '-qm', 'more modules'])
+    assert.deepEqual((await computeBlastRadius(repo, ['run.ts'])).files[0].dependents, ['util.py'], 'a palavra solta numa linha com import não conta; módulo pontilhado conta')
+    assert.deepEqual((await computeBlastRadius(repo, ['[id].tsx'])).files[0].dependents, ['page.ts'], 'colchetes no nome do arquivo são literais')
 
     console.log('factory gates selfcheck: ok')
   } finally {
