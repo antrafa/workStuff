@@ -11,16 +11,20 @@ type Props = {
 export function ShutdownModal({ onClose }: Props) {
   const [shuttingDown, setShuttingDown] = useState(false)
   const [shutDownDone, setShutDownDone] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
+  // The server answers before it stops, so a failure here means it did not stop
   const handleShutdown = async () => {
     setShuttingDown(true)
+    setError(null)
     try {
       await requestShutdown()
-    } catch {
-      // In case the connection dropped immediately upon kill
+      setShutDownDone(true)
+    } catch (e) {
+      setError((e as Error).message)
+    } finally {
+      setShuttingDown(false)
     }
-    setShutDownDone(true)
-    setShuttingDown(false)
   }
 
   const handleCloseTab = () => {
@@ -97,10 +101,11 @@ export function ShutdownModal({ onClose }: Props) {
         </p>
         <p className="muted" style={{ margin: 0 }}>
           {tx({
-            en: 'This will terminate both the local API server and the web interface processes. Any ongoing background tasks will be stopped.',
-            pt: 'Isso vai encerrar os processos do servidor da API e da interface web. Quaisquer tarefas em segundo plano serão interrompidas.',
+            en: 'This will terminate both the local API server and the web interface processes. It is refused while a factory run is in progress.',
+            pt: 'Isso vai encerrar os processos do servidor da API e da interface web. O pedido é recusado enquanto houver execução da fábrica em andamento.',
           })}
         </p>
+        {error && <div className="callout callout-crit">{error}</div>}
         <div className="callout" style={{ fontSize: '0.875rem' }}>
           {tx({
             en: <>To start it again later, click the <b>workStuff</b> app shortcut or run <code className="inline">npm run dev</code>.</>,
