@@ -167,6 +167,8 @@ npm run launcher:install
 - **Linux:** Installs `workstuff.desktop` into `~/.local/share/applications`, making it available in your system app launcher (GNOME, KDE, etc.).
 
 Add `--desktop` to also create an icon on your desktop (`npm run launcher:install -- --desktop`).
+
+With Chrome or Chromium installed, the panel opens in its own app window (no tabs or address bar) with the workStuff icon, using a separate Chrome profile in `~/.workstuff/chrome-app`; links opened from the panel use that profile too, without your usual Chrome logins. On GNOME (X11) the window gets a dark title bar. Without Chrome, it opens in the default browser.
 To manage the background instance from the terminal:
 
 ```bash

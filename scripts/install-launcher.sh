@@ -168,6 +168,7 @@ Icon=$FAVICON_SVG
 Terminal=false
 Categories=Development;IDE;
 StartupNotify=true
+StartupWMClass=workstuff
 Keywords=kubernetes;k8s;docker;devops;ai;factory;
 EOF
 

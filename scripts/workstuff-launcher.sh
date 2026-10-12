@@ -76,11 +76,45 @@ notify_desktop() {
   fi
 }
 
-# 4. Abre o navegador na URL desejada
+# 4. Abre o painel numa janela própria do Chrome (modo app: sem abas nem barra de endereço);
+# sem Chrome, cai no navegador padrão. O perfil separado faz o Chrome abrir um processo novo, que
+# respeita --class: é por essa classe que o GNOME liga a janela ao ícone do workstuff.desktop.
+CHROME_PROFILE="$DATA_DIR/chrome-app"
+
+find_chrome() {
+  local bin
+  for bin in google-chrome google-chrome-stable chromium chromium-browser; do
+    command -v "$bin" >/dev/null 2>&1 && { echo "$bin"; return 0; }
+  done
+  return 1
+}
+
+# No GNOME em X11 a barra de título da janela em modo app vem do tema do sistema (clara no Yaru).
+# Pedir a variante escura deixa a barra na cor do painel. Espera a janela aparecer, até 15 s.
+# ponytail: sempre escura (o tema padrão do painel); o tema claro fica com a barra escura.
+darken_title_bar() {
+  [ "${XDG_SESSION_TYPE:-x11}" = "x11" ] && command -v xprop >/dev/null 2>&1 || return 0
+  local i w found=0
+  for i in $(seq 30); do
+    for w in $(xprop -root _NET_CLIENT_LIST 2>/dev/null | grep -o '0x[0-9a-f]*'); do
+      if xprop -id "$w" WM_CLASS 2>/dev/null | grep -q '"workstuff"'; then
+        xprop -id "$w" -f _GTK_THEME_VARIANT 8u -set _GTK_THEME_VARIANT dark 2>/dev/null && found=1
+      fi
+    done
+    [ $found -eq 1 ] && return 0
+    sleep 0.5
+  done
+}
+
 open_browser() {
-  local url="$1"
-  if [[ "$OSTYPE" == "darwin"* ]]; then
+  local url="$1" chrome
+  if [[ "$OSTYPE" == "darwin"* ]] && [ -d "/Applications/Google Chrome.app" ]; then
+    open -na "Google Chrome" --args --user-data-dir="$CHROME_PROFILE" --no-first-run --app="$url"
+  elif [[ "$OSTYPE" == "darwin"* ]]; then
     open "$url"
+  elif chrome=$(find_chrome); then
+    nohup "$chrome" --user-data-dir="$CHROME_PROFILE" --no-first-run --no-default-browser-check --class=workstuff --app="$url" >/dev/null 2>&1 &
+    darken_title_bar &
   elif command -v xdg-open >/dev/null 2>&1; then
     xdg-open "$url" >/dev/null 2>&1 &
   elif command -v python3 >/dev/null 2>&1; then
