@@ -1,7 +1,7 @@
-import { AlertTriangle, ChevronRight, FlaskConical, Menu, Moon, Power, Search, Settings, Star, Sun } from 'lucide-react'
+import { AlertTriangle, ChevronRight, FlaskConical, Languages, Menu, Moon, Power, Search, Settings, Star, Sun } from 'lucide-react'
 import { Suspense, useEffect, useState } from 'react'
 import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router'
-import { EnvStamp, PageHelpContext, SkeletonRows } from '@/ui'
+import { EnvStamp, PageHelpContext, SkeletonRows, useToast } from '@/ui'
 import { favoriteAt, recordVisit, toggleFavorite, toggleGroup, useFavorites, useHiddenPaths, useOpenGroups } from './menu'
 import { NAV, findNav, type NavItem } from './nav'
 import { CommandPalette } from './CommandPalette'
@@ -11,7 +11,8 @@ import { StatusBar } from './StatusBar'
 import { manualSlugFor } from './manual'
 import { setTheme, useTheme } from './theme'
 import { refreshSession, useClusterShared } from '@/features/cluster/api'
-import { tx } from '@/lib/i18n'
+import { changeLanguage } from '@/features/settings/api'
+import { language, tx } from '@/lib/i18n'
 
 // What the frame says in each environment; an unclassified one counts as PRO.
 const FRAME_TAG: Record<string, string> = {
@@ -32,6 +33,7 @@ export function Layout() {
   const theme = useTheme()
   const dark = document.documentElement.dataset.theme !== 'light'
   const favorites = useFavorites()
+  const toast = useToast()
   const [navOpen, setNavOpen] = useState(false)
   const [helpOpen, setHelpOpen] = useState(false)
   const [paletteOpen, setPaletteOpen] = useState(false)
@@ -125,6 +127,13 @@ export function Layout() {
               : tx({ en: `Current theme: ${theme}. Click for dark`, pt: `Tema atual: ${theme}. Clique para escuro` })}
           >
             {dark ? <Sun size={16} /> : <Moon size={16} />}
+          </button>
+          <button
+            className="btn btn-ghost btn-sm"
+            onClick={() => changeLanguage(language() === 'pt' ? 'en' : 'pt').catch((e: Error) => toast(e.message))}
+            title={tx({ en: 'Language: English. Click for Português', pt: 'Idioma: Português. Clique para English' })}
+          >
+            <Languages size={15} /> {language().toUpperCase()}
           </button>
           <button
             className="btn btn-ghost btn-icon"

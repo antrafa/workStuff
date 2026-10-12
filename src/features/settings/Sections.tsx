@@ -4,9 +4,9 @@ import { NAV } from '@/app/nav'
 import { setHiddenPaths, useHiddenPaths } from '@/app/menu'
 import { ACCENTS, setAccent, setTheme, useAccent, useTheme, type Theme } from '@/app/theme'
 import { Meter, Segmented } from '@/ui'
-import { language, switchLanguage, tx } from '@/lib/i18n'
+import { language, tx } from '@/lib/i18n'
 import type { Lang } from '../../../server/lib/lang.ts'
-import { saveSettings, type Settings } from './api'
+import { changeLanguage } from './api'
 
 const THEMES: { id: Theme; label: string; hint: string; icon: typeof Sun }[] = [
   { id: 'dark', label: tx({ en: 'Dark', pt: 'Escuro' }), hint: tx({ en: 'Graphite console, the panel default', pt: 'Console grafite, padrão do painel' }), icon: Moon },
@@ -14,15 +14,12 @@ const THEMES: { id: Theme; label: string; hint: string; icon: typeof Sun }[] = [
   { id: 'auto', label: tx({ en: 'Automatic', pt: 'Automático' }), hint: tx({ en: 'Follows the operating system theme', pt: 'Segue o tema do sistema operacional' }), icon: Monitor },
 ]
 
-// Saved on the server with the other settings (the server answers errors in it too), then the page
-// reloads in the new language. Saves only the language: a pending AI change stays a draft.
-export function LanguageSection({ saved }: { saved: Settings }) {
+// Saved on the server with the other settings (the server answers errors in it too).
+export function LanguageSection() {
   const [error, setError] = useState<string | null>(null)
   const change = async (lang: Lang) => {
-    if (lang === language()) return
     try {
-      await saveSettings({ ...saved, language: lang })
-      switchLanguage(lang)
+      await changeLanguage(lang)
     } catch (e) {
       setError((e as Error).message)
     }

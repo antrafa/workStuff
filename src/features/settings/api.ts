@@ -1,4 +1,5 @@
 import { api } from '@/lib/api'
+import { language, switchLanguage } from '@/lib/i18n'
 import type { Lang } from '../../../server/lib/lang.ts'
 
 export type ProviderId = 'claude' | 'agy' | 'codex'
@@ -31,4 +32,12 @@ export type Settings = { provider: ProviderId; model: string; effort: string; la
 
 export const fetchSettings = () => api.get<{ settings: Settings; providers: Provider[] }>('/settings')
 export const saveSettings = (settings: Settings) => api.put<{ settings: Settings }>('/settings', settings)
+// Saves only the language, over what the server has (a pending AI change elsewhere stays a draft),
+// then reloads the page in it.
+export async function changeLanguage(lang: Lang) {
+  if (lang === language()) return
+  const { settings } = await fetchSettings()
+  await saveSettings({ ...settings, language: lang })
+  switchLanguage(lang)
+}
 export const refreshModels = (provider: Provider) => api.post<Provider>(`/ai/providers/${provider.id}/models/refresh`)

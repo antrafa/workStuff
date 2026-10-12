@@ -76,7 +76,7 @@ export default function SettingsPage() {
                 {secao === 'ia' && current && <AiSection providers={data.providers} settings={current} onChange={update} />}
                 {secao === 'aparencia' && (
                   <div className="stack" style={{ ['--gap' as string]: '16px' }}>
-                    <LanguageSection saved={data.settings} />
+                    <LanguageSection />
                     <AppearanceSection />
                     <AccentSection />
                   </div>
