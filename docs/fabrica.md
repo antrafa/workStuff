@@ -202,8 +202,14 @@ O código da esteira está em `server/lib/factory/pipeline.ts`. As rotas (`serve
 
 ### 5.7 Revisão humana
 
-A tarefa chega em `review` com o que bloqueia e o que pede atenção no topo da decisão, o diff, as estatísticas, o QA (etapas da verificação e teste por critério), os achados, as ferramentas de segurança, a checagem dos critérios e os envelopes. Na gaveta você pode:
+A tarefa chega em `review` com o que bloqueia e o que pede atenção no topo da decisão, o diff com reorganização cognitiva, as estatísticas, o QA (etapas da verificação e teste por critério), os achados, as ferramentas de segurança, a checagem dos critérios e os envelopes. Na gaveta você pode:
 
+- **Revisão cognitiva do diff** (`CognitiveDiffViewer`): os arquivos do diff não são exibidos em bloco único ou ordem alfabética ingênua. São classificados e priorizados pelo fluxo cognitivo de inspeção:
+  1. **Lógica central (`core`)**: modelos de domínio, regras de negócio e algoritmos principais;
+  2. **Integração & API (`wiring`)**: rotas, controladores, endpoints, schemas e amarrações de pipelines;
+  3. **Testes (`tests`)**: suítes unitárias, integração e fixtures de verificação;
+  4. **Docs & Metadados (`docs_meta`)**: documentação, manifestos de dependências (`package.json`, `pom.xml`), configs e CI/CD.
+  A tela oferece filtros por categoria, busca em tempo real por nome de arquivo, expansão/recolhimento sob demanda e destaca visualmente o **Raio de Impacto (Blast Radius)** ao lado de cada arquivo afetado (indicando se os módulos externos contam ou não com cobertura de testes).
 - **Pedir ajuste**: texto livre, ou o botão "Pedir correção" num achado, que preenche o pedido com ele.
 - **Abrir no editor**: abre a worktree no VS Code (ou no editor de `WORKSTUFF_EDITOR`).
 - **Criar MR/PR**: faz push de `factory/<id>` e abre o MR/PR pela conexão de Repositórios correspondente, com a descrição do Documenter e `Closes #<issue>` quando veio de issue. Se não houver conexão correspondente, a branch fica publicada e a tela avisa para abrir o MR à mão.

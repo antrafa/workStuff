@@ -202,6 +202,8 @@ export type Readiness = {
   attention: string[]
 }
 
+export type DiffCategory = 'core' | 'wiring' | 'tests' | 'docs_meta'
+
 export type DiffStat = {
   filesChanged: number
   insertions: number
