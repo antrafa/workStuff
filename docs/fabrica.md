@@ -566,5 +566,9 @@ Os [runbooks de dev da Fábrica](../dev-runbooks/factory/) cobrem os procediment
 | Verifier adversarial, ferramentas de segurança, prontidão em código e MR automático | workStuff |
 | Até 3 tentativas de build e 2 rodadas automáticas de revisão | projeto de referência (`max_dev_retries`, `max_auto_rounds`) |
 | Worktree isolada, sandbox `bwrap`, aprovação local antes do MR | workStuff |
+| Piso de qualidade determinístico (sem `@ts-ignore` / `.skip()`) e regras anti-slop | [pstack / unslop](referencias-skills.md#31-portão-de-piso-de-qualidade--prompts-anti-slop) (Addy Osmani / Cursor plugins) |
+| Cálculo de raio de impacto (blast radius) via `git grep` e bloqueio na prontidão | [blast-radius](referencias-skills.md#32-raio-de-impacto-blast-radius--prontidão-de-entrega) (Lauren Tan / Cursor plugin) |
+| Reorganização cognitiva do diff em 4 camadas e review canvas na gaveta | [pr-review-canvas](referencias-skills.md#33-reorganização-cognitiva-do-diff--review-canvas) (Lauren Tan / Cursor plugin) |
 
+A análise comparativa aprofundada de todas as skills e o que foi aproveitado ou rejeitado está detalhada em [`docs/referencias-skills.md`](referencias-skills.md).
 O histórico das decisões está em [`superpowers/specs/2026-10-04-fabrica-dev-design.md`](superpowers/specs/2026-10-04-fabrica-dev-design.md).
