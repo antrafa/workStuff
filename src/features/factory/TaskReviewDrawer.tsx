@@ -20,6 +20,7 @@ import { ConfirmModal, Markdown, Modal } from '@/ui'
 import { api } from '@/lib/api'
 import { AGENT_UI, isTaskRunning, retryActionOf, runFactoryAction, taskUsage, type FactoryAction } from './factoryRun'
 import type { FactoryTask, SecurityFinding } from '../../../server/lib/factory/types.ts'
+import { DiscardTaskModal } from './DiscardTaskModal'
 import { TraceTimeline } from './TraceTimeline'
 import { tx } from '@/lib/i18n'
 import { FactoryStatusChip } from './timeline/FactoryStatusChip'
@@ -203,36 +204,16 @@ export function TaskReviewDrawer({ task, onClose, onUpdate }: Props) {
 
   const handleDelete = () => setConfirming('delete')
 
-  const deleteTask = async () => {
-    setProcessing(true)
-    try {
-      await api.delete(`/factory/tasks/${task.id}`)
-      onUpdate()
-      onClose()
-    } catch (err) {
-      setError((err as Error).message)
-    } finally {
-      setProcessing(false)
-    }
-  }
-
   return (
     <Modal onClose={onClose} title={task.title} width={820}>
       {confirming === 'delete' && (
-        <ConfirmModal
-          title={tx({ en: `Discard "${task.title}"?`, pt: `Descartar "${task.title}"?` })}
-          action={tx({ en: 'discard task', pt: 'descartar tarefa' })}
-          confirmLabel={tx({ en: 'Discard', pt: 'Descartar' })}
-          icon={Trash2}
-          effects={[
-            tx({ en: 'Stops the run in progress, if any.', pt: 'Para a execução em andamento, se houver.' }),
-            tx({ en: `Removes the worktree and the branch ${task.branchName}.`, pt: `Remove a worktree e a branch ${task.branchName}.` }),
-          ]}
-          losses={[
-            tx({ en: 'The generated code that did not become an MR or a merge.', pt: 'O código gerado que não virou MR nem merge.' }),
-            tx({ en: 'The spans history and the agents\' session.', pt: 'O histórico de spans e a sessão dos agentes.' }),
-          ]}
-          onConfirm={deleteTask}
+        <DiscardTaskModal
+          task={task}
+          onDiscarded={() => {
+            onUpdate()
+            onClose()
+          }}
+          onError={setError}
           onClose={() => setConfirming(null)}
         />
       )}

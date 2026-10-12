@@ -8,7 +8,8 @@ import { sourceForRemote } from '../lib/repos/remote.ts'
 import { which } from '../lib/run.ts'
 import { detectVerifyCommands } from '../lib/factory/gates.ts'
 import { defaultFactoryStore } from '../lib/factory/store.ts'
-import { defaultProjectStore } from '../lib/factory/projects.ts'
+import { defaultProjectStore, ProjectError } from '../lib/factory/projects.ts'
+import { discardTask } from '../lib/factory/discard.ts'
 import { createTaskRecord } from '../lib/factory/newTask.ts'
 import { existsSync } from 'node:fs'
 import { getWorktreeDiff, removeWorktree, mergeWorktreeLocal, pushWorktreeBranch, resetWorktree, targetBranchOf } from '../lib/factory/worktree.ts'
@@ -26,7 +27,6 @@ import {
   cancelExecution,
   endExecution,
   isExecuting,
-  waitForIdle,
   stateAfterCancel,
   RUNNING_STATES,
   ExecutionCancelledError,
@@ -712,21 +712,10 @@ async function finishTask(task: FactoryTask, mode: 'mr' | 'local_merge'): Promis
 // Exclui tarefa e limpa worktree
 factoryRouter.delete('/tasks/:id', async (req, res) => {
   try {
-    const id = req.params.id as string
-    cancelExecution(id)
-    // Deleting while the run still writes would let it save the task back
-    if (!(await waitForIdle(id, 5000))) {
-      res.status(409).json({ error: say({ en: 'the run is still stopping; try deleting again in a few seconds', pt: 'a execução ainda está parando; tente excluir de novo em alguns segundos' }) })
-      return
-    }
-    const task = await defaultFactoryStore.getTask(id)
-    if (task && task.worktreePath) {
-      await removeWorktree(task.source.repoPath, task.worktreePath, task.branchName)
-    }
-    await defaultFactoryStore.deleteTask(id)
+    await discardTask(req.params.id as string)
     res.json({ ok: true })
   } catch (e) {
-    res.status(500).json({ error: (e as Error).message })
+    res.status(e instanceof ProjectError ? e.status : 500).json({ error: (e as Error).message })
   }
 })
 
