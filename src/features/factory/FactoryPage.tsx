@@ -2,15 +2,18 @@ import { useState, useEffect } from 'react'
 import {
   Compass,
   Factory,
+  FolderPlus,
   Plus,
   RefreshCw,
   Terminal,
 } from 'lucide-react'
-import { Link } from 'react-router'
-import { Page, Async, Empty, Segmented } from '@/ui'
+import { Link, useSearchParams } from 'react-router'
+import { Page, Async, Empty, Segmented, Chips } from '@/ui'
 import { api } from '@/lib/api'
 import { useAsync } from '@/lib/useAsync'
-import type { FactoryTask } from '../../../server/lib/factory/types.ts'
+import type { FactoryProjectView, FactoryTask } from '../../../server/lib/factory/types.ts'
+import { NewProjectModal } from './projects/NewProjectModal'
+import { ProjectHeader } from './projects/ProjectHeader'
 import { FactoryBoard } from './FactoryBoard'
 import { NewTaskModal } from './NewTaskModal'
 import { TaskReviewDrawer } from './TaskReviewDrawer'
@@ -36,6 +39,14 @@ export default function FactoryPage() {
   const [visualizerTask, setVisualizerTask] = useState<FactoryTask | null>(null)
 
   const tasksLoader = useAsync(() => api.get<FactoryTask[]>('/factory/tasks'))
+  const projectsLoader = useAsync(() => api.get<FactoryProjectView[]>('/factory/projects'))
+  const [newProjectOpen, setNewProjectOpen] = useState(false)
+  // 'all', 'loose' or a project id; kept in the URL so a reload or a link opens the same project
+  const [searchParams, setSearchParams] = useSearchParams()
+  const scope = searchParams.get('projeto') ?? 'all'
+  const setScope = (next: string) => setSearchParams(next === 'all' ? {} : { projeto: next })
+  const projects = projectsLoader.data ?? []
+  const project = projects.find(p => p.id === scope) ?? null
   const [wizardOpen, setWizardOpen] = useState(false)
   // First visit with an empty pipeline: start guided
   useEffect(() => {
@@ -50,7 +61,11 @@ export default function FactoryPage() {
     return () => clearInterval(interval)
   }, [hasActive])
 
-  const tasks = tasksLoader.data ?? []
+  const allTasks = tasksLoader.data ?? []
+  // A task whose project was removed outside the panel counts as loose
+  const isLoose = (t: FactoryTask) => !t.projectId || !projects.some(p => p.id === t.projectId)
+  const inScope = (t: FactoryTask) => (scope === 'all' ? true : scope === 'loose' ? isLoose(t) : t.projectId === scope)
+  const tasks = allTasks.filter(inScope)
   const selectedTask = tasks.find(t => t.id === selectedId) ?? null
   const activeCount = tasks.filter(isTaskRunning).length
   const reviewCount = tasks.filter(t => WAITING_STATES.includes(t.state)).length
@@ -64,7 +79,10 @@ export default function FactoryPage() {
     setVisualizerTask(task)
   }
 
-  const handleRefresh = () => tasksLoader.reload()
+  const handleRefresh = () => {
+    tasksLoader.reload()
+    projectsLoader.reload()
+  }
 
   return (
     <Page
@@ -83,6 +101,9 @@ export default function FactoryPage() {
           </button>
           <button type="button" className="btn btn-sm" onClick={() => setWizardOpen(true)} title={tx({ en: 'Step by step: prerequisites, repository, request and cost', pt: 'Passo a passo: pré-requisitos, repositório, demanda e custo' })}>
             <Compass size={14} /> {tx({ en: 'Guided mode', pt: 'Modo guiado' })}
+          </button>
+          <button type="button" className="btn btn-sm" onClick={() => setNewProjectOpen(true)}>
+            <FolderPlus size={14} /> {tx({ en: 'New project', pt: 'Novo projeto' })}
           </button>
           <button type="button" className="btn btn-sm btn-primary" onClick={() => setModalOpen(true)}>
             <Plus size={15} /> {tx({ en: 'New task', pt: 'Nova Tarefa' })}
@@ -106,6 +127,30 @@ export default function FactoryPage() {
           />
         ) : (
           <>
+            {projects.length > 0 && (
+              <Chips
+                options={[
+                  { id: 'all', label: tx({ en: 'All', pt: 'Todos' }), count: allTasks.length },
+                  ...projects.map(p => ({ id: p.id, label: p.name, count: allTasks.filter(t => t.projectId === p.id).length })),
+                  { id: 'loose', label: tx({ en: 'Loose', pt: 'Avulsas' }), count: allTasks.filter(isLoose).length },
+                ]}
+                value={scope}
+                onChange={setScope}
+              />
+            )}
+            {project && (
+              <ProjectHeader
+                key={project.id}
+                project={project}
+                taskCount={tasks.length}
+                onChanged={handleRefresh}
+                onRemoved={() => {
+                  setScope('all')
+                  handleRefresh()
+                }}
+              />
+            )}
+
             {/* Header summary and tabs */}
             <div className="row" style={{ justifyContent: 'space-between', borderBottom: '1px solid var(--line)', paddingBottom: 12 }}>
               <Segmented
@@ -129,7 +174,7 @@ export default function FactoryPage() {
             {activeTab === 'board' && (
               <Async state={tasksLoader}>
                 {loadedTasks => (
-                  loadedTasks.length === 0 ? (
+                  loadedTasks.filter(inScope).length === 0 ? (
                     <Empty
                       icon={Factory}
                       title={tx({ en: 'No task in the pipeline', pt: 'Nenhuma tarefa na esteira' })}
@@ -146,7 +191,7 @@ export default function FactoryPage() {
                     </Empty>
                   ) : (
                     <FactoryBoard
-                      tasks={loadedTasks}
+                      tasks={loadedTasks.filter(inScope)}
                       onOpenTrace={handleOpenTrace}
                       onOpenReview={handleSelectTask}
                       onUpdate={handleRefresh}
@@ -181,7 +226,19 @@ export default function FactoryPage() {
         )}
 
         {/* New task modal */}
+        {newProjectOpen && (
+          <NewProjectModal
+            onClose={() => setNewProjectOpen(false)}
+            onCreated={created => {
+              setNewProjectOpen(false)
+              projectsLoader.reload()
+              setScope(created.id)
+            }}
+          />
+        )}
+
         <NewTaskModal
+          project={project}
           open={modalOpen}
           onClose={() => setModalOpen(false)}
           onCreated={handleRefresh}

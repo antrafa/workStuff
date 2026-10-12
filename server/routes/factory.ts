@@ -8,6 +8,7 @@ import { sourceForRemote } from '../lib/repos/remote.ts'
 import { which } from '../lib/run.ts'
 import { detectVerifyCommands } from '../lib/factory/gates.ts'
 import { defaultFactoryStore } from '../lib/factory/store.ts'
+import { defaultProjectStore } from '../lib/factory/projects.ts'
 import { existsSync } from 'node:fs'
 import { getWorktreeDiff, removeWorktree, mergeWorktreeLocal, pushWorktreeBranch, resetWorktree, targetBranchOf } from '../lib/factory/worktree.ts'
 import { SPECIALIZED_AGENTS } from '../lib/factory/agents.ts'
@@ -292,10 +293,20 @@ factoryRouter.post('/tasks', async (req, res) => {
       res.status(400).json({ error: say({ en: `invalid base branch: ${baseBranch}`, pt: `branch base inválida: ${baseBranch}` }) })
       return
     }
+    const projectId = b.projectId ? String(b.projectId) : undefined
+    if (projectId) {
+      try {
+        defaultProjectStore.get(projectId)
+      } catch (e) {
+        res.status(400).json({ error: (e as Error).message })
+        return
+      }
+    }
     const id = `fac-${Date.now()}`
 
     const task: FactoryTask = {
       id,
+      projectId,
       title: String(b.title).trim(),
       description: String(b.description ?? '').trim(),
       source: {

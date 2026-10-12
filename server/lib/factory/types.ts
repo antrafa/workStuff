@@ -227,8 +227,31 @@ export type BlastRadiusReport = {
   files: FileBlastRadius[]
 }
 
+// A folder the developer works in: ideas, plans and tasks are grouped under it.
+// Repositories are discovered under rootPath on each read, never stored.
+export type FactoryProject = {
+  id: string
+  name: string
+  rootPath: string
+  // Defaults for the ideas and tasks created in the project
+  provider?: 'claude' | 'codex' | 'agy'
+  model?: string
+  verifyCommand?: string
+  createdAt: string
+  updatedAt: string
+}
+
+export type ProjectRepo = {
+  name: string
+  path: string
+}
+
+export type FactoryProjectView = FactoryProject & { repos: ProjectRepo[]; missing: boolean }
+
 export type FactoryTask = {
   id: string
+  // Missing on tasks created before projects existed: they show up as loose tasks
+  projectId?: string
   title: string
   description: string
   source: {

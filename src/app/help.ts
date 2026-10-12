@@ -579,6 +579,7 @@ export const HELP: Record<string, Pair<Help>> = {
     en: {
       purpose: 'Runs the development cycle with eight AI agents (Analyst, Architect, Implementer, Tester, Documenter, Reviewer, Security and Verifier) in isolated Git worktrees, with gates checked by code and human approval before anything is sent.',
       steps: [
+        'Group the work in projects: "New project" takes an existing folder or creates a new one (optionally with git init). The repositories inside it are found by themselves, and the chips above the board filter by project; "Loose" holds the tasks with no project, which "Bring loose tasks" moves into the project open.',
         'First time? "Guided mode" checks bwrap and the CLIs, reads the repository, helps you write the request and picks models and a cost cap. To create directly, use "New task" (imports a GitLab or GitHub issue, or a manual task).',
         'On the Board, each card shows every agent\'s progress, the step running now with who runs it and for how long, and the cost so far. Click the card to open the timeline: one lane per agent and the live activity, with what each agent writes and every tool it calls.',
         'The Analyst writes the acceptance criteria. If there is a business question, the task stops at "waiting for answers" until you reply.',
@@ -602,6 +603,7 @@ export const HELP: Record<string, Pair<Help>> = {
     pt: {
       purpose: 'Orquestra o ciclo de desenvolvimento com oito agentes de IA (Analyst, Architect, Implementer, Tester, Documenter, Reviewer, Security e Verifier) em Git Worktrees isoladas, com portões verificados por código e aprovação humana antes de qualquer envio.',
       steps: [
+        'Agrupe o trabalho em projetos: "Novo projeto" usa uma pasta existente ou cria uma nova (com git init, se quiser). Os repositórios dentro dela são encontrados sozinhos, e os chips acima do quadro filtram por projeto; "Avulsas" reúne as tarefas sem projeto, que "Trazer tarefas avulsas" move para o projeto aberto.',
         'Primeira vez? "Modo guiado" confere bwrap e CLIs, lê o repositório, ajuda a escrever a demanda e escolhe modelos e teto de custo. Para criar direto, use "Nova Tarefa" (importa issue do GitLab ou GitHub, ou tarefa manual).',
         'No Quadro, cada cartão mostra o andamento de cada agente, a etapa de agora com quem a executa e há quanto tempo, e o custo até aqui. Clique no cartão para abrir a linha do tempo: as raias por agente e a atividade ao vivo, com o que cada agente escreve e cada ferramenta que chama.',
         'O Analyst escreve os critérios de aceite. Se houver dúvida de negócio, a tarefa para em "aguardando respostas" até você responder.',
