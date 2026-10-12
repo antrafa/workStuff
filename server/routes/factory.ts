@@ -14,6 +14,7 @@ import { createTaskRecord } from '../lib/factory/newTask.ts'
 import { existsSync } from 'node:fs'
 import { getWorktreeDiff, removeWorktree, mergeWorktreeLocal, pushWorktreeBranch, resetWorktree, targetBranchOf } from '../lib/factory/worktree.ts'
 import { SPECIALIZED_AGENTS } from '../lib/factory/agents.ts'
+import { IDEATION_AGENTS } from '../lib/ideation/agents.ts'
 import { runFactoryAgent } from '../lib/factory/runner.ts'
 import { adjustTask, buildTask, planTask, reverifyOnNewBase, type ExecContext } from '../lib/factory/pipeline.ts'
 import { assessDelivery, canAutoMr } from '../lib/factory/readiness.ts'
@@ -719,14 +720,19 @@ factoryRouter.delete('/tasks/:id', async (req, res) => {
   }
 })
 
-// Execução avulsa de um dos 4 agentes especializados (SSE)
+// Ideation agents that make sense outside an idea; their pipeline output is JSON, here it is prose
+const STANDALONE_IDEATION = { red: IDEATION_AGENTS.red, planner: IDEATION_AGENTS.planner }
+const STANDALONE_NOTE = '\n\nExecução avulsa, fora de uma ideia: responda só em Markdown, sem bloco JSON.'
+
+// Execução avulsa de um agente especializado ou de ideação (SSE)
 factoryRouter.post('/agents/run', async (req, res) => {
   const b = req.body ?? {}
-  const agentId = b.agentId as SpecializedAgentId
+  const agentId = String(b.agentId ?? '')
   const repoPath = String(b.repoPath ?? '').trim()
   const prompt = String(b.prompt ?? '').trim()
+  const ideationAgent = Object.hasOwn(STANDALONE_IDEATION, agentId) ? STANDALONE_IDEATION[agentId as keyof typeof STANDALONE_IDEATION] : undefined
 
-  if (!agentId || !SPECIALIZED_AGENTS[agentId]) {
+  if (!ideationAgent && !Object.hasOwn(SPECIALIZED_AGENTS, agentId)) {
     res.status(400).json({ error: say({ en: 'invalid agent', pt: 'agente inválido' }) })
     return
   }
@@ -739,7 +745,9 @@ factoryRouter.post('/agents/run', async (req, res) => {
 
   try {
     const result = await runFactoryAgent({
-      agentId,
+      ...(ideationAgent
+        ? { agent: { ...ideationAgent, systemPrompt: ideationAgent.systemPrompt + STANDALONE_NOTE } }
+        : { agentId: agentId as SpecializedAgentId }),
       prompt,
       cwd: repoPath,
       // This is the user's own checkout, not a worktree: every agent only reads here

@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
 import {
-  BookOpen, Bot, ClipboardList, Cpu, Eye, ExternalLink, FolderOpen, Play, ShieldAlert, Sparkles, Square, Terminal, Wrench
+  BookOpen, Bot, ClipboardList, Cpu, Eye, ExternalLink, FolderOpen, ListTree, Play, ShieldAlert, Sparkles, Square, Swords, Terminal, Wrench
 } from 'lucide-react'
 import { Link } from 'react-router'
 import { Markdown, Modal } from '@/ui'
@@ -11,8 +11,11 @@ import type { SessionEvent } from './factoryRun'
 import type { SpecializedAgentId } from '../../../server/lib/factory/types.ts'
 import { tx } from '@/lib/i18n'
 
+// The two ideation agents that stand on their own, outside an idea (see /factory/agents/run)
+type StandaloneAgentId = SpecializedAgentId | 'red' | 'planner'
+
 const AGENT_CARDS: Array<{
-  id: SpecializedAgentId
+  id: StandaloneAgentId
   name: string
   role: string
   icon: typeof Bot
@@ -96,11 +99,27 @@ const AGENT_CARDS: Array<{
     runbooks: [
       { title: tx({ en: 'Publish the branch for an MR', pt: 'Publicar a branch para MR' }), file: 'factory/publicar-mr.md', when: tx({ en: 'Push the branch to the remote to open the MR', pt: 'Enviar a branch ao remoto para abrir o MR' }) },
     ],
-  }
+  },
+  {
+    id: 'red',
+    name: 'Red team',
+    role: tx({ en: 'Plays devil\'s advocate before you build: describe an idea and it points out where it can fail, what it hides in cost and what you are taking for granted', pt: 'Faz o advogado do diabo antes de você construir: descreva uma ideia e ele aponta onde ela pode falhar, que custo esconde e o que você está dando como certo' }),
+    icon: Swords,
+    placeholder: tx({ en: 'Describe the idea as you would to a colleague. e.g. I want customers to see their invoices in the portal instead of asking support by email. What could go wrong?', pt: 'Descreva a ideia como contaria a um colega. Ex.: Quero que o cliente veja as faturas no portal em vez de pedir ao suporte por e-mail. O que pode dar errado?' }),
+    runbooks: [],
+  },
+  {
+    id: 'planner',
+    name: 'Planner',
+    role: tx({ en: 'Turns an idea into a work plan: large steps in order, starting with the smallest version that already works, each with examples of how to check it is done', pt: 'Transforma uma ideia num plano de trabalho: etapas grandes, em ordem, começando pela menor versão que já funciona, cada uma com exemplos de como conferir que ficou pronta' }),
+    icon: ListTree,
+    placeholder: tx({ en: 'Say what you want built and what stays out for now. e.g. Customers download their invoices as PDF from the portal; downloading many at once can wait.', pt: 'Diga o que quer construir e o que fica de fora por enquanto. Ex.: O cliente baixa as faturas em PDF pelo portal; baixar várias de uma vez pode esperar.' }),
+    runbooks: [],
+  },
 ]
 
 export function StandaloneAgentTab() {
-  const [selectedAgent, setSelectedAgent] = useState<SpecializedAgentId>('architect')
+  const [selectedAgent, setSelectedAgent] = useState<StandaloneAgentId>('architect')
   const [repoPath, setRepoPath] = useState('')
   const [prompt, setPrompt] = useState('')
   const [provider, setProvider] = useState<'claude' | 'codex' | 'agy'>('agy')
@@ -273,7 +292,7 @@ export function StandaloneAgentTab() {
       </form>
 
       {/* The agent's runbooks: they run right here, in the target repository folder */}
-      <section className="card card-pad stack" style={{ gap: 10 }}>
+      {activeMeta.runbooks.length > 0 && <section className="card card-pad stack" style={{ gap: 10 }}>
         <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
           <span className="row" style={{ gap: 6, alignItems: 'center', fontWeight: 600 }}>
             <BookOpen size={15} style={{ color: 'var(--signal)' }} /> {tx({ en: `${activeMeta.name} runbooks`, pt: `Runbooks do ${activeMeta.name}` })}
@@ -304,7 +323,7 @@ export function StandaloneAgentTab() {
             </button>
           ))}
         </div>
-      </section>
+      </section>}
 
       {openRunbook && (
         <Modal title={openRunbook.title} onClose={() => setOpenRunbook(null)} width={900}>
