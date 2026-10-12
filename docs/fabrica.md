@@ -26,7 +26,8 @@ Este documento descreve como ela funciona por dentro. Para a visão do sistema i
 18. [Como estender](#18-como-estender)
 19. [Limites conhecidos](#19-limites-conhecidos)
 20. [Solução de problemas](#20-solução-de-problemas)
-21. [Origem das ideias](#21-origem-das-ideias)
+21. [Princípios e fundamentos](#21-princípios-e-fundamentos-da-fábrica)
+22. [Projetos e ideação](#22-projetos-e-ideação)
 
 ---
 
@@ -420,6 +421,8 @@ Tudo fica fora do repositório, em `WORKSTUFF_HOME` (padrão `~/.workstuff`):
 | `factory/tasks.json` | Todas as tarefas. A gravação usa um arquivo temporário e `rename`, então uma queda no meio não deixa o arquivo pela metade. |
 | `factory/sessions/<id>.jsonl` | A sessão de cada tarefa, evento por evento (`.json` é o formato antigo, ainda lido). |
 | `worktrees/<repo>/<id>/` | As worktrees em andamento. |
+| `factory/projects/<id>/project.json` | Um projeto: nome, pasta e padrões das tarefas. |
+| `factory/projects/<id>/ideas/<id>/idea.json`, `idea.md` | Uma ideia: fase, conversa, documento vivo, desafio, plano, tarefas e o que já foi enviado; o `.md` é o documento vivo, regravado a cada mudança. |
 
 ## 14. API
 
@@ -446,6 +449,12 @@ Prefixo `/api/factory`, em `server/routes/factory.ts`. As ações longas respond
 | `GET /issues` | Issues abertas das conexões de Repositórios (até 30 por conexão). |
 | `POST /pick-folder` | Seletor de pasta nativo. |
 | `GET /settings` | Provedor, modelo e esforço de Configurações. |
+| `GET /projects`, `POST /projects` | Lista e cria projetos. A criação aceita `rootPath` (pasta existente) ou `create: { parent, folder, gitInit }`. |
+| `GET`, `PATCH`, `DELETE /projects/:id` | Um projeto; edita nome e padrões; exclui (`?tasks=discard` descarta também as tarefas; sem ele, elas viram avulsas). A pasta nunca é tocada. |
+| `POST /projects/:id/adopt-tasks` | Traz para o projeto as tarefas avulsas cujo repositório fica dentro da pasta dele. |
+| `GET`, `POST /projects/:pid/ideas`, `GET`, `DELETE .../ideas/:id` | Lista, cria, lê e exclui ideias. |
+| `POST .../ideas/:id/message`, `/challenge`, `/plan`, `/split` | Uma operação de agente (SSE): conversa com o facilitador, rodada do desafio, plano e quebra em tarefas. Uma por ideia de cada vez (409). |
+| `POST .../ideas/:id/decisions`, `/advance`, `/back`, `/stop`, `/dispatch`; `PUT .../masters`, `.../tasks`; `GET .../markdown` | Decisões dos ataques, seguir ou voltar de fase, parar o agente, enviar as tarefas à esteira, editar plano e tarefas à mão, exportar o documento. |
 
 Uma ação pedida num estado que não a permite (botão velho, clique duplo) responde 409, assim como iniciar uma execução numa tarefa que já tem outra rodando.
 
@@ -463,7 +472,9 @@ Tudo em `src/features/factory/`.
 | Gaveta da tarefa | `TaskReviewDrawer.tsx` | Dúvidas do Analyst, critérios e plano (editável), diff, QA, revisão e segurança, ajuste, MR ou merge, descarte (com `ConfirmModal`). |
 | Nova tarefa | `NewTaskModal.tsx` | Criação direta: manual ou por issue, com todas as opções; avisa quando falta o `bwrap`. |
 | Modo guiado | `FactoryWizard.tsx` | Seis passos: como funciona, pré-requisitos, repositório, demanda, agentes e custo, revisar. Abre sozinho na primeira visita sem tarefas. |
-| Agentes avulsos | `StandaloneAgentTab.tsx` | Um agente, um prompt, um repositório, em modo leitura, com runbooks relacionados. |
+| Agentes avulsos | `StandaloneAgentTab.tsx` | Um agente, um prompt, um repositório, em modo leitura, com runbooks relacionados. Inclui o Red team e o Planner da ideação, que fora de uma ideia respondem em Markdown. |
+| Projetos | `projects/NewProjectModal.tsx`, `projects/ProjectHeader.tsx` | Criar projeto, chips de escopo (`?projeto=`), trazer tarefas avulsas, excluir. |
+| Ideias | `ideation/IdeasTab.tsx`, `IdeaScreen.tsx`, `IdeaPanels.tsx`, `ideationApi.ts` | Lista de ideias; fases com o guia de cada uma, o que falta para seguir, conversa, documento vivo; painéis de desafio, plano, quebra e envio. |
 | Estado compartilhado | `factoryRun.ts` | Rótulos de estado, cores e nomes dos agentes, ações por estado (`nextActions`), início de ações, acompanhamento ao vivo (`useLiveTask`), custo. |
 
 ## 16. Mapa do código
@@ -482,6 +493,9 @@ Tudo em `src/features/factory/`.
 | `server/lib/factory/store.ts` | `tasks.json`, spans, chamadas de ferramenta e a sessão JSONL com assinantes ao vivo. |
 | `server/lib/factory/executions.ts` | Registro em memória das execuções, cancelamento, estado de retorno após parada. |
 | `server/routes/factory.ts` | Rotas HTTP, guardas de estado, validação de entrada, streams SSE, MR/PR. |
+| `server/lib/factory/projects.ts`, `server/routes/factoryProjects.ts` | Projetos: repositórios encontrados na pasta, criação de pasta com `git init`, adoção de tarefas avulsas. |
+| `server/lib/factory/newTask.ts`, `discard.ts` | O registro de uma tarefa nova e o descarte, compartilhados entre as rotas e a ideação. |
+| `server/lib/ideation/` | `types.ts` (fases, seções do documento, modelo), `guards.ts` (portões em código), `store.ts`, `agents.ts` (prompts), `envelopes.ts` (leitura e normalização das respostas), `flow.ts` (as operações); rota em `server/routes/ideation.ts`. |
 | `server/lib/ai/runner.ts`, `events.ts` | Execução dos CLIs com watchdog (15 min de limite e 4 min sem saída na Fábrica) e normalização dos eventos e do custo. Compartilhados com o resto do painel. |
 
 ## 17. Testes da própria Fábrica
@@ -499,6 +513,9 @@ Todos entram no `npm run check`:
 | `node server/lib/factory/readiness.ts --selfcheck` | Cada bloqueio e cada ponto de atenção; MR automático só com tudo limpo. |
 | `node server/lib/factory/envelopes.ts --selfcheck` | Leitura dos envelopes, veredito, refutação do Verifier, critérios por id, fusão de achados, conteúdo dos prompts. |
 | `node server/lib/factory/executions.ts --selfcheck` | Registro, cancelamento, limpeza atrasada. |
+| `node server/lib/factory/projects.ts --selfcheck` | Repositórios encontrados na pasta, criação com `git init`, adoção de tarefas. |
+| `node server/lib/ideation/guards.ts --selfcheck`, `store.ts`, `envelopes.ts` | Portões de cada fase, ciclos e cobertura de cenários, documento em Markdown, leitura das respostas dos agentes. |
+| `node scripts/check-ideation-flow.ts` | A ideação inteira com um `claude` falso: fases, desafio, plano recusado e refeito, quebra, envio sem duplicar, bloqueio por dependência, descarte, ideia encerrada e reaberta. |
 | `node scripts/check-factory-pipeline.ts` | A esteira inteira, com um `claude` falso no `PATH`: dúvida do Analyst, correção após portão, achado bloqueante corrigido na rodada automática, achado refutado pelo Verifier, Tester depois da correção, Documenter barrado, sem verificação bloqueia, rebase quando a base anda, modelo por agente, teto de custo. Não gasta tokens. |
 
 ## 18. Como estender
@@ -566,9 +583,39 @@ Os [runbooks de dev da Fábrica](../dev-runbooks/factory/) cobrem os procediment
 | Verifier adversarial, ferramentas de segurança, prontidão em código e MR automático | Validação dupla contra alucinações de revisão |
 | Limite estrito de 3 tentativas de build e 2 rodadas automáticas de revisão | Teto determinístico contra loops infinitos |
 | Worktree isolada, sandbox `bwrap`, aprovação local antes do MR | Isolamento e segurança operacional na máquina local |
-| Piso de qualidade determinístico (sem `@ts-ignore` / `.skip()`) e regras anti-slop | [pstack / unslop](referencias-skills.md#31-portão-de-piso-de-qualidade--prompts-anti-slop) |
-| Cálculo de raio de impacto (blast radius) via `git grep` e bloqueio na prontidão | [blast-radius](referencias-skills.md#32-raio-de-impacto-blast-radius--prontidão-de-entrega) |
-| Reorganização cognitiva do diff em 4 camadas e review canvas na gaveta | [pr-review-canvas](referencias-skills.md#33-reorganização-cognitiva-do-diff--review-canvas) |
+| Piso de qualidade determinístico (sem `@ts-ignore` / `.skip()`) e regras anti-slop | Impede que o laço de correção "passe" suprimindo o erro ou pulando o teste (ideia de `pstack/unslop`) |
+| Cálculo de raio de impacto (blast radius) via `git grep` e bloqueio na prontidão | Um arquivo com 3 ou mais dependentes de produção sem teste retém o MR automático (ideia de `blast-radius`) |
+| Reorganização cognitiva do diff em 4 camadas e review canvas na gaveta | Lógica central primeiro, depois integração, testes e metadados (ideia de `pr-review-canvas`) |
 
-A análise comparativa das skills de referência e o que foi aproveitado ou rejeitado está detalhada em [`docs/referencias-skills.md`](referencias-skills.md).
-O histórico das decisões está em [`superpowers/specs/2026-10-04-fabrica-dev-design.md`](superpowers/specs/2026-10-04-fabrica-dev-design.md).
+O que ficou de fora de propósito:
+
+- **Laços autônomos sem teto.** Contraria o teto de 3 tentativas de build e 2 rodadas automáticas de revisão.
+- **Enxames de agentes que delegam entre si.** A esteira mantém raias fixas, na ordem do capítulo 4.
+- **Análise de AST para o raio de impacto.** `git grep` não traz dependência, é instantâneo e funciona em qualquer stack.
+
+## 22. Projetos e ideação
+
+Antes da esteira, a Fábrica pode amadurecer uma ideia até ela virar tarefas. O que o desenvolvedor vê está no manual (`docs/manual/pt/fabrica.md`); aqui fica como funciona.
+
+**Projeto.** Agrupa uma pasta, as tarefas e as ideias dela. Os repositórios são os diretórios com `.git` na raiz da pasta e até dois níveis abaixo (pulando `node_modules` e pastas ocultas). A tarefa ganha `projectId`; uma tarefa sem projeto é "avulsa", e "Trazer tarefas avulsas" adota as que têm o repositório dentro da pasta. Excluir o projeto apaga as ideias e solta ou descarta as tarefas; a pasta nunca é tocada.
+
+**Fases da ideia.** `explore` → `challenge` → `refine` → `plan` → `split` → `dispatched`, mais `dropped`. Seguir de fase só acontece com `gateBlockers` vazio, conferido em código:
+
+| Fase | O portão pede |
+|---|---|
+| `explore` | Seções `problem`, `audience`, `job` e `workaround` preenchidas (ou marcadas "hipótese — verificar"). |
+| `challenge` | Pelo menos uma rodada; nenhum ataque de severidade alta sem decisão; `assumptions` e `premortem`. |
+| `refine` | `refined`, `outOfV1`, `recommendation` e a recomendação go, pivot ou stop. Pivot volta a `explore`; stop encerra (`dropped`). |
+| `plan` | `planErrors`: exatamente um walking skeleton, sem dependência; toda master com repositório e cenário; dependências existentes e sem ciclo; repositórios do projeto ou declarados em `newRepos`. |
+| `split` | `splitErrors`: 1 repositório e 1 stack por tarefa; todo cenário de cada master coberto por alguma tarefa; nenhuma master sem tarefa; dependências existentes e sem ciclo. |
+
+**Agentes.** Facilitador, red team, blue team, Planner e Splitter (`server/lib/ideation/agents.ts`), executados por `runFactoryAgent` com o agente passado direto, sempre em leitura e com a pasta do projeto como diretório. Só uma operação por ideia de cada vez. Regras que o código aplica sobre a resposta deles:
+
+- O facilitador não escreve as seções `original` e `mitigations`: a segunda é montada a partir das decisões do desenvolvedor sobre cada ataque.
+- O desafio tem no máximo 2 rodadas, e a segunda só roda com todos os ataques da primeira decididos. "Encerra a ideia" (`kill`) leva a ideia a `dropped`.
+- Plano e quebra rodam até passar no portão, no máximo 3 vezes, reenviando os erros ao agente; o que sobrar fica na tela para correção manual.
+- Voltar de fase não apaga o que veio depois: as fases seguintes ficam marcadas como `stale`.
+
+**Envio à esteira (`dispatch`).** Cada tarefa da quebra vira uma `FactoryTask` com `source.type: 'idea'`, `origin` (`ideaId`, `masterKey`, `taskKey`), `givenCriteria` (os cenários Gherkin, que o Analyst recebe como CA1..n, primeiro e sem reescrever, via `withGivenCriteria`) e `dependsOn` (ids das tarefas de que depende, com as dependências entre masters expandidas). As tarefas são criadas em ordem topológica; o envio é idempotente (o que já foi enviado não se repete) e pula a tarefa cujo repositório ainda não existe, junto com as que dependem dela.
+
+**Dependência na esteira.** `POST /tasks/:id/plan` responde 409 enquanto `pendingDependencies` achar uma dependência que não está `done`. Uma dependência descartada deixa de bloquear.
