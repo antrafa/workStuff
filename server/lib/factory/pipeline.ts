@@ -5,7 +5,7 @@
 import { defaultFactoryStore as store } from './store.ts'
 import { commitWorktree, createWorktree, discardFiles, fetchBase, getWorktreeDiff, headOf, resetWorktree, syncWithBase, uncommittedFiles, type BaseSync } from './worktree.ts'
 import { runFactoryAgent } from './runner.ts'
-import { checkCriteriaCoverage, docsCiting, gateArtifactsExist, gateDiffNotEmpty, gateNoQualityDegradation, gateTestsPass, nonDocFiles, nonTestFiles, type TestsGateResult } from './gates.ts'
+import { checkCriteriaCoverage, computeBlastRadius, docsCiting, gateArtifactsExist, gateDiffNotEmpty, gateNoQualityDegradation, gateTestsPass, nonDocFiles, nonTestFiles, type TestsGateResult } from './gates.ts'
 import { runSecurityScans, scanFindings } from './scanners.ts'
 import { assessDelivery } from './readiness.ts'
 import { ExecutionCancelledError, throwIfCancelled } from './executions.ts'
@@ -375,9 +375,11 @@ export async function reverifyOnNewBase(ctx: ExecContext, task: FactoryTask): Pr
   const lastRun: TestsGateResult = { passed: task.qaReport.passed, command: task.qaReport.testsRan, steps: task.qaReport.steps, output: task.qaReport.output ?? '', exitCode: 0, durationMs: 0 }
   const { tests, sync } = await syncAndVerify(ctx, task, worktreePath, lastRun)
   const { diff, stat } = await getWorktreeDiff(worktreePath, task.baseBranch)
+  const blastRadius = await computeBlastRadius(worktreePath, stat.files).catch(() => task.blastRadius)
   const patch: Partial<FactoryTask> = {
     diffContent: diff,
     diffStat: stat,
+    blastRadius,
     qaReport: { ...task.qaReport, ...qaRun(tests), baseSync: { status: sync.status, detail: sync.detail } },
     reviewedHead: await headOf(worktreePath),
     verifiedBase: sync.baseHead,
@@ -472,12 +474,14 @@ async function finishReview(
   handoffs: FactoryTask['handoffs'],
 ): Promise<FactoryTask> {
   const { diff, stat } = await getWorktreeDiff(worktreePath, task.baseBranch)
+  const blastRadius = await computeBlastRadius(worktreePath, stat.files).catch(() => undefined)
   const summary = [outcome.review.summary, outcome.security.summary].filter(Boolean).join('\n\n')
   const ids = criteriaIds(handoffs?.spec)
   const patch: Partial<FactoryTask> = {
     state: 'review',
     diffContent: diff,
     diffStat: stat,
+    blastRadius,
     qaReport: {
       ...qaRun(qa.tests),
       summary: qaSummary,

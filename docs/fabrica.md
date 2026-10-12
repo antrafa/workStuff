@@ -196,6 +196,7 @@ O código da esteira está em `server/lib/factory/pipeline.ts`. As rotas (`serve
 | Critério de aceite não atendido | Tester alterou arquivo que não é de teste |
 | Revisão que não rodou ou ficou incompleta | Mais de 400 linhas alteradas |
 | | Caminho sensível: CI, Docker, Helm, Terraform, migração, manifesto de dependências, nomes com auth, secret, token, crypt, permission |
+| | Alto raio de impacto: arquivo alterado é importado por múltiplos módulos fora do diff sem testes chamadores |
 
 3. **MR automático** (`task.autoMr`): se a tarefa pediu e não há nenhum item em nenhuma das duas colunas, a esteira abre o MR sozinha no fim da construção ou do ajuste. Nunca faz merge local sozinha, porque ele escreve no seu checkout.
 

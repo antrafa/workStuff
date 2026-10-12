@@ -209,6 +209,17 @@ export type DiffStat = {
   files: string[]
 }
 
+export type FileBlastRadius = {
+  file: string
+  dependents: string[]
+  testFiles: string[]
+}
+
+export type BlastRadiusReport = {
+  totalDependents: number
+  files: FileBlastRadius[]
+}
+
 export type FactoryTask = {
   id: string
   title: string
@@ -253,6 +264,7 @@ export type FactoryTask = {
   diffContent?: string
   qaReport?: QaReport
   securityReport?: SecurityReport
+  blastRadius?: BlastRadiusReport
   prUrl?: string
   createdAt: string
   updatedAt: string

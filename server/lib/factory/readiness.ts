@@ -65,6 +65,17 @@ export function assessDelivery(task: FactoryTask): Readiness {
   const sensitive = (stat?.files ?? []).filter(f => SENSITIVE.test(f))
   if (sensitive.length) attention.push(say({ en: `Touches sensitive paths: ${sensitive.join(', ')}.`, pt: `Mexe em caminhos sensíveis: ${sensitive.join(', ')}.` }))
 
+  for (const item of task.blastRadius?.files ?? []) {
+    if (item.dependents.length >= 3 && item.testFiles.length === 0) {
+      const examples = item.dependents.slice(0, 3).join(', ')
+      const more = item.dependents.length > 3 ? ` (+${item.dependents.length - 3})` : ''
+      attention.push(say({
+        en: `High blast radius: "${item.file}" is imported by ${item.dependents.length} files outside diff (${examples}${more}), with no test callers.`,
+        pt: `Alto raio de impacto: "${item.file}" é importado por ${item.dependents.length} arquivos fora do diff (${examples}${more}), sem testes chamadores.`,
+      }))
+    }
+  }
+
   return { blockers, attention }
 }
 
@@ -99,6 +110,7 @@ if (import.meta.main && process.argv.includes('--selfcheck')) {
   assert.equal(r({ securityReport: { ...green.securityReport!, tools: [{ tool: 'semgrep', status: 'missing', install: 'pipx install semgrep' }] } }).attention.length, 1)
   assert.equal(r({ diffStat: { filesChanged: 1, insertions: 300, deletions: 200, files: ['a.ts'] } }).attention.length, 1, 'diff grande')
   assert.equal(r({ diffStat: { filesChanged: 2, insertions: 1, deletions: 0, files: ['.gitlab-ci.yml', 'src/auth/login.ts'] } }).attention.length, 1, 'caminho sensível')
+  assert.equal(r({ blastRadius: { totalDependents: 4, files: [{ file: 'src/core.ts', dependents: ['a.ts', 'b.ts', 'c.ts', 'd.ts'], testFiles: [] }] } }).attention.length, 1, 'alto raio de impacto sem testes pede atenção')
   const touched = r({ qaReport: { ...green.qaReport!, testerTouched: ['src/a.ts'] } })
   assert.equal(canAutoMr(green, touched), false, 'qualquer ponto de atenção segura o MR automático')
 

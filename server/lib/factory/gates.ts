@@ -4,13 +4,13 @@
 
 import assert from 'node:assert/strict'
 import { existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
-import { join } from 'node:path'
+import { basename, join } from 'node:path'
 import { homedir, tmpdir } from 'node:os'
 import { spawn } from 'node:child_process'
 import { run } from '../run.ts'
 import { jail, withSandbox } from './runner.ts'
 import { GIT_NO_HOOKS, uncommittedFiles } from './worktree.ts'
-import type { CriterionCoverage, CriterionTests, VerifyStep } from './types.ts'
+import type { BlastRadiusReport, CriterionCoverage, CriterionTests, FileBlastRadius, VerifyStep } from './types.ts'
 import { say } from '../i18n.ts'
 
 export type DiffGateResult = {
@@ -427,6 +427,52 @@ export async function gateNoQualityDegradation(
   }
 }
 
+// 8. Gate / Analisador: Blast Radius (Raio de Impacto de Código).
+// Mapeia quais arquivos fora do diff dependem ou importam os arquivos alterados.
+export async function computeBlastRadius(
+  worktreePath: string,
+  changedFiles: string[],
+): Promise<BlastRadiusReport> {
+  const codeFiles = changedFiles.filter(f => !DOC_FILE.test(f) && !TEST_FILE.test(f))
+  if (codeFiles.length === 0) {
+    return { totalDependents: 0, files: [] }
+  }
+
+  const results: FileBlastRadius[] = []
+  const allDependents = new Set<string>()
+
+  for (const file of codeFiles) {
+    const base = basename(file).replace(/\.[a-zA-Z0-9_-]+$/, '')
+    if (!base || base.length < 2) continue
+
+    const pattern = `(import|from|require).*([\"'/]${base}(\\.[a-zA-Z0-9_-]+)?[\"';]|\\b${base}\\b)`
+    const out = await run('git', [...GIT_NO_HOOKS, '-C', worktreePath, 'grep', '-l', '-E', pattern]).catch(() => '')
+    const matched = out.split('\n').map(l => l.trim()).filter(Boolean)
+
+    const dependents: string[] = []
+    const testFiles: string[] = []
+
+    for (const match of matched) {
+      if (match === file || changedFiles.includes(match) || DOC_FILE.test(match)) continue
+      if (TEST_FILE.test(match)) {
+        testFiles.push(match)
+      } else {
+        dependents.push(match)
+        allDependents.add(match)
+      }
+    }
+
+    if (dependents.length > 0 || testFiles.length > 0) {
+      results.push({ file, dependents, testFiles })
+    }
+  }
+
+  return {
+    totalDependents: allDependents.size,
+    files: results,
+  }
+}
+
 // Autoteste
 if (import.meta.main && process.argv.includes('--selfcheck')) {
   const tmp = mkdtempSync(join(tmpdir(), 'workstuff-gates-test-'))
@@ -561,6 +607,18 @@ diff --git a/README.md b/README.md
     const degResult = await gateNoQualityDegradation(repo, 'HEAD')
     assert.equal(degResult.passed, false, 'gate rejeita repositório com @ts-ignore')
     assert.match(degResult.reason!, /ts-ignore/)
+
+    // 8. Teste de computeBlastRadius (Raio de impacto de arquivos alterados)
+    writeFileSync(join(repo, 'math.ts'), 'export const sum = (a: number, b: number) => a + b\n')
+    writeFileSync(join(repo, 'calc.ts'), 'import { sum } from "./math.ts"\nexport const double = (x: number) => sum(x, x)\n')
+    writeFileSync(join(repo, 'math.test.ts'), 'import { sum } from "./math.ts"\n')
+    await run('git', ['-C', repo, 'add', '.'])
+    await run('git', ['-C', repo, 'commit', '-m', 'add math modules', '-q'])
+
+    const br = await computeBlastRadius(repo, ['math.ts'])
+    assert.equal(br.totalDependents, 1, 'calc.ts é o único dependente de produção fora do diff')
+    assert.deepEqual(br.files[0].dependents, ['calc.ts'])
+    assert.deepEqual(br.files[0].testFiles, ['math.test.ts'])
 
     console.log('factory gates selfcheck: ok')
   } finally {
