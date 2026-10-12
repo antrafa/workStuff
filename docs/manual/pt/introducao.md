@@ -108,7 +108,7 @@ O ícone de sol ou de lua no canto superior direito troca na hora entre o tema c
 
 ### Idioma
 
-O painel fala português e inglês. Troque nas [Configurações](/configuracoes), em **Aparência** > **Idioma**. A página recarrega no novo idioma.
+O painel fala português e inglês. O jeito mais rápido de trocar é o seletor **EN | PT** na barra do topo, ao lado do botão de tema: clique no idioma que quer e a página recarrega nele. A mesma escolha também está nas [Configurações](/configuracoes), em **Aparência** > **Idioma**.
 
 ### Encerrar o painel
 

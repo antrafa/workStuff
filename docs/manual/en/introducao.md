@@ -108,7 +108,7 @@ The sun or moon icon at the top right switches between the light and the dark th
 
 ### Language
 
-The panel speaks English and Portuguese. Change it in [Settings](/configuracoes), under **Appearance** > **Language**. The page reloads in the new language.
+The panel speaks English and Portuguese. The quickest way to switch is the **EN | PT** switch in the top bar, next to the theme button: click the language you want and the page reloads in it. The same choice is also in [Settings](/configuracoes), under **Appearance** > **Language**.
 
 ### Shutting the panel down
 

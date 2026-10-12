@@ -40,7 +40,7 @@ Depois abra <http://localhost:5180> no navegador.
 2. Em **Provedor de IA**, clique no programa que você tem instalado: **Claude Code**, **OpenAI Codex** ou **Google Antigravity**. Os que não estão instalados aparecem como **não detectado** e não podem ser escolhidos.
 3. Escolha um modelo (o marcado como **recomendado** é um bom começo) e o **Esforço**.
 4. Clique em **Salvar alterações**.
-5. Se preferir o painel em inglês, abra **Aparência** e escolha **English** em **Idioma**. A página recarrega.
+5. Se preferir o painel em inglês, clique em **EN** na barra do topo (ou, aqui mesmo, abra **Aparência** e escolha **English** em **Idioma**). A página recarrega.
 
 > **Dica:** salve a escolha da IA antes de trocar o idioma: a recarga descarta o que não foi salvo.
 

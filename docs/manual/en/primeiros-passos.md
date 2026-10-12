@@ -40,7 +40,7 @@ Then open <http://localhost:5180> in the browser.
 2. In **AI provider**, click the program you have installed: **Claude Code**, **OpenAI Codex** or **Google Antigravity**. Programs that are not installed show **not found** and cannot be chosen.
 3. Pick a model (the one marked **recommended** is a good start) and the **Effort**.
 4. Click **Save changes**.
-5. If you prefer the panel in Portuguese, open **Appearance** and choose **Português** under **Language**. The page reloads.
+5. If you prefer the panel in Portuguese, click **PT** in the top bar (or, here, open **Appearance** and choose **Português** under **Language**). The page reloads.
 
 > **Tip:** save the AI choice before changing the language: the reload throws away changes that were not saved.
 

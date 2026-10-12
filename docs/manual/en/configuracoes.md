@@ -52,6 +52,8 @@ Use this for a model the program accepts but that does not appear in the list ye
 2. Under **Language**, click **English** or **Português**.
 3. The page reloads in the new language. The panel's server messages also change.
 
+> **Tip:** the **EN | PT** switch in the top bar does the same from any screen.
+
 > **Warning:** the reload throws away unsaved changes in **AI provider**. Click **Save changes** first.
 
 ### Change the theme

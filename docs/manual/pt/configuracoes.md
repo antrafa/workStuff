@@ -52,6 +52,8 @@ Use isso para um modelo que o programa aceita mas que ainda não aparece na list
 2. Em **Idioma**, clique em **English** ou **Português**.
 3. A página recarrega no novo idioma. As mensagens do servidor do painel também mudam.
 
+> **Dica:** o seletor **EN | PT** na barra do topo faz o mesmo, de qualquer tela.
+
 > **Atenção:** a recarga descarta as mudanças não salvas em **Provedor de IA**. Clique em **Salvar alterações** antes.
 
 ### Trocar o tema
