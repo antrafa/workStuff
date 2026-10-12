@@ -1,5 +1,7 @@
 import { Router } from 'express'
 import { run, which } from '../lib/run.ts'
+import { runningCount } from '../lib/factory/executions.ts'
+import { say } from '../lib/i18n.ts'
 
 export const statusRouter = Router()
 
@@ -33,4 +35,18 @@ statusRouter.get('/', async (_req, res) => {
     cached = { at: Date.now(), body: { tools, agents, port: Number(process.env.PORT ?? 3101) } }
   }
   res.json(cached.body)
+})
+
+// Stops the whole process group this server runs in: the `npm run dev` job in a terminal, or the
+// group the launcher starts it in. No pid file, so a stale or reused pid can never be signalled.
+// ponytail: assumes its own group holds only workStuff; a supervisor sharing the group would stop too.
+statusRouter.post('/shutdown', (_req, res) => {
+  const busy = runningCount()
+  if (busy > 0) {
+    res.status(409).json({ error: say({ en: `${busy} factory run(s) in progress: stop them before shutting down.`, pt: `${busy} execução(ões) da fábrica em andamento: pare-as antes de encerrar.` }) })
+    return
+  }
+  res.json({ ok: true, message: say({ en: 'workStuff is shutting down...', pt: 'encerrando o workStuff...' }) })
+  console.log('[status] shutdown requested from the panel')
+  setTimeout(() => process.kill(0, 'SIGTERM'), 350)
 })

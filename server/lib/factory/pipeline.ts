@@ -5,7 +5,7 @@
 import { defaultFactoryStore as store } from './store.ts'
 import { commitWorktree, createWorktree, discardFiles, fetchBase, getWorktreeDiff, headOf, resetWorktree, syncWithBase, uncommittedFiles, type BaseSync } from './worktree.ts'
 import { runFactoryAgent } from './runner.ts'
-import { checkCriteriaCoverage, docsCiting, gateArtifactsExist, gateDiffNotEmpty, gateTestsPass, nonDocFiles, nonTestFiles, type TestsGateResult } from './gates.ts'
+import { checkCriteriaCoverage, computeBlastRadius, docsCiting, gateArtifactsExist, gateDiffNotEmpty, gateNoQualityDegradation, gateTestsPass, nonDocFiles, nonTestFiles, type TestsGateResult } from './gates.ts'
 import { runSecurityScans, scanFindings } from './scanners.ts'
 import { assessDelivery } from './readiness.ts'
 import { ExecutionCancelledError, throwIfCancelled } from './executions.ts'
@@ -170,13 +170,20 @@ async function checkBuildGates(ctx: ExecContext, task: FactoryTask, worktreePath
     if (!artifacts.passed) return { failure: artifacts.reason, fatal: true, tests: skippedTests }
   }
 
+  const quality = await codeStep(
+    ctx, 'gate', { name: say({ en: 'Gate: quality floor (no suppressions)', pt: 'Portão: piso de qualidade (sem supressões)' }), phase: 'qa_security' },
+    () => gateNoQualityDegradation(worktreePath, task.baseBranch),
+    r => r.reason,
+  )
+  if (!quality.passed) return { failure: quality.reason, fatal: true, tests: skippedTests }
+
   const tests = await runTests(ctx, task, worktreePath, say({ en: 'Gate: project verification', pt: 'Portão: verificação do projeto' }))
   // A suite that could not run (no command, no bwrap) is reported to the human, not "fixed" by the agent
   if (tests.passed || tests.skipped) return { fatal: false, tests }
   return { failure: `Comando: ${tests.command}\n${tests.output}`, fatal: false, tests }
 }
 
-// SSSF-style correction: a failed gate re-prompts the same CLI session (Claude) with exactly
+// Session-level correction: a failed gate re-prompts the same CLI session (Claude) with exactly
 // what failed, instead of starting over. Exhausted attempts: a broken diff aborts the run;
 // failing tests go on to the review rounds, which hand them back to the Implementer.
 async function implementWithGates(
@@ -368,10 +375,12 @@ export async function reverifyOnNewBase(ctx: ExecContext, task: FactoryTask): Pr
   const lastRun: TestsGateResult = { passed: task.qaReport.passed, command: task.qaReport.testsRan, steps: task.qaReport.steps, output: task.qaReport.output ?? '', exitCode: 0, durationMs: 0 }
   const { tests, sync } = await syncAndVerify(ctx, task, worktreePath, lastRun)
   const { diff, stat } = await getWorktreeDiff(worktreePath, task.baseBranch)
+  const blastRadius = await computeBlastRadius(worktreePath, stat.files).catch(() => task.blastRadius)
   const patch: Partial<FactoryTask> = {
     diffContent: diff,
     diffStat: stat,
-    qaReport: { ...task.qaReport, ...qaRun(tests), baseSync: { status: sync.status, detail: sync.detail } },
+    blastRadius,
+    qaReport: { ...task.qaReport, ...qaRun(tests), qualityFloor: await qualityFloor(worktreePath, task.baseBranch), baseSync: { status: sync.status, detail: sync.detail } },
     reviewedHead: await headOf(worktreePath),
     verifiedBase: sync.baseHead,
   }
@@ -455,6 +464,10 @@ async function adjustReviewedWork(ctx: ExecContext, task: FactoryTask, worktreeP
 // The verification fields of the QA report. A suite that did not run is never a pass.
 const qaRun = (tests: TestsGateResult) => ({ passed: tests.passed, output: tests.output, testsRan: tests.command, steps: tests.steps })
 
+// The build gate only sees the Implementer's turn; this one sees everything that ships, Tester included
+const qualityFloor = (worktreePath: string, baseBranch: string) =>
+  gateNoQualityDegradation(worktreePath, baseBranch).then(r => r.passed ? undefined : r.reason)
+
 async function finishReview(
   task: FactoryTask,
   worktreePath: string,
@@ -465,17 +478,20 @@ async function finishReview(
   handoffs: FactoryTask['handoffs'],
 ): Promise<FactoryTask> {
   const { diff, stat } = await getWorktreeDiff(worktreePath, task.baseBranch)
+  const blastRadius = await computeBlastRadius(worktreePath, stat.files).catch(() => undefined)
   const summary = [outcome.review.summary, outcome.security.summary].filter(Boolean).join('\n\n')
   const ids = criteriaIds(handoffs?.spec)
   const patch: Partial<FactoryTask> = {
     state: 'review',
     diffContent: diff,
     diffStat: stat,
+    blastRadius,
     qaReport: {
       ...qaRun(qa.tests),
       summary: qaSummary,
       criteria: ids.length ? checkCriteriaCoverage(worktreePath, ids, qa.testEnv?.criteriaTests ?? []) : undefined,
       testerTouched: qa.testerTouched,
+      qualityFloor: await qualityFloor(worktreePath, task.baseBranch),
       baseSync: { status: sync.status, detail: sync.detail },
     },
     securityReport: { passed: outcome.passed, findings: outcome.findings, criteria: outcome.review.criteria, summary, fixRounds: outcome.fixRounds, tools: outcome.tools },

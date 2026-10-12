@@ -61,6 +61,8 @@ export function getExecution(taskId: string): { kind: ExecutionKind; startedAt: 
   return current ? { kind: current.kind, startedAt: current.startedAt } : null
 }
 
+export const runningCount = (): number => running.size
+
 export function isExecuting(taskId: string): boolean {
   return running.has(taskId)
 }

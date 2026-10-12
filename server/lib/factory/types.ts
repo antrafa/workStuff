@@ -157,6 +157,8 @@ export type QaReport = {
   criteria?: CriterionCoverage[]
   // Non-test files the Tester changed: reviewed, but worth a human look
   testerTouched?: string[]
+  // Quality floor over the whole delivery (Tester included); set only when it failed
+  qualityFloor?: string
   // Rebase onto the newest base before the last verification
   baseSync?: { status: 'current' | 'rebased' | 'conflict'; detail?: string }
 }
@@ -202,11 +204,27 @@ export type Readiness = {
   attention: string[]
 }
 
+// Test files, by the usual conventions. Shared by the server gates and the diff viewer.
+export const TEST_FILE = /(^|\/)(tests?|__tests__|spec|e2e)\/|\.(test|spec)\.[^/]+$|_test\.(go|py)$|(^|\/)test_[^/]+\.py$|Tests?\.(java|kt|cs)$|(^|\/)scripts\/check-[^/]+$/i
+
+export type DiffCategory = 'core' | 'wiring' | 'tests' | 'docs_meta'
+
 export type DiffStat = {
   filesChanged: number
   insertions: number
   deletions: number
   files: string[]
+}
+
+export type FileBlastRadius = {
+  file: string
+  dependents: string[]
+  testFiles: string[]
+}
+
+export type BlastRadiusReport = {
+  totalDependents: number
+  files: FileBlastRadius[]
 }
 
 export type FactoryTask = {
@@ -253,6 +271,7 @@ export type FactoryTask = {
   diffContent?: string
   qaReport?: QaReport
   securityReport?: SecurityReport
+  blastRadius?: BlastRadiusReport
   prUrl?: string
   createdAt: string
   updatedAt: string

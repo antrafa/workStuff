@@ -154,6 +154,26 @@ npm run preview   # serve the built UI
 
 The API is started separately with `npm run server`.
 
+### One-click launcher (macOS & Linux)
+
+To start workStuff with a single click from your desktop, dock or application menu:
+
+```bash
+npm run launcher:install
+```
+
+- **macOS:** Creates `workStuff.app` in `~/Applications` with a native Retina icon. Pin it to your Dock or search via Spotlight (`Cmd + Space` → `workStuff`).
+- **Linux:** Installs `workstuff.desktop` into `~/.local/share/applications`, making it available in your system app launcher (GNOME, KDE, etc.).
+
+Add `--desktop` to also create an icon on your desktop (`npm run launcher:install -- --desktop`).
+To manage the background instance from the terminal:
+
+```bash
+./scripts/workstuff-launcher.sh status
+./scripts/workstuff-launcher.sh stop
+./scripts/workstuff-launcher.sh restart
+```
+
 ## Configuration
 
 All configuration is optional.

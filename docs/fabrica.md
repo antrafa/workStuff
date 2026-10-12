@@ -196,13 +196,20 @@ O código da esteira está em `server/lib/factory/pipeline.ts`. As rotas (`serve
 | Critério de aceite não atendido | Tester alterou arquivo que não é de teste |
 | Revisão que não rodou ou ficou incompleta | Mais de 400 linhas alteradas |
 | | Caminho sensível: CI, Docker, Helm, Terraform, migração, manifesto de dependências, nomes com auth, secret, token, crypt, permission |
+| Supressão ou teste pulado em qualquer ponto da entrega, inclusive nos testes do Tester | Alto raio de impacto: arquivo alterado é importado por três ou mais módulos fora do diff sem testes chamadores |
 
 3. **MR automático** (`task.autoMr`): se a tarefa pediu e não há nenhum item em nenhuma das duas colunas, a esteira abre o MR sozinha no fim da construção ou do ajuste. Nunca faz merge local sozinha, porque ele escreve no seu checkout.
 
 ### 5.7 Revisão humana
 
-A tarefa chega em `review` com o que bloqueia e o que pede atenção no topo da decisão, o diff, as estatísticas, o QA (etapas da verificação e teste por critério), os achados, as ferramentas de segurança, a checagem dos critérios e os envelopes. Na gaveta você pode:
+A tarefa chega em `review` com o que bloqueia e o que pede atenção no topo da decisão, o diff com reorganização cognitiva, as estatísticas, o QA (etapas da verificação e teste por critério), os achados, as ferramentas de segurança, a checagem dos critérios e os envelopes. Na gaveta você pode:
 
+- **Revisão cognitiva do diff** (`CognitiveDiffViewer`): os arquivos do diff não são exibidos em bloco único ou ordem alfabética ingênua. São classificados e priorizados pelo fluxo cognitivo de inspeção:
+  1. **Lógica central (`core`)**: modelos de domínio, regras de negócio e algoritmos principais;
+  2. **Integração & API (`wiring`)**: rotas, controladores, endpoints, schemas e amarrações de pipelines;
+  3. **Testes (`tests`)**: suítes unitárias, integração e fixtures de verificação;
+  4. **Docs & Metadados (`docs_meta`)**: documentação, manifestos de dependências (`package.json`, `pom.xml`), configs e CI/CD.
+  A tela oferece filtros por categoria, busca em tempo real por nome de arquivo, expansão/recolhimento sob demanda e destaca visualmente o **Raio de Impacto (Blast Radius)** ao lado de cada arquivo afetado (indicando se os módulos externos contam ou não com cobertura de testes).
 - **Pedir ajuste**: texto livre, ou o botão "Pedir correção" num achado, que preenche o pedido com ele.
 - **Abrir no editor**: abre a worktree no VS Code (ou no editor de `WORKSTUFF_EDITOR`).
 - **Criar MR/PR**: faz push de `factory/<id>` e abre o MR/PR pela conexão de Repositórios correspondente, com a descrição do Documenter e `Closes #<issue>` quando veio de issue. Se não houver conexão correspondente, a branch fica publicada e a tela avisa para abrir o MR à mão.
@@ -269,6 +276,7 @@ stateDiagram-v2
 |---|---|---|
 | **Há alterações** | Algum arquivo mudou em relação à base (alterações não commitadas mais o diff da branch), ignorando os links de dependência. | Correção pelo Implementer; esgotado, interrompe. |
 | **Arquivos declarados existem** | Cada arquivo do `changedFiles` existe no disco ou está no diff (um arquivo apagado de propósito conta). | Correção; esgotado, interrompe. |
+| **Piso de qualidade (sem supressões)** | Rejeita diffs que adicionem supressões de tipo ou linter (`@ts-ignore`, `@ts-nocheck`, `eslint-disable`, `@SuppressWarnings`, `# type: ignore`) ou testes pulados (`.skip()`, `@Disabled`, `@Ignore`). Compara contra o ponto em que a tarefa saiu da base, não contra a ponta dela: o que a base mudou depois não é culpa do agente. Diretivas só contam em posição de comentário e chamadas de teste só no início da linha, para que texto citando-as (ou `model.fit(`) não reprove. | Correção pelo Implementer; esgotado, interrompe. |
 | **Verificação do projeto** | Cada etapa da verificação termina com código 0, dentro do sandbox, parando na primeira que falha. | Correção; esgotado, vai para as rodadas de revisão como bloqueio. |
 | **Cobertura por critério** | Cada critério tem um arquivo de teste que existe, ou uma explicação do Tester. | Pede o seu olhar; segura o MR automático. |
 | **Ferramentas de segurança** | gitleaks, semgrep e npm audit, quando instalados e aplicáveis. | Segredo vira achado `critical`; o resto é evidência para o Security. |
@@ -542,21 +550,25 @@ O selfcheck de `agents.ts` falha se um agente da ordem ficar sem definição, e 
 
 Os [runbooks de dev da Fábrica](../dev-runbooks/factory/) cobrem os procedimentos manuais: limpar worktrees, reproduzir um portão, publicar a branch, resolver um merge local que falhou.
 
-## 21. Origem das ideias
+## 21. Princípios e Fundamentos da Fábrica
 
-| Ideia | De onde veio |
+| Mecanismo | Papel na Esteira |
 |---|---|
-| Fases de código e de agente; "o agente propõe, o código decide" | [super-simple-software-factory](https://github.com/disler/super-simple-software-factory) |
-| Envelopes tipados entre agentes; portões que verificam o que o agente declarou | super-simple-software-factory |
-| Correção na mesma sessão em vez de recomeçar | super-simple-software-factory |
-| Documenter; modelo caro para planejar e barato para construir | super-simple-software-factory |
-| Trace em raias por agente | super-simple-software-factory |
-| Especificação com critérios de aceite antes do plano; dúvidas que param a esteira | projeto de referência (triage e concept) |
-| Revisão em paralelo por especialistas; severidade por consequência; confiança mínima de 75; veredito em código | projeto de referência (review squad) |
-| Achado começa pela falha concreta; teste só conta se a asserção pode falhar; "não audite o arquivo inteiro" | projeto de referência (`REVIEW_FINDING_BAR`) |
-| Critério por id conferido contra a especificação; teste que prova comportamento | projeto de referência (sdd-compliance-reviewer e test-reviewer) |
-| Verifier adversarial, ferramentas de segurança, prontidão em código e MR automático | workStuff |
-| Até 3 tentativas de build e 2 rodadas automáticas de revisão | projeto de referência (`max_dev_retries`, `max_auto_rounds`) |
-| Worktree isolada, sandbox `bwrap`, aprovação local antes do MR | workStuff |
+| Fases de código e de agente; "o agente propõe, o código decide" | Controle determinístico: o LLM sugere artefatos, mas o código avalia e executa |
+| Envelopes tipados entre agentes; portões que verificam o que o agente declarou | Contratos de dados estritos em JSON para evitar alucinações e perda de contexto |
+| Correção na mesma sessão em vez de recomeçar | Reenvio na sessão do provedor (`--resume`) com a falha exata do portão |
+| Documenter; modelo caro para planejar e barato para construir | Otimização de custo e especialização funcional por agente |
+| Trace em raias por agente | Observabilidade completa de tempo, custo em tokens e ferramentas |
+| Especificação com critérios de aceite antes do plano; dúvidas que param a esteira | Triage determinística: perguntas ao desenvolvedor antes de gerar código |
+| Revisão em paralelo por especialistas; severidade por consequência; confiança mínima de 75; veredito em código | Squad de revisão: Reviewer funcional e Security em paralelo |
+| Achado começa pela falha concreta; teste só conta se a asserção pode falhar | Régua objetiva contra falsos positivos ou comentários de estilo |
+| Critério por id conferido contra a especificação; teste que prova comportamento | Rastreabilidade formal (CA1, CA2...) da especificação ao teste |
+| Verifier adversarial, ferramentas de segurança, prontidão em código e MR automático | Validação dupla contra alucinações de revisão |
+| Limite estrito de 3 tentativas de build e 2 rodadas automáticas de revisão | Teto determinístico contra loops infinitos |
+| Worktree isolada, sandbox `bwrap`, aprovação local antes do MR | Isolamento e segurança operacional na máquina local |
+| Piso de qualidade determinístico (sem `@ts-ignore` / `.skip()`) e regras anti-slop | [pstack / unslop](referencias-skills.md#31-portão-de-piso-de-qualidade--prompts-anti-slop) |
+| Cálculo de raio de impacto (blast radius) via `git grep` e bloqueio na prontidão | [blast-radius](referencias-skills.md#32-raio-de-impacto-blast-radius--prontidão-de-entrega) |
+| Reorganização cognitiva do diff em 4 camadas e review canvas na gaveta | [pr-review-canvas](referencias-skills.md#33-reorganização-cognitiva-do-diff--review-canvas) |
 
+A análise comparativa das skills de referência e o que foi aproveitado ou rejeitado está detalhada em [`docs/referencias-skills.md`](referencias-skills.md).
 O histórico das decisões está em [`superpowers/specs/2026-10-04-fabrica-dev-design.md`](superpowers/specs/2026-10-04-fabrica-dev-design.md).

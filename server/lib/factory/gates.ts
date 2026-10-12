@@ -3,14 +3,14 @@
 // Autoteste: node server/lib/factory/gates.ts --selfcheck
 
 import assert from 'node:assert/strict'
-import { existsSync, mkdirSync, readdirSync, readFileSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
-import { join } from 'node:path'
+import { existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { basename, join } from 'node:path'
 import { homedir, tmpdir } from 'node:os'
 import { spawn } from 'node:child_process'
 import { run } from '../run.ts'
 import { jail, withSandbox } from './runner.ts'
 import { GIT_NO_HOOKS, uncommittedFiles } from './worktree.ts'
-import type { CriterionCoverage, CriterionTests, VerifyStep } from './types.ts'
+import { TEST_FILE, type BlastRadiusReport, type CriterionCoverage, type CriterionTests, type FileBlastRadius, type VerifyStep } from './types.ts'
 import { say } from '../i18n.ts'
 
 export type DiffGateResult = {
@@ -282,8 +282,7 @@ export async function docsCiting(worktreePath: string, files: string[]): Promise
   return out.split('\n').filter(f => f && DOC_FILE.test(f) && !files.includes(f))
 }
 
-// 5. Test files, by the usual conventions. A miss only asks for a human look (see readiness.ts).
-const TEST_FILE = /(^|\/)(tests?|__tests__|spec|e2e)\/|\.(test|spec)\.[^/]+$|_test\.(go|py)$|(^|\/)test_[^/]+\.py$|Tests?\.(java|kt|cs)$|(^|\/)scripts\/check-[^/]+$/i
+// 5. Test files (TEST_FILE in types.ts). A miss only asks for a human look (see readiness.ts).
 export const nonTestFiles = (files: string[]) => files.filter(f => !TEST_FILE.test(f))
 
 // 6. Gate: the Tester's mapping of criteria to tests, checked against the disk. A test file it names
@@ -299,6 +298,189 @@ export function checkCriteriaCoverage(worktreePath: string, criteriaIds: string[
     const note = absent.length ? say({ en: `test file not found: ${absent.join(', ')}`, pt: `arquivo de teste não encontrado: ${absent.join(', ')}` }) : undefined
     return { id, status: 'missing', tests: entry.tests, note }
   })
+}
+
+// 7. Gate: Quality floor (Constraint-Driven Development).
+// Bars suppression of types/linting, skipped tests, or disabled assertions in new code.
+export type DegradationViolation = {
+  file: string
+  line: number
+  rule: string
+  snippet: string
+}
+
+export type QualityDegradationResult = {
+  passed: boolean
+  violations: DegradationViolation[]
+  reason?: string
+}
+
+// Directives only count in comment position and test calls only at the start of a statement, with
+// one-line string literals blanked first: text that names them (and `model.fit(`) does not trip the gate.
+// ponytail: line heuristic, no parser; a directive inside a multi-line string still matches.
+const STRING_LITERAL = /(["'`])(?:\\.|(?!\1).)*\1/g
+const DEGRADATION_RULES: Array<{ rule: string; pattern: RegExp }> = [
+  { rule: 'ts-ignore', pattern: /(^|\s)(\/\/|\/\*)\s*@ts-ignore\b/ },
+  { rule: 'ts-nocheck', pattern: /(^|\s)(\/\/|\/\*)\s*@ts-nocheck\b/ },
+  { rule: 'eslint-disable', pattern: /(^|\s)(\/\/|\/\*)\s*eslint-disable/ },
+  { rule: 'test-skip', pattern: /^\s*((it|test|describe|context)\.skip|xit|xtest|xdescribe|fit|fdescribe)\s*\(|^\s*@(Disabled|Ignore)\b|^\s*@pytest\.mark\.skip\b/ },
+  { rule: 'suppress-warnings', pattern: /^\s*@SuppressWarnings\b/ },
+  { rule: 'python-type-ignore', pattern: /(^|\s)#\s*type:\s*ignore\b/ },
+  { rule: 'python-noqa', pattern: /(^|\s)#\s*noqa\b/ },
+]
+
+export function detectQualityDegradation(diffText: string): DegradationViolation[] {
+  const violations: DegradationViolation[] = []
+  if (!diffText) return violations
+
+  const lines = diffText.split('\n')
+  let currentFile = ''
+  let currentLine = 0
+  let isDoc = false
+
+  for (const line of lines) {
+    if (line.startsWith('diff --git ')) {
+      const match = line.match(/^diff --git a\/.+ b\/(.+)$/)
+      currentFile = match ? match[1].trim() : ''
+      isDoc = currentFile ? DOC_FILE.test(currentFile) : false
+      continue
+    }
+    if (line.startsWith('+++ b/')) {
+      currentFile = line.slice(6).trim()
+      isDoc = currentFile ? DOC_FILE.test(currentFile) : false
+      continue
+    }
+    if (line.startsWith('@@ ')) {
+      const match = line.match(/^@@\s+-\d+(?:,\d+)?\s+\+(\d+)(?:,\d+)?\s+@@/)
+      if (match) {
+        currentLine = parseInt(match[1], 10) - 1
+      }
+      continue
+    }
+
+    if (isDoc) continue
+
+    if (line.startsWith('+') && !line.startsWith('+++')) {
+      currentLine++
+      const content = line.slice(1)
+      const code = content.replace(STRING_LITERAL, '""')
+      for (const { rule, pattern } of DEGRADATION_RULES) {
+        if (pattern.test(code)) {
+          violations.push({
+            file: currentFile,
+            line: currentLine,
+            rule,
+            snippet: content.trim(),
+          })
+          break
+        }
+      }
+    } else if (line.startsWith(' ')) {
+      currentLine++
+    }
+  }
+
+  return violations
+}
+
+export async function gateNoQualityDegradation(
+  worktreePath: string,
+  baseBranch = 'main',
+): Promise<QualityDegradationResult> {
+  try {
+    // Against the fork point, not the base tip: what the base changed since then is not the agent's
+    const forkPoint = (await run('git', [...GIT_NO_HOOKS, '-C', worktreePath, 'merge-base', '--end-of-options', baseBranch, 'HEAD'])).trim()
+    let diff = await run('git', [...GIT_NO_HOOKS, '-C', worktreePath, 'diff', '-U0', '--end-of-options', forkPoint])
+
+    // Also inspect untracked files not yet in git diff
+    const uncommitted = await uncommittedFiles(worktreePath)
+    for (const file of uncommitted) {
+      if (DOC_FILE.test(file)) continue
+      const tracked = await run('git', [...GIT_NO_HOOKS, '-C', worktreePath, 'ls-files', '--error-unmatch', '--', file]).then(() => true, () => false)
+      if (!tracked) {
+        const fullPath = join(worktreePath, file)
+        if (existsSync(fullPath) && !lstatSync(fullPath).isDirectory()) {
+          const content = readFileSync(fullPath, 'utf-8')
+          const fileLines = content.split('\n')
+          const syntheticDiff = `\ndiff --git a/${file} b/${file}\n--- /dev/null\n+++ b/${file}\n@@ -0,0 +1,${fileLines.length} @@\n` + fileLines.map(l => '+' + l).join('\n')
+          diff += syntheticDiff
+        }
+      }
+    }
+
+    const violations = detectQualityDegradation(diff)
+    if (violations.length === 0) {
+      return { passed: true, violations: [] }
+    }
+    const details = violations.map(v => `${v.file}:${v.line} (${v.rule}: "${v.snippet}")`).join(', ')
+    return {
+      passed: false,
+      violations,
+      reason: say({
+        en: `Quality floor violated: ${details}`,
+        pt: `Piso de qualidade violado: ${details}`,
+      }),
+    }
+  } catch (err) {
+    return {
+      passed: false,
+      violations: [],
+      reason: say({
+        en: `Failed to inspect quality floor: ${(err as Error).message}`,
+        pt: `Falha ao inspecionar piso de qualidade: ${(err as Error).message}`,
+      }),
+    }
+  }
+}
+
+// 8. Gate / Analisador: Blast Radius (Raio de Impacto de Código).
+// Mapeia quais arquivos fora do diff dependem ou importam os arquivos alterados.
+export async function computeBlastRadius(
+  worktreePath: string,
+  changedFiles: string[],
+): Promise<BlastRadiusReport> {
+  const codeFiles = changedFiles.filter(f => !DOC_FILE.test(f) && !TEST_FILE.test(f))
+  if (codeFiles.length === 0) {
+    return { totalDependents: 0, files: [] }
+  }
+
+  const results: FileBlastRadius[] = []
+  const allDependents = new Set<string>()
+
+  for (const file of codeFiles) {
+    const base = basename(file).replace(/\.[a-zA-Z0-9_-]+$/, '')
+    if (!base || base.length < 2) continue
+
+    // A quoted path ending in the file ('./math', "../lib/run.ts") or a dotted module (Python, Java).
+    // The basename is escaped: `[id].tsx` is a file name, not a character class.
+    const name = base.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+    const pattern = `(import|from|require).*["'/]${name}(\\.[A-Za-z0-9_-]+)?["']|^[[:space:]]*(import|from)[[:space:]]+([A-Za-z0-9_.]*\\.)?${name}([[:space:];]|$)`
+    // git grep exits 1 when nothing matches
+    const out = await run('git', [...GIT_NO_HOOKS, '-C', worktreePath, 'grep', '-l', '-E', '-e', pattern]).catch(() => '')
+    const matched = out.split('\n').map(l => l.trim()).filter(Boolean)
+
+    const dependents: string[] = []
+    const testFiles: string[] = []
+
+    for (const match of matched) {
+      if (match === file || changedFiles.includes(match) || DOC_FILE.test(match)) continue
+      if (TEST_FILE.test(match)) {
+        testFiles.push(match)
+      } else {
+        dependents.push(match)
+        allDependents.add(match)
+      }
+    }
+
+    if (dependents.length > 0 || testFiles.length > 0) {
+      results.push({ file, dependents, testFiles })
+    }
+  }
+
+  return {
+    totalDependents: allDependents.size,
+    files: results,
+  }
 }
 
 // Autoteste
@@ -368,10 +550,13 @@ if (import.meta.main && process.argv.includes('--selfcheck')) {
 
     const repo = join(tmp, 'docs-repo')
     mkdirSync(repo)
-    await run('git', ['-C', repo, 'init', '-q'])
+    await run('git', ['-C', repo, 'init', '-q', '-b', 'main'])
+    await run('git', ['-C', repo, 'config', 'user.name', 'Test'])
+    await run('git', ['-C', repo, 'config', 'user.email', 'test@test.com'])
     writeFileSync(join(repo, 'README.md'), 'Veja src/nav.ts\n')
     writeFileSync(join(repo, 'other.ts'), 'src/nav.ts\n')
     await run('git', ['-C', repo, 'add', '.'])
+    await run('git', ['-C', repo, 'commit', '-m', 'init', '-q'])
     assert.deepEqual(await docsCiting(repo, ['src/nav.ts']), ['README.md'], 'só documentação conta, código que cita não')
     assert.deepEqual(await docsCiting(repo, ['src/outro.ts']), [], 'nenhuma doc cita: Documenter pulado')
 
@@ -381,6 +566,102 @@ if (import.meta.main && process.argv.includes('--selfcheck')) {
     writeFileSync(join(fakeHome, '.gradle', 'gradle.properties'), '')
     assert.deepEqual(buildCacheDirs(fakeHome), [join(fakeHome, '.m2', 'repository'), join(fakeHome, '.m2', 'wrapper'), join(fakeHome, '.gradle', 'caches')],
       'só pastas de cache graváveis: init.d, gradle.properties e settings.xml ficam de fora')
+
+    // 7. Teste de detecção de degradação de qualidade (Anti-slop / Constraint-driven)
+    const cleanDiff = `diff --git a/src/app.ts b/src/app.ts
+--- a/src/app.ts
++++ b/src/app.ts
+@@ -1,3 +1,4 @@
+ export const a = 1
++export const b = 2
+`
+    assert.deepEqual(detectQualityDegradation(cleanDiff), [], 'diff limpo não tem violações')
+
+    const badDiff = `diff --git a/src/app.ts b/src/app.ts
+--- a/src/app.ts
++++ b/src/app.ts
+@@ -10,3 +10,6 @@
+ context line
++// @ts-ignore: bypass type error
++/* eslint-disable-next-line */
++it.skip("should work", () => {})
+-old deleted line
+diff --git a/src/Service.java b/src/Service.java
+--- a/src/Service.java
++++ b/src/Service.java
+@@ -5,1 +5,2 @@
++@SuppressWarnings("unchecked")
+diff --git a/README.md b/README.md
+--- a/README.md
++++ b/README.md
+@@ -1,2 +1,3 @@
++# Documentação com @ts-ignore explicativo
+`
+    const violations = detectQualityDegradation(badDiff)
+    assert.equal(violations.length, 4, 'detecta exatamente as 4 violações em código, ignorando markdown e linhas antigas')
+    assert.equal(violations[0].rule, 'ts-ignore')
+    assert.equal(violations[0].file, 'src/app.ts')
+    assert.equal(violations[0].line, 11)
+    assert.equal(violations[1].rule, 'eslint-disable')
+    assert.equal(violations[2].rule, 'test-skip')
+    assert.equal(violations[3].rule, 'suppress-warnings')
+    assert.equal(violations[3].file, 'src/Service.java')
+
+    const lookalikes = `diff --git a/src/train.py b/src/train.py
++++ b/src/train.py
+@@ -1,0 +1,4 @@
++model.fit(X, y)
++prompt = "NUNCA use xit(), // @ts-ignore nem eslint-disable"
++xit('pula', () => {})
+`
+    const lookalikeHits = detectQualityDegradation(lookalikes)
+    assert.deepEqual(lookalikeHits.map(v => v.line), [3], 'chamada de método e texto citando as diretivas não contam; xit( no início conta')
+
+    // Teste de gateNoQualityDegradation no repositório de teste
+    writeFileSync(join(repo, 'bad.ts'), '// @ts-ignore\nconst err = 1\n')
+    const degResultUntracked = await gateNoQualityDegradation(repo, 'HEAD')
+    assert.equal(degResultUntracked.passed, false, 'gate rejeita arquivo untracked com @ts-ignore')
+    assert.match(degResultUntracked.reason!, /ts-ignore/)
+
+    await run('git', ['-C', repo, 'add', '.'])
+    const degResult = await gateNoQualityDegradation(repo, 'HEAD')
+    assert.equal(degResult.passed, false, 'gate rejeita repositório com @ts-ignore')
+    assert.match(degResult.reason!, /ts-ignore/)
+
+    // A base que andou depois do fork não é culpa do agente
+    await run('git', ['-C', repo, 'commit', '-qam', 'bad'])
+    await run('git', ['-C', repo, 'branch', 'base-fork'])
+    writeFileSync(join(repo, 'bad.ts'), 'const err = 1\n')
+    await run('git', ['-C', repo, 'commit', '-qam', 'base remove a supressão'])
+    await run('git', ['-C', repo, 'checkout', '-q', '-b', 'task', 'base-fork'])
+    writeFileSync(join(repo, 'ok.ts'), 'export const ok = 1\n')
+    await run('git', ['-C', repo, 'add', '.'])
+    await run('git', ['-C', repo, 'commit', '-qm', 'task'])
+    assert.equal((await gateNoQualityDegradation(repo, 'main')).passed, true, 'linha mudada só na base não reprova a tarefa')
+    assert.equal((await gateNoQualityDegradation(repo, 'nao-existe')).passed, false, 'base inexistente reprova em vez de passar sem olhar')
+    await run('git', ['-C', repo, 'checkout', '-q', 'main'])
+
+    // 8. Teste de computeBlastRadius (Raio de impacto de arquivos alterados)
+    writeFileSync(join(repo, 'math.ts'), 'export const sum = (a: number, b: number) => a + b\n')
+    writeFileSync(join(repo, 'calc.ts'), 'import { sum } from "./math.ts"\nexport const double = (x: number) => sum(x, x)\n')
+    writeFileSync(join(repo, 'math.test.ts'), 'import { sum } from "./math.ts"\n')
+    await run('git', ['-C', repo, 'add', '.'])
+    await run('git', ['-C', repo, 'commit', '-m', 'add math modules', '-q'])
+
+    const br = await computeBlastRadius(repo, ['math.ts'])
+    assert.equal(br.totalDependents, 1, 'calc.ts é o único dependente de produção fora do diff')
+    assert.deepEqual(br.files[0].dependents, ['calc.ts'])
+    assert.deepEqual(br.files[0].testFiles, ['math.test.ts'])
+
+    writeFileSync(join(repo, 'run.ts'), 'export const run = () => 1\n')
+    writeFileSync(join(repo, 'cli.ts'), 'import { x } from "./other"\nrun()\n')
+    writeFileSync(join(repo, '[id].tsx'), 'export default 1\n')
+    writeFileSync(join(repo, 'page.ts'), 'import Page from "./[id].tsx"\n')
+    writeFileSync(join(repo, 'util.py'), 'from pkg.run import go\n')
+    await run('git', ['-C', repo, 'add', '.'])
+    await run('git', ['-C', repo, 'commit', '-qm', 'more modules'])
+    assert.deepEqual((await computeBlastRadius(repo, ['run.ts'])).files[0].dependents, ['util.py'], 'a palavra solta numa linha com import não conta; módulo pontilhado conta')
+    assert.deepEqual((await computeBlastRadius(repo, ['[id].tsx'])).files[0].dependents, ['page.ts'], 'colchetes no nome do arquivo são literais')
 
     console.log('factory gates selfcheck: ok')
   } finally {

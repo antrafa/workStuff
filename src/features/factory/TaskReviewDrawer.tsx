@@ -23,6 +23,7 @@ import type { FactoryTask, SecurityFinding } from '../../../server/lib/factory/t
 import { TraceTimeline } from './TraceTimeline'
 import { tx } from '@/lib/i18n'
 import { FactoryStatusChip } from './timeline/FactoryStatusChip'
+import { CognitiveDiffViewer } from './CognitiveDiffViewer'
 
 // Same minimum the server asks for (server/routes/factory.ts)
 const MIN_OVERRIDE = 10
@@ -48,13 +49,6 @@ type Props = {
 }
 
 type Tab = 'diff' | 'qa' | 'security' | 'trace'
-
-function diffLineColor(line: string): string | undefined {
-  if (line.startsWith('+++') || line.startsWith('---')) return undefined
-  if (line.startsWith('+')) return 'var(--ok)'
-  if (line.startsWith('-')) return 'var(--crit)'
-  return undefined
-}
 
 export function TaskReviewDrawer({ task, onClose, onUpdate }: Props) {
   const [tab, setTab] = useState<Tab>('diff')
@@ -543,31 +537,13 @@ export function TaskReviewDrawer({ task, onClose, onUpdate }: Props) {
               </button>
             </div>
 
-            {/* Diff tab */}
+            {/* Diff tab: Cognitive Diff Viewer with category grouping & blast radius */}
             {tab === 'diff' && (
-              <div className="stack" style={{ gap: 8 }}>
-                {task.diffStat && (
-                  <div className="row" style={{ fontSize: 12, color: 'var(--muted)' }}>
-                    <span>{tx({ en: `${task.diffStat.filesChanged} files changed`, pt: `${task.diffStat.filesChanged} arquivos alterados` })}</span>
-                    <span>·</span>
-                    <span style={{ color: 'var(--ok)' }}>{tx({ en: `+${task.diffStat.insertions} additions`, pt: `+${task.diffStat.insertions} adições` })}</span>
-                    <span>·</span>
-                    <span style={{ color: 'var(--crit)' }}>{tx({ en: `-${task.diffStat.deletions} deletions`, pt: `-${task.diffStat.deletions} remoções` })}</span>
-                  </div>
-                )}
-                <div
-                  className="card card-pad mono"
-                  style={{ maxHeight: 360, overflowY: 'auto', fontSize: 12, background: 'var(--surface-3)', whiteSpace: 'pre-wrap' }}
-                >
-                  {task.diffContent
-                    ? task.diffContent.split('\n').map((line, i) => (
-                        <span key={i} style={{ display: 'block', color: diffLineColor(line) }}>
-                          {line || ' '}
-                        </span>
-                      ))
-                    : tx({ en: 'No difference found against the base branch.', pt: 'Nenhuma diferença identificada contra a branch base.' })}
-                </div>
-              </div>
+              <CognitiveDiffViewer
+                diffContent={task.diffContent}
+                diffStat={task.diffStat}
+                blastRadius={task.blastRadius}
+              />
             )}
 
             {/* QA tab */}
