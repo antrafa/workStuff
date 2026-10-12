@@ -53,11 +53,12 @@ function IdeaBody({ project, idea, tasks, onIdea, onBack, onTasksChanged }: Omit
     }
   }
 
+  const nextPhase = PHASE_ORDER[PHASE_ORDER.indexOf(idea.phase) + 1]
   const advanceLabel = idea.phase === 'refine' && idea.recommendation === 'pivot'
-    ? tx({ en: 'Pivot: back to Explore', pt: 'Pivot: voltar a Explorar' })
+    ? tx({ en: 'Change course (pivot): back to Explore', pt: 'Mudar o rumo (pivot): voltar a Explorar' })
     : idea.phase === 'refine' && idea.recommendation === 'stop'
-      ? tx({ en: 'Stop: drop the idea', pt: 'Stop: encerrar a ideia' })
-      : tx({ en: 'Approve phase', pt: 'Aprovar fase' })
+      ? tx({ en: 'Stop: drop the idea', pt: 'Parar (stop): encerrar a ideia' })
+      : tx({ en: `Approve and go to ${PHASE_UI[nextPhase]?.label}`, pt: `Aprovar e ir para ${PHASE_UI[nextPhase]?.label}` })
 
   return (
     <div className="stack" style={{ gap: 12 }}>
@@ -85,25 +86,29 @@ function IdeaBody({ project, idea, tasks, onIdea, onBack, onTasksChanged }: Omit
       )}
       {Boolean(idea.stale?.length) && (
         <div className="callout callout-info">
-          {tx({ en: 'Marked ⟲: built before an earlier phase was reopened; redo it when you get there.', pt: 'Marcado com ⟲: feito antes de uma fase anterior ser reaberta; refaça quando chegar lá.' })}
+          {tx({ en: 'Phases marked ⟲ were done before you went back to an earlier phase. What is in them is kept, but may be out of date: redo them when you get there.', pt: 'As fases marcadas com ⟲ foram feitas antes de você voltar a uma fase anterior. O que está nelas fica guardado, mas pode estar desatualizado: refaça quando chegar lá.' })}
         </div>
       )}
+
+      <div className="callout callout-info stack" style={{ gap: 2 }}>
+        <b style={{ fontSize: 13 }}>{PHASE_UI[idea.phase].label}: {PHASE_UI[idea.phase].hint.toLowerCase()}</b>
+        <span style={{ fontSize: 13 }}><b>{tx({ en: 'What to do now: ', pt: 'O que fazer agora: ' })}</b>{PHASE_UI[idea.phase].guide}</span>
+      </div>
 
       {(canAdvance || canGoBack) && (
         <div className="card card-pad stack" style={{ gap: 8 }}>
           <div className="row" style={{ gap: 8 }}>
-            <span className="eyebrow">{tx({ en: 'Phase gate', pt: 'Portão da fase' })}</span>
-            <span className="muted" style={{ fontSize: 12 }}>{PHASE_UI[idea.phase].hint}</span>
+            <span className="eyebrow" title={tx({ en: 'The panel checks in code what the phase needs before letting you go on', pt: 'O painel confere em código o que a fase pede antes de deixar você seguir' })}>{tx({ en: 'To move on', pt: 'Para seguir' })}</span>
             <div className="spacer" />
             {canGoBack && <button type="button" className="btn btn-sm" disabled={busy} onClick={() => act('back')}><Undo2 size={14} /> {idea.phase === 'dropped' ? tx({ en: 'Reopen', pt: 'Reabrir' }) : tx({ en: 'Back one phase', pt: 'Voltar uma fase' })}</button>}
             {canAdvance && <button type="button" className="btn btn-sm btn-primary" disabled={busy || idea.gate.length > 0} onClick={() => act('advance')}><Check size={14} /> {advanceLabel}</button>}
           </div>
           {canAdvance && (idea.gate.length > 0 ? (
-            <ul className="muted" style={{ margin: 0, paddingLeft: 18, fontSize: 13 }}>
+            <ul className="muted" style={{ margin: 0, paddingLeft: 18, fontSize: 13 }} aria-label={tx({ en: 'Still missing', pt: 'Ainda falta' })}>
               {idea.gate.map(g => <li key={g}>{g}</li>)}
             </ul>
           ) : (
-            <span style={{ fontSize: 13, color: 'var(--ok)' }}><CheckCircle2 size={13} /> {tx({ en: 'Everything this phase needs is there. Review the document and approve.', pt: 'Tudo o que a fase pede está lá. Revise o documento e aprove.' })}</span>
+            <span style={{ fontSize: 13, color: 'var(--ok)' }}><CheckCircle2 size={13} /> {tx({ en: 'Everything this phase needs is there. Read the document on the right and, if it says what you mean, approve.', pt: 'Tudo o que a fase pede está lá. Leia o documento ao lado e, se ele diz o que você quer, aprove.' })}</span>
           ))}
         </div>
       )}
@@ -162,17 +167,17 @@ function Conversation({ idea, agent, busy }: { idea: IdeaView; agent: Agent; bus
         )}
         {idea.turns.map((t, i) => (
           <div key={i} className="idea-turn stack" style={{ ['--turn-color' as string]: IDEA_AGENT_UI[t.role].color, gap: 4 }}>
-            <span style={{ fontSize: 12, fontWeight: 600, color: IDEA_AGENT_UI[t.role].color }}>{IDEA_AGENT_UI[t.role].name}</span>
+            <span style={{ fontSize: 12, fontWeight: 600, color: IDEA_AGENT_UI[t.role].color }} title={IDEA_AGENT_UI[t.role].role || undefined}>{IDEA_AGENT_UI[t.role].name}</span>
             {t.role === 'system' ? <span className="muted" style={{ fontSize: 12 }}>{t.text}</span> : <Markdown>{t.text}</Markdown>}
             {t.questions?.map((q, qi) => (
               <div key={qi} className="callout callout-info stack" style={{ gap: 4 }}>
                 <b style={{ fontSize: 13 }}>Q{qi + 1}. {q.question}</b>
                 {q.recommendation && (
                   <div className="row" style={{ gap: 8 }}>
-                    <span style={{ fontSize: 13, flex: 1 }}>➜ {q.recommendation}</span>
+                    <span style={{ fontSize: 13, flex: 1 }}><b>{tx({ en: 'Recommended: ', pt: 'Recomendado: ' })}</b>{q.recommendation}</span>
                     {!closed && i === idea.turns.length - 1 && (
-                      <button type="button" className="btn btn-sm" onClick={() => setMessage(m => `${m}${m ? '\n' : ''}Q${qi + 1}: ${tx({ en: 'yes', pt: 'sim' })}, ${q.recommendation}`)}>
-                        {tx({ en: 'Accept', pt: 'Aceitar' })}
+                      <button type="button" className="btn btn-sm" title={tx({ en: 'Copies this answer into your reply below; Send when you are done', pt: 'Copia esta resposta para a sua resposta abaixo; clique em Enviar quando terminar' })} onClick={() => setMessage(m => `${m}${m ? '\n' : ''}Q${qi + 1}: ${tx({ en: 'yes', pt: 'sim' })}, ${q.recommendation}`)}>
+                        {tx({ en: 'Use this answer', pt: 'Usar esta resposta' })}
                       </button>
                     )}
                   </div>
@@ -193,7 +198,7 @@ function Conversation({ idea, agent, busy }: { idea: IdeaView; agent: Agent; bus
       {!closed && (
         <div className="stack" style={{ gap: 6 }}>
           <textarea className="textarea" rows={3} value={message} disabled={busy} onChange={e => setMessage(e.target.value)}
-            placeholder={tx({ en: 'Answer, correct, ask… ("advance" fills the rest of the phase with the recommendations)', pt: 'Responda, corrija, pergunte… ("avançar" preenche o resto da fase com as recomendações)' })}
+            placeholder={tx({ en: 'Answer the questions in your own words, correct the facilitator or ask something. Ctrl+Enter sends.', pt: 'Responda às perguntas com as suas palavras, corrija o facilitador ou pergunte algo. Ctrl+Enter envia.' })}
             onKeyDown={e => {
               if (e.key === 'Enter' && (e.ctrlKey || e.metaKey) && message.trim()) send(message.trim())
             }} />
@@ -205,7 +210,7 @@ function Conversation({ idea, agent, busy }: { idea: IdeaView; agent: Agent; bus
                 <button type="button" className="btn btn-sm" disabled={busy} onClick={() => send('')} title={tx({ en: 'The facilitator opens the next round from where the document is', pt: 'O facilitador abre a próxima rodada a partir de onde o documento está' })}>
                   <RotateCcw size={13} /> {facilitatorSpoke ? tx({ en: 'Next round', pt: 'Próxima rodada' }) : tx({ en: 'Start', pt: 'Começar' })}
                 </button>
-                <button type="button" className="btn btn-sm" disabled={busy} onClick={() => send(tx({ en: 'advance', pt: 'avançar' }))}>{tx({ en: 'Advance with the recommendations', pt: 'Avançar com as recomendações' })}</button>
+                <button type="button" className="btn btn-sm" disabled={busy} onClick={() => send(tx({ en: 'advance', pt: 'avançar' }))} title={tx({ en: 'The facilitator fills in what is missing in this phase with its recommended answers, marked as assumptions to confirm later', pt: 'O facilitador preenche o que falta nesta fase com as respostas que recomendou, marcadas como premissas a confirmar depois' })}>{tx({ en: 'Fill in the rest with the recommendations', pt: 'Completar com as recomendações' })}</button>
               </>
             )}
             <div className="spacer" />
@@ -222,6 +227,7 @@ function LivingDocument({ idea }: { idea: IdeaView }) {
   return (
     <div className="card card-pad stack" style={{ gap: 8 }}>
       <span className="eyebrow">{tx({ en: 'Living document', pt: 'Documento vivo' })}</span>
+      <span className="muted" style={{ fontSize: 12 }}>{tx({ en: 'The summary of the idea, filled in by the conversation. It is what the plan is built from; Export downloads it.', pt: 'O resumo da ideia, preenchido pela conversa. É a partir dele que o plano é feito; Exportar baixa uma cópia.' })}</span>
       <Markdown>{body || tx({ en: '_Empty for now: it fills up as the conversation goes._', pt: '_Vazio por enquanto: ele se preenche conforme a conversa._' })}</Markdown>
     </div>
   )

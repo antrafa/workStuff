@@ -190,9 +190,9 @@ In the challenge phase of an idea, the red team attacks it (where can it fail?) 
 
 A large step of the plan for an idea, written by the Planner agent, with objective, scope and Gherkin scenarios. Keys like `M1`, `M2`.
 
-### Split
+### Split (break down)
 
-Breaking each master task into executable tasks, each one in a single repository and a single stack (backend, frontend, mobile, infra or docs), done by the Splitter agent. Keys like `M1.T2`.
+Breaking each master task into executable tasks (the **Break down** phase of an idea), each one in a single repository and a single stack (backend, frontend, mobile, infra or docs), done by the Splitter agent. Keys like `M1.T2`.
 
 ### Dependency
 

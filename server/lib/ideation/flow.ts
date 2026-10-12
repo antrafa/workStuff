@@ -183,6 +183,17 @@ export function advance(idea: Idea, project: FactoryProjectView): Idea {
   return store.save({ ...idea, phase: next, stale: idea.stale?.filter(p => p !== next), turns: [...idea.turns, system(`Fase ${idea.phase} aprovada.`)] })
 }
 
+// Phase names for what the panel records in the conversation (the screen's own labels are in the web app)
+const PHASE_NAME: Record<IdeaPhase, { en: string; pt: string }> = {
+  explore: { en: 'Explore', pt: 'Explorar' },
+  challenge: { en: 'Challenge', pt: 'Desafiar' },
+  refine: { en: 'Refine', pt: 'Refinar' },
+  plan: { en: 'Plan', pt: 'Plano' },
+  split: { en: 'Break down', pt: 'Quebrar' },
+  dispatched: { en: 'In the factory', pt: 'Na fábrica' },
+  dropped: { en: 'Dropped', pt: 'Encerrada' },
+}
+
 // Reopens the previous phase. What was built on top stays, marked stale, until it is redone.
 export function back(idea: Idea): Idea {
   refusePhase(idea, ['challenge', 'refine', 'plan', 'split', 'dropped'])
@@ -193,7 +204,7 @@ export function back(idea: Idea): Idea {
     phase: prev,
     droppedReason: undefined,
     stale: [...new Set([...(idea.stale ?? []), ...later])],
-    turns: [...idea.turns, { role: 'system', text: `De volta à fase ${prev}.`, at: now() }],
+    turns: [...idea.turns, { role: 'system', text: say({ en: `Back to ${PHASE_NAME[prev].en}.`, pt: `De volta a ${PHASE_NAME[prev].pt}.` }), at: now() }],
   })
 }
 
@@ -227,7 +238,7 @@ export async function plan(ctx: FlowContext, project: FactoryProjectView, idea: 
     // The split was made from the old plan
     tasks: undefined,
     stale: f.stale?.filter(p => p !== 'plan'),
-    turns: [...f.turns, ...(instructions ? [{ role: 'user' as const, text: `Instruções para o plano: ${instructions}`, at: now() }] : []), { role: 'planner', text: result.value.prose, at: now() }],
+    turns: [...f.turns, ...(instructions ? [{ role: 'user' as const, text: say({ en: `Instructions for the plan: ${instructions}`, pt: `Instruções para o plano: ${instructions}` }), at: now() }] : []), { role: 'planner', text: result.value.prose, at: now() }],
   }), result.runs)
   return { idea: saved, errors: result.errors }
 }
@@ -258,7 +269,7 @@ export async function split(ctx: FlowContext, project: FactoryProjectView, idea:
   const saved = persist(idea, f => ({
     tasks,
     stale: f.stale?.filter(p => p !== 'split'),
-    turns: [...f.turns, { role: 'splitter', text: `${tasks.length} tarefa(s) executável(is) em ${masters.length} master(s).`, at: now() }],
+    turns: [...f.turns, { role: 'splitter', text: say({ en: `${tasks.length} task(s) in ${masters.length} step(s).`, pt: `${tasks.length} tarefa(s) em ${masters.length} etapa(s).` }), at: now() }],
   }), results.flatMap(r => r.runs))
   return { idea: saved, errors: splitErrors(tasks, masters, repoNames(project)) }
 }
@@ -330,7 +341,7 @@ export async function dispatch(project: FactoryProjectView, idea: Idea): Promise
   const saved = persist(idea, f => ({
     dispatched: sent,
     phase: done ? 'dispatched' : f.phase,
-    turns: [...f.turns, { role: 'system', text: `${created.length} tarefa(s) enviada(s) à fábrica${skipped.length ? `; ${skipped.length} aguardando` : ''}.`, at: now() }],
+    turns: [...f.turns, { role: 'system', text: say({ en: `${created.length} task(s) sent to the factory${skipped.length ? `; ${skipped.length} waiting` : ''}.`, pt: `${created.length} tarefa(s) enviada(s) à fábrica${skipped.length ? `; ${skipped.length} aguardando` : ''}.` }), at: now() }],
   }))
   return { idea: saved, created, skipped }
 }

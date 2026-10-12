@@ -192,7 +192,7 @@ Uma etapa grande do plano de uma ideia, escrita pelo agente Planner, com objetiv
 
 ### Divisão (split)
 
-Quebrar cada tarefa master em tarefas executáveis, cada uma em um único repositório e uma única stack (backend, frontend, mobile, infra ou docs), trabalho do agente Splitter. Chaves como `M1.T2`.
+Quebrar cada tarefa master em tarefas executáveis (a fase **Quebrar** de uma ideia), cada uma em um único repositório e uma única stack (backend, frontend, mobile, infra ou docs), trabalho do agente Splitter. Chaves como `M1.T2`.
 
 ### Dependência
 

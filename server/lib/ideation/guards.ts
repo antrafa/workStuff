@@ -3,7 +3,7 @@
 
 import assert from 'node:assert/strict'
 import { say } from '../i18n.ts'
-import { PHASE_REQUIRED, STACKS, type ExecutableTask, type Idea, type MasterTask } from './types.ts'
+import { DOC_SECTIONS, PHASE_REQUIRED, STACKS, type DocSection, type ExecutableTask, type Idea, type MasterTask } from './types.ts'
 
 const norm = (s: string) => s.toLowerCase().replace(/\s+/g, ' ').trim()
 
@@ -65,10 +65,10 @@ export function planErrors(masters: MasterTask[], repoNames: string[]): string[]
       if (!repoNames.includes(repo) && !(m.newRepos ?? []).includes(repo)) errors.push(say({ en: `${m.key} names the repository ${repo}, which is not in the project (list it in newRepos if this master creates it)`, pt: `${m.key} cita o repositório ${repo}, que não existe no projeto (declare em newRepos se for criado por ela)` }))
     }
     if (m.repos.length === 0) errors.push(say({ en: `${m.key} does not say which repository it happens in`, pt: `${m.key} não diz em qual repositório acontece` }))
-    if (m.scenarios.length === 0) errors.push(say({ en: `${m.key} has no Gherkin scenario`, pt: `${m.key} não tem cenário Gherkin` }))
+    if (m.scenarios.length === 0) errors.push(say({ en: `${m.key} has no acceptance scenario (Gherkin: "Given… When… Then…")`, pt: `${m.key} não tem cenário de aceite (Gherkin: "Dado… Quando… Então…")` }))
   }
   const skeletons = masters.filter(m => m.walkingSkeleton)
-  if (skeletons.length !== 1) errors.push(say({ en: `the plan needs exactly one walking skeleton master (it has ${skeletons.length})`, pt: `o plano precisa de exatamente uma master walking skeleton (tem ${skeletons.length})` }))
+  if (skeletons.length !== 1) errors.push(say({ en: `the plan needs exactly one walking skeleton, the first and simplest version that works end to end (it has ${skeletons.length})`, pt: `o plano precisa de exatamente um walking skeleton, a primeira versão, a mais simples, que já funciona de ponta a ponta (tem ${skeletons.length})` }))
   else if (skeletons[0].dependsOn.length > 0) errors.push(say({ en: `${skeletons[0].key} is the walking skeleton and cannot depend on another master`, pt: `${skeletons[0].key} é o walking skeleton e não pode depender de outra master` }))
   const cycle = findCycle(new Map(masters.map(m => [m.key, m.dependsOn])))
   if (cycle) errors.push(say({ en: `circular dependency between masters: ${cycle.join(' -> ')}`, pt: `dependência circular entre masters: ${cycle.join(' -> ')}` }))
@@ -125,15 +125,23 @@ export function splitErrors(tasks: ExecutableTask[], masters: MasterTask[], repo
 const filled = (v?: string) => Boolean(v && v.trim())
 
 // Why the current phase cannot close yet; empty means the gate is open.
+const sectionTitle = (key: DocSection) => {
+  const [, pt, en] = DOC_SECTIONS.find(s => s[0] === key)!
+  return say({ en, pt })
+}
+
 export function gateBlockers(idea: Idea, repoNames: string[]): string[] {
-  const blockers = (PHASE_REQUIRED[idea.phase] ?? []).filter(k => !filled(idea.doc[k])).map(k => say({ en: `section "${k}" is empty: fill it or mark it "hipótese — verificar"`, pt: `seção "${k}" vazia: preencha ou marque "hipótese — verificar"` }))
+  const blockers = (PHASE_REQUIRED[idea.phase] ?? []).filter(k => !filled(idea.doc[k])).map(k => say({
+    en: `"${sectionTitle(k)}" is still empty in the document: answer the facilitator's questions about it, or say it is still a guess to check later`,
+    pt: `"${sectionTitle(k)}" ainda está vazio no documento: responda às perguntas do facilitador sobre isso, ou diga que ainda é um palpite a conferir depois`,
+  }))
   if (idea.phase === 'challenge') {
     const rounds = idea.challenge ?? []
-    if (rounds.length === 0) blockers.push(say({ en: 'run the red team × blue team at least once', pt: 'rode o red team × blue team ao menos uma vez' }))
+    if (rounds.length === 0) blockers.push(say({ en: 'click "Run the challenge" at least once, so the idea is criticized before you go on', pt: 'clique em "Rodar o desafio" ao menos uma vez, para a ideia ser criticada antes de seguir' }))
     const open = rounds.flatMap(r => r.attacks).filter(a => a.severity === 'alta' && !a.decision)
-    if (open.length) blockers.push(say({ en: `${open.length} high-severity attack(s) with no decision`, pt: `${open.length} ataque(s) de severidade alta sem decisão` }))
+    if (open.length) blockers.push(say({ en: `${open.length} high-severity attack(s) with no decision: choose what to do with each one in the attack card`, pt: `${open.length} ataque(s) de severidade alta sem decisão: escolha o que fazer com cada um no cartão do ataque` }))
   }
-  if (idea.phase === 'refine' && !idea.recommendation) blockers.push(say({ en: 'missing the recommendation: go, pivot or stop', pt: 'falta a recomendação: go, pivot ou stop' }))
+  if (idea.phase === 'refine' && !idea.recommendation) blockers.push(say({ en: 'the facilitator has not recommended yet whether to go on (go), change course (pivot) or stop: continue the conversation', pt: 'o facilitador ainda não recomendou seguir (go), mudar o rumo (pivot) ou parar (stop): continue a conversa' }))
   if (idea.phase === 'plan') blockers.push(...planErrors(idea.masters ?? [], repoNames))
   if (idea.phase === 'split') blockers.push(...splitErrors(idea.tasks ?? [], idea.masters ?? [], repoNames))
   return blockers
@@ -173,6 +181,7 @@ if (import.meta.main && process.argv.includes('--selfcheck')) {
   idea.challenge![0].attacks[0].decision = 'accept'
   assert.deepEqual(gateBlockers(idea, []), [])
   assert.equal(gateBlockers({ phase: 'explore', doc: {} } as Idea, []).length, 4)
+  assert.match(gateBlockers({ phase: 'explore', doc: {} } as Idea, [])[0], /"Real problem" is still empty/, 'the gate names the section as the document shows it')
 
   console.log('ideation guards selfcheck: ok')
 }

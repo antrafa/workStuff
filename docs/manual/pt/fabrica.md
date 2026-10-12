@@ -314,7 +314,7 @@ A pasta no disco não é tocada. As ideias do projeto, com conversas e planos, s
 
 ## Ideias: da ideia às tarefas
 
-A aba **Ideias** existe dentro de um projeto. Ela leva uma ideia crua por cinco fases, sempre nesta ordem: **Explorar**, **Desafiar**, **Refinar**, **Plano** e **Split**. No fim, as tarefas vão para o quadro. Os agentes de ideação só leem a pasta do projeto; nada é escrito nela.
+A aba **Ideias** existe dentro de um projeto. Ela leva uma ideia crua por cinco fases, sempre nesta ordem: **Explorar**, **Desafiar**, **Refinar**, **Plano** e **Quebrar**. No fim, as tarefas vão para o quadro. Os agentes de ideação só leem a pasta do projeto; nada é escrito nela.
 
 ### Criar uma ideia
 
@@ -327,21 +327,22 @@ A lista de ideias mostra a fase de cada uma, um ponto piscando quando um agente 
 
 ### A tela da ideia
 
-- **Fases.** Uma faixa numerada com as cinco fases e a atual em destaque.
-- **Portão da fase.** Lista o que falta para a fase fechar. Quando não falta nada, aparece **Tudo o que a fase pede está lá. Revise o documento e aprove.** e o botão **Aprovar fase** libera. **Voltar uma fase** reabre a fase anterior.
-- **Conversa.** O diálogo com os agentes.
-- **Documento vivo.** O texto da ideia, organizado em seções (problema real, público, premissas e riscos, versão refinada e outras), que os agentes vão preenchendo.
+- **Fases.** Uma faixa numerada com as cinco fases e a atual em destaque. Passe o mouse sobre uma fase para ver para que ela serve.
+- **O que fazer agora.** Uma caixa azul diz para que serve a fase atual e o que você faz nela, passo a passo.
+- **Para seguir.** Lista o que ainda falta para a fase fechar, dizendo como resolver cada item. Quando não falta nada, aparece **Tudo o que a fase pede está lá. Leia o documento ao lado e, se ele diz o que você quer, aprove.** e o botão **Aprovar e ir para** (seguido do nome da próxima fase) libera. **Voltar uma fase** reabre a fase anterior.
+- **Conversa.** O diálogo com os agentes. Passe o mouse sobre o nome de um agente para ver o papel dele.
+- **Documento vivo.** O resumo da ideia, organizado em seções (problema real, público, premissas e riscos, versão refinada e outras), que a conversa vai preenchendo. É a partir dele que o plano é feito.
 
-Uma seção obrigatória que você ainda não sabe responder pode ser marcada como "hipótese — verificar" para o portão aceitar.
+Se você ainda não sabe responder algo que a fase pede, diga isso ao facilitador: ele registra a seção como um palpite a conferir depois ("hipótese — verificar"), e a fase pode seguir.
 
 ### Conversar com o facilitador
 
 O **facilitador** é o agente que conduz a conversa. Em cada rodada, ele reescreve a ideia como problema e faz até três perguntas, cada uma com a resposta que ele recomenda.
 
 1. Clique em **Começar** (depois da primeira vez, o botão vira **Próxima rodada**).
-2. Para cada pergunta (Q1, Q2, Q3), clique em **Aceitar** para usar a resposta recomendada, ou escreva a sua.
+2. Cada pergunta (Q1, Q2, Q3) vem com a resposta que o facilitador recomenda, em **Recomendado:**. Clique em **Usar esta resposta** para copiá-la para a sua resposta, ou escreva a sua.
 3. Clique em **Enviar** (ou Ctrl+Enter).
-4. Quando quiser pular as perguntas restantes, clique em **Avançar com as recomendações**: o facilitador preenche o resto da fase com as respostas que ele recomenda.
+4. Quando quiser pular as perguntas restantes, clique em **Completar com as recomendações**: o facilitador preenche o que falta na fase com as respostas que ele recomendou, marcadas como premissas a confirmar depois.
 
 Enquanto um agente roda, **Parar** interrompe. Só um agente roda por ideia de cada vez.
 
@@ -353,54 +354,54 @@ Descobre o problema real, quem o tem e o que essa pessoa faz hoje para contorná
 
 O **red team** ataca a ideia e o **blue team** defende cada ataque. Os dois nunca conversam entre si: quem decide é você.
 
-1. No painel **Red team × blue team**, clique em **Rodar o desafio**.
-2. Cada ataque aparece com um código (A1, A2...), a severidade, a evidência e o alvo; abaixo, a resposta do blue team e a mitigação proposta.
-3. Para cada ataque, escreva uma nota (opcional) e escolha:
-   - **Mitigar**: aceita a mitigação proposta.
-   - **Aceitar o risco**: segue sabendo do risco.
-   - **Descartar**: o ataque não vale.
-   - **Derruba a ideia**: encerra a ideia, com esse ataque como motivo.
+1. No painel **Críticas e defesas**, clique em **Rodar o desafio**.
+2. Cada ataque aparece com um código (A1, A2...), a gravidade (alta, média ou baixa), o quanto há de evidência e o assunto atacado; abaixo vem a resposta do blue team (**Defende**, **Mitiga** ou **Concorda**) e, quando houver, a mitigação proposta.
+3. Para cada ataque, escreva por que decidiu assim (opcional) e escolha:
+   - **Adotar a mitigação**: o jeito que o blue team propôs para reduzir o risco vira um requisito da ideia.
+   - **Aceitar o risco**: você segue sabendo do risco, que fica registrado no documento.
+   - **Não procede**: a crítica não vale para esta ideia.
+   - **Encerra a ideia**: a crítica é fatal; a ideia é encerrada com esse ataque como motivo.
 4. Se quiser, depois de decidir todos, clique em **Rodada 2: atacar a versão mitigada**. São no máximo 2 rodadas.
 
 As decisões vão para a seção "Decisões do desafio" do documento. O portão pede pelo menos uma rodada, nenhum ataque de severidade alta sem decisão e as seções de premissas e pre-mortem (o exercício de imaginar que a ideia já fracassou e perguntar por quê) preenchidas.
 
 ### Refinar
 
-O facilitador propõe três opções de solução, a menor versão que testa a premissa mais arriscada e uma recomendação: **go** (seguir), **pivot** (mudar de rumo) ou **stop** (parar). O botão do portão acompanha a recomendação:
+O facilitador propõe três opções de solução (uma delas sem software), a menor versão que testa a premissa mais arriscada e uma recomendação: **go** (seguir), **pivot** (mudar o rumo) ou **stop** (parar). O botão de seguir acompanha a recomendação:
 
-- **Aprovar fase** com go: segue para o Plano.
-- **Pivot: voltar a Explorar**: volta à primeira fase, com o documento preservado.
-- **Stop: encerrar a ideia**: a ideia vai para **Encerrada**.
+- **Aprovar e ir para Plano**, com go: segue para o Plano.
+- **Mudar o rumo (pivot): voltar a Explorar**: volta à primeira fase, com o documento preservado.
+- **Parar (stop): encerrar a ideia**: a ideia vai para **Encerrada**.
 
-Uma ideia encerrada pode voltar com **Reabrir**.
+Uma ideia encerrada pode voltar com **Reabrir**, que a leva para Desafiar (ou para Refinar, se ela não passou pelo desafio), com tudo guardado.
 
 ### Plano
 
-O **Planner** escreve as **tarefas master**: etapas grandes, em ordem (M1, M2...). A primeira é o **walking skeleton**: a menor versão do sistema que já funciona de ponta a ponta, mesmo que quase vazia, para provar que as partes se conectam. Cada master traz objetivo, repositórios, o que está no escopo e fora dele e os cenários em **Gherkin**: exemplos escritos no formato "Dado... Quando... Então..." que dizem como conferir que ficou pronto.
+O **Planner** escreve as **etapas do trabalho**, chamadas de **tarefas master**: entregas grandes, em ordem (M1, M2...). A primeira é o **walking skeleton**: a menor versão do sistema que já funciona de ponta a ponta, mesmo que quase vazia, para provar que as partes se conectam. Cada etapa traz objetivo, repositórios, o que está no escopo e fora dele e, em **Quando está pronta (cenários de aceite)**, os cenários em **Gherkin**: exemplos escritos no formato "Dado... Quando... Então..." que dizem como conferir que ficou pronto.
 
 1. Se quiser, escreva instruções para o Planner (por exemplo, "o admin fica para depois").
 2. Clique em **Gerar o plano** (depois, **Refazer o plano**).
 3. Para corrigir à mão, clique em **Editar (YAML)**, altere o texto e clique em **Salvar**. YAML é um formato de texto estruturado, com uma linha por campo.
 
-O código confere o plano: exatamente um walking skeleton, sem depender de outra master; toda master com repositório e cenário; nenhuma dependência circular; e repositórios que existem no projeto (ou declarados como novos). Se o Planner errar, ele recebe os erros e tenta de novo, até 3 vezes; o que ainda estiver errado aparece em **A verificação recusou:**.
+O código confere o plano: exatamente um walking skeleton, sem depender de outra master; toda master com repositório e cenário; nenhuma dependência circular; e repositórios que existem no projeto (ou declarados como novos). Se o Planner errar, ele recebe os erros e tenta de novo, até 3 vezes; o que ainda estiver errado aparece em **Ainda falta corrigir antes de seguir**, para você pedir a correção nas instruções ou editar à mão.
 
-> **Atenção:** refazer ou editar o plano apaga o split que tinha sido feito a partir dele.
+> **Atenção:** refazer ou editar o plano apaga as tarefas que tinham sido quebradas a partir dele.
 
-### Split
+### Quebrar em tarefas
 
-O **Splitter** quebra cada master em **tarefas executáveis**, cada uma num repositório só e numa stack só. **Stack** é o tipo de trabalho: `backend`, `frontend`, `mobile`, `infra` ou `docs`. Uma tarefa que mexeria nas duas pontas vira duas.
+O **Splitter** quebra cada etapa em **tarefas para a fábrica**, cada uma num repositório só e numa stack só. **Stack** é o tipo de trabalho: `backend`, `frontend`, `mobile`, `infra` ou `docs`. Uma tarefa que mexeria nas duas pontas vira duas.
 
 1. Se quiser, escreva instruções para o Splitter.
-2. Clique em **Quebrar as masters**. Depois, **Quebrar todas de novo** refaz tudo, e **Refazer M1** refaz só uma master.
-3. Abra cada tarefa para ver objetivo, escopo, **Contratos com as irmãs** (o que ela combina com as tarefas vizinhas), cenários e o comando de verificação sugerido.
+2. Clique em **Quebrar as etapas em tarefas**. Depois, **Quebrar todas as etapas de novo** refaz tudo, e **Refazer M1** refaz só uma etapa.
+3. Abra cada tarefa para ver objetivo, escopo, **Combinado com as outras tarefas (contratos)** (por exemplo, o endpoint que uma cria e a outra usa), cenários e o **Comando que confere** sugerido.
 4. **Editar (YAML)** permite corrigir à mão.
 
-O código confere que todo cenário de cada master ficou em alguma tarefa, que nenhuma master ficou sem tarefa e que as dependências existem e não formam um círculo.
+O código confere que todo cenário de cada etapa ficou em alguma tarefa, que nenhuma etapa ficou sem tarefa e que as dependências existem e não formam um círculo.
 
 ### Enviar à fábrica
 
-1. Com o portão do Split aberto, clique em **Enviar à fábrica**.
-2. Cada tarefa executável vira uma tarefa no quadro do projeto, na coluna **Entrada**, com o título `[M1.T1] ...` e os cenários em Gherkin como critérios de aceite, que chegam ao Analyst como CA1, CA2... e ficam primeiro, sem alteração.
+1. Quando **Para seguir** não listar mais nada na fase Quebrar, clique em **Enviar à fábrica**.
+2. Cada tarefa vira uma tarefa no quadro do projeto, na coluna **Entrada**, com o título `[M1.T1] ...` e os cenários em Gherkin como critérios de aceite, que chegam ao Analyst como CA1, CA2... e ficam primeiro, sem alteração.
 3. As tarefas são criadas na ordem das dependências.
 4. Uma tarefa cujo repositório ainda não existe (porque outra tarefa vai criá-lo) fica para depois, assim como as que dependem dela. Elas aparecem em **Aguardando um próximo envio:**. Clique em **Enviar à fábrica** de novo quando o repositório existir; o que já foi enviado não é enviado duas vezes.
 
@@ -412,12 +413,12 @@ Uma tarefa que depende de outra mostra no cartão o selo **aguarda** com a chave
 
 ### Voltar uma fase
 
-**Voltar uma fase** reabre a anterior sem apagar o que veio depois. O que foi feito nas fases seguintes ganha a marca ⟲: foi construído antes da reabertura e deve ser refeito quando você chegar lá de novo.
+**Voltar uma fase** reabre a anterior sem apagar o que veio depois. As fases seguintes ganham a marca ⟲: o que está nelas fica guardado, mas pode estar desatualizado, e deve ser refeito quando você chegar lá de novo.
 
 ### Exportar e excluir
 
 - **Exportar** baixa o documento vivo como um arquivo Markdown (`.md`, texto simples com formatação leve).
-- **Excluir**, na tela da ideia ou pela lixeira na lista, para o agente que estiver rodando e apaga a conversa, o documento vivo, o plano e o split. As tarefas já enviadas continuam no quadro.
+- **Excluir**, na tela da ideia ou pela lixeira na lista, para o agente que estiver rodando e apaga a conversa, o documento vivo, o plano e as tarefas quebradas. As tarefas já enviadas continuam no quadro.
 
 ## Agentes Especializados
 

@@ -314,7 +314,7 @@ The folder on disk is not touched. The project's ideas, with their conversations
 
 ## Ideas: from an idea to tasks
 
-The **Ideas** tab lives inside a project. It takes a rough idea through five phases, always in this order: **Explore**, **Challenge**, **Refine**, **Plan** and **Split**. At the end, the tasks go to the board. The ideation agents only read the project folder; nothing is written to it.
+The **Ideas** tab lives inside a project. It takes a rough idea through five phases, always in this order: **Explore**, **Challenge**, **Refine**, **Plan** and **Break down**. At the end, the tasks go to the board. The ideation agents only read the project folder; nothing is written to it.
 
 ### Creating an idea
 
@@ -327,21 +327,22 @@ The idea list shows each idea's phase, a blinking dot while an agent is running 
 
 ### The idea screen
 
-- **Phases.** A numbered strip with the five phases and the current one highlighted.
-- **Phase gate.** Lists what is missing before the phase can close. When nothing is missing, **Everything this phase needs is there. Review the document and approve.** shows up and the **Approve phase** button unlocks. **Back one phase** reopens the previous phase.
-- **Conversation.** The dialogue with the agents.
-- **Living document.** The idea's text, organized in sections (real problem, audience, assumptions and risks, refined version and others), which the agents keep filling in.
+- **Phases.** A numbered strip with the five phases and the current one highlighted. Hover a phase to see what it is for.
+- **What to do now.** A blue box says what the current phase is for and what you do in it, step by step.
+- **To move on.** Lists what is still missing before the phase can close, saying how to solve each item. When nothing is missing, **Everything this phase needs is there. Read the document on the right and, if it says what you mean, approve.** shows up and the **Approve and go to** button (followed by the next phase's name) unlocks. **Back one phase** reopens the previous phase.
+- **Conversation.** The dialogue with the agents. Hover an agent's name to see its role.
+- **Living document.** The summary of the idea, organized in sections (real problem, audience, assumptions and risks, refined version and others), which the conversation keeps filling in. It is what the plan is built from.
 
-A required section you cannot answer yet can be marked "hipótese — verificar" (hypothesis, to verify) for the gate to accept it.
+If you cannot answer yet something the phase asks for, tell the facilitator: it records that section as a guess to check later ("hipótese — verificar"), and the phase can move on.
 
 ### Talking to the facilitator
 
 The **facilitator** is the agent that leads the conversation. In each round, it rewrites the idea as a problem and asks up to three questions, each with the answer it recommends.
 
 1. Click **Start** (after the first time, the button becomes **Next round**).
-2. For each question (Q1, Q2, Q3), click **Accept** to use the recommended answer, or write your own.
+2. Each question (Q1, Q2, Q3) comes with the answer the facilitator recommends, under **Recommended:**. Click **Use this answer** to copy it into your reply, or write your own.
 3. Click **Send** (or Ctrl+Enter).
-4. When you want to skip the remaining questions, click **Advance with the recommendations**: the facilitator fills in the rest of the phase with the answers it recommends.
+4. When you want to skip the remaining questions, click **Fill in the rest with the recommendations**: the facilitator fills in what is missing in the phase with the answers it recommended, marked as assumptions to confirm later.
 
 While an agent runs, **Stop** interrupts it. Only one agent runs per idea at a time.
 
@@ -353,54 +354,54 @@ Finds the real problem, who has it and what that person does today to work aroun
 
 The **red team** attacks the idea and the **blue team** defends against each attack. The two never talk to each other: you are the one who decides.
 
-1. In the **Red team × blue team** panel, click **Run the challenge**.
-2. Each attack shows a code (A1, A2...), its severity, the evidence and the target; below it, the blue team's answer and the proposed mitigation.
-3. For each attack, write a note (optional) and choose:
-   - **Mitigate**: take the proposed mitigation.
-   - **Accept the risk**: go on knowing the risk.
-   - **Discard**: the attack does not hold.
-   - **Kills the idea**: drops the idea, with this attack as the reason.
+1. In the **Criticisms and defenses** panel, click **Run the challenge**.
+2. Each attack shows a code (A1, A2...), its severity (high, medium or low), how much evidence backs it and what it is about; below it comes the blue team's answer (**Defends**, **Mitigates** or **Concedes**) and, when there is one, the proposed mitigation.
+3. For each attack, write why you decided (optional) and choose:
+   - **Adopt the mitigation**: the blue team's way to reduce the risk becomes a requirement of the idea.
+   - **Accept the risk**: you go on knowing the risk, which is recorded in the document.
+   - **Does not apply**: the criticism does not apply to this idea.
+   - **Ends the idea**: the criticism is fatal; the idea is dropped with this attack as the reason.
 4. If you want, once every attack is decided, click **Round 2: attack the mitigated version**. There are at most 2 rounds.
 
 The decisions go into the document's "Challenge decisions" section. The gate asks for at least one round, no high-severity attack left undecided and the assumptions and pre-mortem sections filled in (a pre-mortem is the exercise of imagining the idea has already failed and asking why).
 
 ### Refine
 
-The facilitator proposes three solution options, the smallest version that tests the riskiest assumption and a recommendation: **go** (carry on), **pivot** (change course) or **stop**. The gate button follows the recommendation:
+The facilitator proposes three solution options (one of them without software), the smallest version that tests the riskiest assumption and a recommendation: **go** (carry on), **pivot** (change course) or **stop**. The button to move on follows the recommendation:
 
-- **Approve phase** with go: moves on to Plan.
-- **Pivot: back to Explore**: goes back to the first phase, with the document kept.
+- **Approve and go to Plan**, with go: moves on to Plan.
+- **Change course (pivot): back to Explore**: goes back to the first phase, with the document kept.
 - **Stop: drop the idea**: the idea becomes **Dropped**.
 
-A dropped idea can come back with **Reopen**.
+A dropped idea can come back with **Reopen**, which takes it to Challenge (or to Refine, if it was never challenged), with everything kept.
 
 ### Plan
 
-The **Planner** writes the **master tasks**: large steps, in order (M1, M2...). The first one is the **walking skeleton**: the smallest version of the system that already works end to end, even if nearly empty, to prove the parts connect. Each master carries an objective, repositories, what is in and out of scope and the scenarios in **Gherkin**: examples written as "Given... When... Then..." that say how to check it is done.
+The **Planner** writes the **steps of the work**, called **master tasks**: large deliveries, in order (M1, M2...). The first one is the **walking skeleton**: the smallest version of the system that already works end to end, even if nearly empty, to prove the parts connect. Each step carries an objective, repositories, what is in and out of scope and, under **When it is done (acceptance scenarios)**, the scenarios in **Gherkin**: examples written as "Given... When... Then..." that say how to check it is done.
 
 1. If you want, write instructions for the Planner (for example, "the admin comes later").
 2. Click **Generate the plan** (later, **Redo the plan**).
 3. To fix it by hand, click **Edit (YAML)**, change the text and click **Save**. YAML is a structured text format, with one line per field.
 
-Code checks the plan: exactly one walking skeleton, not depending on another master; every master with a repository and a scenario; no circular dependency; and repositories that exist in the project (or are declared as new). If the Planner gets it wrong, it receives the errors and tries again, up to 3 times; whatever is still wrong shows under **The check refused:**.
+Code checks the plan: exactly one walking skeleton, not depending on another master; every master with a repository and a scenario; no circular dependency; and repositories that exist in the project (or are declared as new). If the Planner gets it wrong, it receives the errors and tries again, up to 3 times; whatever is still wrong shows under **Still to fix before going on**, so you can ask for the fix in the instructions or edit by hand.
 
-> **Warning:** redoing or editing the plan erases the split that was made from it.
+> **Warning:** redoing or editing the plan erases the tasks that were broken down from it.
 
-### Split
+### Break down into tasks
 
-The **Splitter** breaks each master into **executable tasks**, each in a single repository and a single stack. The **stack** is the kind of work: `backend`, `frontend`, `mobile`, `infra` or `docs`. A task that would touch both ends becomes two.
+The **Splitter** breaks each step into **tasks for the factory**, each in a single repository and a single stack. The **stack** is the kind of work: `backend`, `frontend`, `mobile`, `infra` or `docs`. A task that would touch both ends becomes two.
 
 1. If you want, write instructions for the Splitter.
-2. Click **Split the masters**. Later, **Split every master again** redoes everything, and **Redo M1** redoes a single master.
-3. Open each task to see its objective, scope, **Contracts with sibling tasks** (what it agrees on with neighboring tasks), scenarios and the suggested verification command.
+2. Click **Break the steps into tasks**. Later, **Break every step down again** redoes everything, and **Redo M1** redoes a single step.
+3. Open each task to see its objective, scope, **Agreed with the other tasks (contracts)** (for example, the endpoint one creates and the other uses), scenarios and the suggested **Command that checks it**.
 4. **Edit (YAML)** lets you fix it by hand.
 
-Code checks that every scenario of each master landed in some task, that no master was left without tasks and that the dependencies exist and do not form a circle.
+Code checks that every scenario of each step landed in some task, that no step was left without tasks and that the dependencies exist and do not form a circle.
 
 ### Send to the factory
 
-1. With the Split gate open, click **Send to the factory**.
-2. Each executable task becomes a task on the project's board, in the **Intake** column, titled `[M1.T1] ...`, with its Gherkin scenarios as acceptance criteria, which reach the Analyst as CA1, CA2... and stay first, unchanged.
+1. Once **To move on** lists nothing else in the Break down phase, click **Send to the factory**.
+2. Each task becomes a task on the project's board, in the **Intake** column, titled `[M1.T1] ...`, with its Gherkin scenarios as acceptance criteria, which reach the Analyst as CA1, CA2... and stay first, unchanged.
 3. The tasks are created in dependency order.
 4. A task whose repository does not exist yet (because another task will create it) is held back, along with the ones that depend on it. They show under **Waiting for a later send:**. Click **Send to the factory** again once the repository exists; what was already sent is not sent twice.
 
@@ -412,12 +413,12 @@ A task that depends on another shows the **waits for** badge on its card with th
 
 ### Going back a phase
 
-**Back one phase** reopens the previous phase without erasing what came after. What was built in the later phases gets the ⟲ mark: it was made before the reopening and should be redone when you get there again.
+**Back one phase** reopens the previous phase without erasing what came after. The later phases get the ⟲ mark: what is in them is kept but may be out of date, and should be redone when you get there again.
 
 ### Exporting and deleting
 
 - **Export** downloads the living document as a Markdown file (`.md`, plain text with light formatting).
-- **Delete**, on the idea screen or through the trash icon in the list, stops any running agent and erases the conversation, the living document, the plan and the split. Tasks already sent stay on the board.
+- **Delete**, on the idea screen or through the trash icon in the list, stops any running agent and erases the conversation, the living document, the plan and the broken-down tasks. Tasks already sent stay on the board.
 
 ## Specialized agents
 

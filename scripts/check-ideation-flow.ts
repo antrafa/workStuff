@@ -77,7 +77,7 @@ try {
   assert.equal(idea.phase, 'challenge')
 
   // Challenge
-  assert.throws(() => flow.advance(idea, project), /red team/)
+  assert.throws(() => flow.advance(idea, project), /Run the challenge/)
   idea = await flow.challenge(ctx, project, idea)
   assert.equal(idea.challenge?.[0].attacks[0].mitigation, 'ler o export do billing')
   assert.equal(idea.doc.premortem, 'falhou por falta de dado')
