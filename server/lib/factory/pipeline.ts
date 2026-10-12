@@ -31,6 +31,7 @@ import {
   parsePlanEnvelope,
   parseReviewEnvelope,
   parseSpecEnvelope,
+  withGivenCriteria,
   parseTestEnvelope,
 } from './envelopes.ts'
 import { taskUsage } from './types.ts'
@@ -394,7 +395,7 @@ export async function planTask(ctx: ExecContext, task: FactoryTask): Promise<Fac
   const base = await startPhase(task, { state: 'planning' })
   ctx.send({ type: 'status', message: say({ en: 'Analyst: writing the acceptance criteria...', pt: 'Analyst: especificando critérios de aceite...' }) })
   const { envelope: spec } = await agentStep(ctx, base, 'analyst', { name: say({ en: 'Specification and acceptance criteria', pt: 'Especificação e critérios de aceite' }), phase: 'planning' },
-    { prompt: formatSpecPrompt(base), cwd: base.source.repoPath }, parseSpecEnvelope)
+    { prompt: formatSpecPrompt(base), cwd: base.source.repoPath }, text => withGivenCriteria(parseSpecEnvelope(text), base.givenCriteria))
 
   if (spec.openQuestions.length > 0) {
     return saveState(base, { state: 'waiting_clarification', handoffs: { ...base.handoffs, spec } })

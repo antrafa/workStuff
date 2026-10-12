@@ -23,6 +23,8 @@ import { runbooksRouter } from './routes/runbooks.ts'
 import { playbooksRouter } from './routes/playbooks.ts'
 import { devRunbooksRouter } from './routes/devRunbooks.ts'
 import { factoryRouter } from './routes/factory.ts'
+import { factoryProjectsRouter } from './routes/factoryProjects.ts'
+import { ideationRouter } from './routes/ideation.ts'
 import { startScheduler } from './lib/schedules/scheduler.ts'
 import { settingsRouter } from './routes/settings.ts'
 import { statusRouter } from './routes/status.ts'
@@ -56,6 +58,8 @@ app.use('/api/schedules', schedulesRouter)
 app.use('/api/runbooks', runbooksRouter)
 app.use('/api/playbooks', playbooksRouter)
 app.use('/api/dev-runbooks', devRunbooksRouter)
+app.use('/api/factory/projects/:projectId/ideas', ideationRouter)
+app.use('/api/factory/projects', factoryProjectsRouter)
 app.use('/api/factory', factoryRouter)
 app.use('/api/status', statusRouter)
 

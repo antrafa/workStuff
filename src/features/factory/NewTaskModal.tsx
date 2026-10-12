@@ -4,7 +4,7 @@ import { Modal, Segmented } from '@/ui'
 import { api } from '@/lib/api'
 import { AGENT_ORDER, AGENT_UI, CLAUDE_SPLIT } from './factoryRun'
 import { tx } from '@/lib/i18n'
-import type { SpecializedAgentId } from '../../../server/lib/factory/types.ts'
+import type { FactoryProjectView, SpecializedAgentId } from '../../../server/lib/factory/types.ts'
 
 
 type Issue = {
@@ -24,12 +24,14 @@ type SettingsResponse = {
 }
 
 type Props = {
+  // The project selected on the board: the task goes into it, picking one of its repositories
+  project?: FactoryProjectView | null
   open: boolean
   onClose: () => void
   onCreated: () => void
 }
 
-export function NewTaskModal({ open, onClose, onCreated }: Props) {
+export function NewTaskModal({ project, open, onClose, onCreated }: Props) {
   const [tab, setTab] = useState<'manual' | 'issues'>('manual')
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
@@ -60,10 +62,15 @@ export function NewTaskModal({ open, onClose, onCreated }: Props) {
     if (open) {
       api.get<SettingsResponse>('/factory/settings')
         .then(res => {
-          if (res?.provider) setProvider(res.provider)
+          if (project?.provider) setProvider(project.provider)
+          else if (res?.provider) setProvider(res.provider)
           if (res?.model) setDefaultModel(res.model)
         })
         .catch(e => setError(tx({ en: `Could not read Settings: ${(e as Error).message}`, pt: `Não foi possível ler as Configurações: ${(e as Error).message}` })))
+      if (project) {
+        setRepoPath(path => (project.repos.some(r => r.path === path) ? path : project.repos[0]?.path ?? path))
+        setVerifyCommand(cmd => cmd || project.verifyCommand || '')
+      }
       api.get<{ bwrap: boolean }>('/factory/preflight')
         .then(p => setNoSandbox(!p.bwrap))
         .catch(() => setNoSandbox(false))
@@ -115,6 +122,7 @@ export function NewTaskModal({ open, onClose, onCreated }: Props) {
     setError(null)
     try {
       await api.post('/factory/tasks', {
+        projectId: project?.id,
         title,
         description,
         // empty: the server resolves the repo's default branch (main, master, develop...)
@@ -205,8 +213,14 @@ export function NewTaskModal({ open, onClose, onCreated }: Props) {
                   placeholder={tx({ en: '/path/to/the/project', pt: '/caminho/do/projeto/workspace' })}
                   value={repoPath}
                   onChange={e => setRepoPath(e.target.value)}
+                  list="factory-project-repos"
                   required
                 />
+                {project && (
+                  <datalist id="factory-project-repos">
+                    {project.repos.map(r => <option key={r.path} value={r.path}>{r.name}</option>)}
+                  </datalist>
+                )}
                 <button type="button" className="btn" onClick={pickFolder} title={tx({ en: 'Choose folder', pt: 'Escolher pasta' })}>
                   <FolderOpen size={16} /> {tx({ en: 'Choose', pt: 'Escolher' })}
                 </button>

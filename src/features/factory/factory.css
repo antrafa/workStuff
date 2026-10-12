@@ -14,6 +14,11 @@
   --fx-security: #fb923c;
   --fx-documenter: #a3e635;
   --fx-verifier: #e879f9;
+  --fx-facilitator: #38bdf8;
+  --fx-redteam: #f87171;
+  --fx-blueteam: #818cf8;
+  --fx-planner: #2dd4bf;
+  --fx-splitter: #fbbf24;
 }
 :root[data-theme='light'] {
   --fx-engineer: #7c3aed;
@@ -27,6 +32,11 @@
   --fx-security: #c2410c;
   --fx-documenter: #4d7c0f;
   --fx-verifier: #a21caf;
+  --fx-facilitator: #0369a1;
+  --fx-redteam: #b91c1c;
+  --fx-blueteam: #4338ca;
+  --fx-planner: #0f766e;
+  --fx-splitter: #b45309;
 }
 
 @keyframes pulse {
@@ -169,4 +179,29 @@
 .fx-summary dd {
   margin: 0;
   word-break: break-word;
+}
+
+/* Ideação: conversa ao lado do documento vivo */
+.idea-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 16px;
+  align-items: start;
+}
+@media (max-width: 1000px) {
+  .idea-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+.idea-turn {
+  border-left: 3px solid var(--turn-color, var(--line));
+  padding: 6px 10px;
+}
+.idea-steps {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.idea-steps span[aria-current='step'] {
+  font-weight: 600;
 }

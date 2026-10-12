@@ -3,18 +3,21 @@
 import { Router, type Response } from 'express'
 import { openInEditor, pickFolder } from '../lib/desktop.ts'
 import { openSse } from '../lib/sse.ts'
-import { originUrl, repoInfo, validRef } from '../lib/review/git.ts'
+import { originUrl, repoInfo } from '../lib/review/git.ts'
 import { sourceForRemote } from '../lib/repos/remote.ts'
 import { which } from '../lib/run.ts'
 import { detectVerifyCommands } from '../lib/factory/gates.ts'
 import { defaultFactoryStore } from '../lib/factory/store.ts'
+import { defaultProjectStore, ProjectError } from '../lib/factory/projects.ts'
+import { discardTask } from '../lib/factory/discard.ts'
+import { createTaskRecord } from '../lib/factory/newTask.ts'
 import { existsSync } from 'node:fs'
 import { getWorktreeDiff, removeWorktree, mergeWorktreeLocal, pushWorktreeBranch, resetWorktree, targetBranchOf } from '../lib/factory/worktree.ts'
 import { SPECIALIZED_AGENTS } from '../lib/factory/agents.ts'
 import { runFactoryAgent } from '../lib/factory/runner.ts'
 import { adjustTask, buildTask, planTask, reverifyOnNewBase, type ExecContext } from '../lib/factory/pipeline.ts'
 import { assessDelivery, canAutoMr } from '../lib/factory/readiness.ts'
-import { AGENT_ORDER, type FactoryTask, type FactoryTaskState, type SpecializedAgentId } from '../lib/factory/types.ts'
+import { AGENT_ORDER, pendingDependencies, type FactoryTask, type FactoryTaskState, type SpecializedAgentId } from '../lib/factory/types.ts'
 import { listSources, resolveToken } from '../lib/repos/sources.ts'
 import { call, type Conn } from '../lib/repos/providers.ts'
 import { readSettings } from '../lib/settingsStore.ts'
@@ -24,7 +27,6 @@ import {
   cancelExecution,
   endExecution,
   isExecuting,
-  waitForIdle,
   stateAfterCancel,
   RUNNING_STATES,
   ExecutionCancelledError,
@@ -285,34 +287,27 @@ factoryRouter.post('/tasks', async (req, res) => {
       res.status(400).json({ error: (e as Error).message })
       return
     }
-    const info = await repoInfo(b.source.repoPath).catch(() => null)
-    const baseBranch = b.baseBranch || info?.defaultBase || info?.current || 'main'
-    // The base branch reaches git as a bare argument: a leading '-' would be read as an option
-    if (!validRef(baseBranch)) {
-      res.status(400).json({ error: say({ en: `invalid base branch: ${baseBranch}`, pt: `branch base inválida: ${baseBranch}` }) })
+    const projectId = b.projectId ? String(b.projectId) : undefined
+    let task: FactoryTask
+    try {
+      if (projectId) defaultProjectStore.get(projectId)
+      task = await createTaskRecord({
+        projectId,
+        title: String(b.title).trim(),
+        description: String(b.description ?? '').trim(),
+        baseBranch: b.baseBranch,
+        source: {
+          type: b.source.type || 'manual',
+          repoPath: b.source.repoPath,
+          remoteUrl: b.source.remoteUrl,
+          issueIid: b.source.issueIid ? Number(b.source.issueIid) : undefined,
+          issueUrl: b.source.issueUrl,
+        },
+        ...options,
+      })
+    } catch (e) {
+      res.status(400).json({ error: (e as Error).message })
       return
-    }
-    const id = `fac-${Date.now()}`
-
-    const task: FactoryTask = {
-      id,
-      title: String(b.title).trim(),
-      description: String(b.description ?? '').trim(),
-      source: {
-        type: b.source.type || 'manual',
-        repoPath: b.source.repoPath,
-        // Finds the Repositórios connection when the MR is opened
-        remoteUrl: b.source.remoteUrl || (await originUrl(b.source.repoPath)),
-        issueIid: b.source.issueIid ? Number(b.source.issueIid) : undefined,
-        issueUrl: b.source.issueUrl,
-      },
-      state: 'intake',
-      baseBranch,
-      branchName: `factory/${id}`,
-      ...options,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-      spans: [],
     }
 
     await defaultFactoryStore.saveTask(task)
@@ -432,6 +427,12 @@ factoryRouter.post('/tasks/:id/plan', async (req, res) => {
     return
   }
   if (refuseState(res, task, ['intake', 'waiting_clarification', 'waiting_approval', 'error'], { en: 'plan', pt: 'planejar' })) return
+  const waiting = pendingDependencies(task, await defaultFactoryStore.getTasks())
+  if (waiting.length) {
+    const names = waiting.map(t => t.origin?.taskKey ?? t.title).join(', ')
+    res.status(409).json({ error: say({ en: `this task waits for ${names}: finish (and merge) it first`, pt: `esta tarefa espera ${names}: conclua (e faça o merge) antes` }) })
+    return
+  }
   const answers = String(req.body?.answers ?? '').trim()
   if (task.state === 'waiting_clarification' && !answers) {
     res.status(400).json({ error: say({ en: "answer the Analyst's questions before planning again", pt: "responda às dúvidas do Analyst antes de planejar de novo" }) })
@@ -711,21 +712,10 @@ async function finishTask(task: FactoryTask, mode: 'mr' | 'local_merge'): Promis
 // Exclui tarefa e limpa worktree
 factoryRouter.delete('/tasks/:id', async (req, res) => {
   try {
-    const id = req.params.id as string
-    cancelExecution(id)
-    // Deleting while the run still writes would let it save the task back
-    if (!(await waitForIdle(id, 5000))) {
-      res.status(409).json({ error: say({ en: 'the run is still stopping; try deleting again in a few seconds', pt: 'a execução ainda está parando; tente excluir de novo em alguns segundos' }) })
-      return
-    }
-    const task = await defaultFactoryStore.getTask(id)
-    if (task && task.worktreePath) {
-      await removeWorktree(task.source.repoPath, task.worktreePath, task.branchName)
-    }
-    await defaultFactoryStore.deleteTask(id)
+    await discardTask(req.params.id as string)
     res.json({ ok: true })
   } catch (e) {
-    res.status(500).json({ error: (e as Error).message })
+    res.status(e instanceof ProjectError ? e.status : 500).json({ error: (e as Error).message })
   }
 })
 

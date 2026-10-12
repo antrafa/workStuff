@@ -1,8 +1,10 @@
-import { AlertTriangle, CheckCircle2, GitBranch, ShieldAlert, AlertCircle } from 'lucide-react'
-import type { FactoryTask, FactoryTaskState } from '../../../server/lib/factory/types.ts'
+import { useState } from 'react'
+import { AlertTriangle, CheckCircle2, GitBranch, Hourglass, Lightbulb, ShieldAlert, AlertCircle, Trash2 } from 'lucide-react'
+import { pendingDependencies, type FactoryTask, type FactoryTaskState } from '../../../server/lib/factory/types.ts'
 import { AGENT_ORDER, AGENT_UI, currentSpan, fmtDuration, isTaskRunning, taskUsage } from './factoryRun'
 import { FactoryStatusChip } from './timeline/FactoryStatusChip'
 import { TaskActions } from './TaskActions'
+import { DiscardTaskModal } from './DiscardTaskModal'
 import { tx } from '@/lib/i18n'
 
 type Props = {
@@ -115,7 +117,7 @@ export function FactoryBoard({ tasks, onOpenTrace, onOpenReview, onUpdate }: Pro
                   </div>
                 ) : (
                   col.items.map(task => (
-                    <TaskCard key={task.id} task={task} onOpenTrace={onOpenTrace} onOpenReview={onOpenReview} onUpdate={onUpdate} />
+                    <TaskCard key={task.id} task={task} waitingOn={pendingDependencies(task, tasks)} onOpenTrace={onOpenTrace} onOpenReview={onOpenReview} onUpdate={onUpdate} />
                   ))
                 )}
               </div>
@@ -172,11 +174,13 @@ function NowLine({ task, running }: { task: FactoryTask; running: boolean }) {
   )
 }
 
-function TaskCard({ task, onOpenTrace, onOpenReview, onUpdate }: { task: FactoryTask } & Omit<Props, 'tasks'>) {
+function TaskCard({ task, waitingOn, onOpenTrace, onOpenReview, onUpdate }: { task: FactoryTask; waitingOn: FactoryTask[] } & Omit<Props, 'tasks'>) {
   const running = isTaskRunning(task)
   const failed = task.state === 'error'
   const waiting = task.state === 'waiting_approval' || task.state === 'waiting_clarification' || task.state === 'review'
   const usage = taskUsage(task)
+  const [discarding, setDiscarding] = useState(false)
+  const [discardError, setDiscardError] = useState<string | null>(null)
   return (
     <div
       role="button"
@@ -200,10 +204,34 @@ function TaskCard({ task, onOpenTrace, onOpenReview, onUpdate }: { task: Factory
         <div className="row mono" style={{ gap: 8, fontSize: 11 }}>
           {task.diffStat && <span style={{ color: 'var(--ok)' }}>+{task.diffStat.insertions}/-{task.diffStat.deletions}</span>}
           {usage.costUsd !== null && <span style={{ color: 'var(--muted)' }} title={tx({ en: 'Cost summed over the agents', pt: 'Custo somado dos agentes' })}>US$ {usage.costUsd.toFixed(2)}</span>}
+          <button
+            type="button"
+            className="btn btn-ghost btn-sm btn-icon"
+            title={tx({ en: 'Discard task', pt: 'Descartar tarefa' })}
+            aria-label={tx({ en: `Discard ${task.title}`, pt: `Descartar ${task.title}` })}
+            onClick={e => {
+              e.stopPropagation()
+              setDiscarding(true)
+            }}
+            onKeyDown={e => e.stopPropagation()}
+          >
+            <Trash2 size={13} />
+          </button>
         </div>
       </div>
 
       <div style={{ fontWeight: 600, fontSize: 13, lineHeight: 1.35, color: 'var(--ink)' }}>{task.title}</div>
+
+      {(task.origin || waitingOn.length > 0) && (
+        <div className="row" style={{ gap: 6, fontSize: 11, flexWrap: 'wrap' }}>
+          {task.origin && <span className="badge" title={tx({ en: 'Came from an idea of the project', pt: 'Veio de uma ideia do projeto' })}><Lightbulb size={11} /> {task.origin.taskKey}</span>}
+          {waitingOn.length > 0 && (
+            <span className="badge badge-warn" title={tx({ en: 'Planning starts once these are done', pt: 'O planejamento começa quando estas estiverem concluídas' })}>
+              <Hourglass size={11} /> {tx({ en: 'waits for', pt: 'aguarda' })} {waitingOn.map(t => t.origin?.taskKey ?? t.title).join(', ')}
+            </span>
+          )}
+        </div>
+      )}
 
       <AgentProgress task={task} />
       <NowLine task={task} running={running} />
@@ -232,7 +260,16 @@ function TaskCard({ task, onOpenTrace, onOpenReview, onUpdate }: { task: Factory
         </div>
       )}
 
+      {discardError && <div className="callout callout-crit" style={{ fontSize: 11 }}>{discardError}</div>}
+
       <TaskActions task={task} running={running} onOpenReview={onOpenReview} onChanged={onUpdate} block />
+
+      {discarding && (
+        // The modal sits inside the clickable card: its clicks must not open the timeline
+        <div onClick={e => e.stopPropagation()} onKeyDown={e => e.stopPropagation()}>
+          <DiscardTaskModal task={task} onDiscarded={onUpdate} onError={setDiscardError} onClose={() => setDiscarding(false)} />
+        </div>
+      )}
     </div>
   )
 }
