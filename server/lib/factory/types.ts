@@ -157,6 +157,8 @@ export type QaReport = {
   criteria?: CriterionCoverage[]
   // Non-test files the Tester changed: reviewed, but worth a human look
   testerTouched?: string[]
+  // Quality floor over the whole delivery (Tester included); set only when it failed
+  qualityFloor?: string
   // Rebase onto the newest base before the last verification
   baseSync?: { status: 'current' | 'rebased' | 'conflict'; detail?: string }
 }

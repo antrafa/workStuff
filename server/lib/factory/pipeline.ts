@@ -380,7 +380,7 @@ export async function reverifyOnNewBase(ctx: ExecContext, task: FactoryTask): Pr
     diffContent: diff,
     diffStat: stat,
     blastRadius,
-    qaReport: { ...task.qaReport, ...qaRun(tests), baseSync: { status: sync.status, detail: sync.detail } },
+    qaReport: { ...task.qaReport, ...qaRun(tests), qualityFloor: await qualityFloor(worktreePath, task.baseBranch), baseSync: { status: sync.status, detail: sync.detail } },
     reviewedHead: await headOf(worktreePath),
     verifiedBase: sync.baseHead,
   }
@@ -464,6 +464,10 @@ async function adjustReviewedWork(ctx: ExecContext, task: FactoryTask, worktreeP
 // The verification fields of the QA report. A suite that did not run is never a pass.
 const qaRun = (tests: TestsGateResult) => ({ passed: tests.passed, output: tests.output, testsRan: tests.command, steps: tests.steps })
 
+// The build gate only sees the Implementer's turn; this one sees everything that ships, Tester included
+const qualityFloor = (worktreePath: string, baseBranch: string) =>
+  gateNoQualityDegradation(worktreePath, baseBranch).then(r => r.passed ? undefined : r.reason)
+
 async function finishReview(
   task: FactoryTask,
   worktreePath: string,
@@ -487,6 +491,7 @@ async function finishReview(
       summary: qaSummary,
       criteria: ids.length ? checkCriteriaCoverage(worktreePath, ids, qa.testEnv?.criteriaTests ?? []) : undefined,
       testerTouched: qa.testerTouched,
+      qualityFloor: await qualityFloor(worktreePath, task.baseBranch),
       baseSync: { status: sync.status, detail: sync.detail },
     },
     securityReport: { passed: outcome.passed, findings: outcome.findings, criteria: outcome.review.criteria, summary, fixRounds: outcome.fixRounds, tools: outcome.tools },
