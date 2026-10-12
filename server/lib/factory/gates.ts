@@ -10,7 +10,7 @@ import { spawn } from 'node:child_process'
 import { run } from '../run.ts'
 import { jail, withSandbox } from './runner.ts'
 import { GIT_NO_HOOKS, uncommittedFiles } from './worktree.ts'
-import type { BlastRadiusReport, CriterionCoverage, CriterionTests, FileBlastRadius, VerifyStep } from './types.ts'
+import { TEST_FILE, type BlastRadiusReport, type CriterionCoverage, type CriterionTests, type FileBlastRadius, type VerifyStep } from './types.ts'
 import { say } from '../i18n.ts'
 
 export type DiffGateResult = {
@@ -282,8 +282,7 @@ export async function docsCiting(worktreePath: string, files: string[]): Promise
   return out.split('\n').filter(f => f && DOC_FILE.test(f) && !files.includes(f))
 }
 
-// 5. Test files, by the usual conventions. A miss only asks for a human look (see readiness.ts).
-const TEST_FILE = /(^|\/)(tests?|__tests__|spec|e2e)\/|\.(test|spec)\.[^/]+$|_test\.(go|py)$|(^|\/)test_[^/]+\.py$|Tests?\.(java|kt|cs)$|(^|\/)scripts\/check-[^/]+$/i
+// 5. Test files (TEST_FILE in types.ts). A miss only asks for a human look (see readiness.ts).
 export const nonTestFiles = (files: string[]) => files.filter(f => !TEST_FILE.test(f))
 
 // 6. Gate: the Tester's mapping of criteria to tests, checked against the disk. A test file it names

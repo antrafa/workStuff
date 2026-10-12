@@ -28,6 +28,7 @@ assert.equal(categorizeFilePath('src/features/factory/__tests__/drawer.test.tsx'
 assert.equal(categorizeFilePath('src/domain/user.spec.ts'), 'tests')
 assert.equal(categorizeFilePath('src/test/java/com/app/UserTest.java'), 'tests')
 assert.equal(categorizeFilePath('pkg/auth/token_test.go'), 'tests')
+assert.equal(categorizeFilePath('src/UserServiceTest.java'), 'tests', 'sufixo Test, mesma regra dos portões')
 assert.equal(categorizeFilePath('scripts/check-factory-pipeline.ts'), 'tests')
 
 assert.equal(categorizeFilePath('docs/fabrica.md'), 'docs_meta')

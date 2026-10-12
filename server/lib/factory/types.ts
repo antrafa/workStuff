@@ -204,6 +204,9 @@ export type Readiness = {
   attention: string[]
 }
 
+// Test files, by the usual conventions. Shared by the server gates and the diff viewer.
+export const TEST_FILE = /(^|\/)(tests?|__tests__|spec|e2e)\/|\.(test|spec)\.[^/]+$|_test\.(go|py)$|(^|\/)test_[^/]+\.py$|Tests?\.(java|kt|cs)$|(^|\/)scripts\/check-[^/]+$/i
+
 export type DiffCategory = 'core' | 'wiring' | 'tests' | 'docs_meta'
 
 export type DiffStat = {

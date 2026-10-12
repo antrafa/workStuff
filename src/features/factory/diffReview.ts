@@ -3,7 +3,7 @@
 // lógica central de negócio, depois amarração de APIs/rotas, depois testes e por fim docs/metadados.
 
 import type { Pair } from '../../../server/lib/lang.ts'
-import type { DiffCategory } from '../../../server/lib/factory/types.ts'
+import { TEST_FILE, type DiffCategory } from '../../../server/lib/factory/types.ts'
 
 export type { DiffCategory }
 
@@ -59,9 +59,7 @@ const CATEGORY_PRIORITY: Record<DiffCategory, number> = {
   docs_meta: 3,
 }
 
-// Regex heuristics for path classification
-const TEST_PATH_REGEX =
-  /(^|\/)(__tests__|tests?|fixtures?|testing)\/|(\.(test|spec)\.[a-zA-Z0-9]+$)|(\bTest(Case)?\.[a-zA-Z]+$)|(^|\/)test_[^/]+\.py$|[^/]+_test\.(py|go)$|(^|\/)scripts\/check-[^/]+\.ts$/i
+// Regex heuristics for path classification; tests use the same rule as the server gates
 
 const DOCS_META_REGEX =
   /\.(md|markdown|txt|rst|adoc)$|^LICENSE$|^NOTICE$|(^|\/)docs?\/|(^|\/)(\.gitlab-ci\.yml|\.github\/|Dockerfile|docker-compose[^/]*|helm\/|charts\/|k8s\/|terraform\/)|\.tf$|(^|\/)(package(-lock)?\.json|pnpm-lock\.yaml|yarn\.lock|pom\.xml|build\.gradle(\.kts)?|requirements[^/]*\.txt|pyproject\.toml|go\.(mod|sum)|Cargo\.(toml|lock)|Gemfile(\.lock)?)$|(^|\/)(\.gitignore|\.editorconfig|tsconfig[a-zA-Z0-9.-]*\.json|vite\.config\.[a-zA-Z]+|eslint.*|\.prettierrc.*)$/i
@@ -74,7 +72,7 @@ const WIRING_REGEX =
  */
 export function categorizeFilePath(path: string): DiffCategory {
   const normalized = path.replace(/\\/g, '/')
-  if (TEST_PATH_REGEX.test(normalized)) return 'tests'
+  if (TEST_FILE.test(normalized)) return 'tests'
   if (DOCS_META_REGEX.test(normalized)) return 'docs_meta'
   if (WIRING_REGEX.test(normalized)) return 'wiring'
   return 'core'
