@@ -1,4 +1,4 @@
-import { AlertTriangle, ChevronRight, FlaskConical, Menu, Moon, Search, Settings, Star, Sun } from 'lucide-react'
+import { AlertTriangle, ChevronRight, FlaskConical, Menu, Moon, Power, Search, Settings, Star, Sun } from 'lucide-react'
 import { Suspense, useEffect, useState } from 'react'
 import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router'
 import { EnvStamp, PageHelpContext, SkeletonRows } from '@/ui'
@@ -6,6 +6,7 @@ import { favoriteAt, recordVisit, toggleFavorite, toggleGroup, useFavorites, use
 import { NAV, findNav, type NavItem } from './nav'
 import { CommandPalette } from './CommandPalette'
 import { HelpModal } from './HelpModal'
+import { ShutdownModal } from './ShutdownModal'
 import { StatusBar } from './StatusBar'
 import { helpFor } from './help'
 import { setTheme, useTheme } from './theme'
@@ -34,6 +35,7 @@ export function Layout() {
   const [navOpen, setNavOpen] = useState(false)
   const [helpOpen, setHelpOpen] = useState(false)
   const [paletteOpen, setPaletteOpen] = useState(false)
+  const [shutdownOpen, setShutdownOpen] = useState(false)
   const help = helpFor(pathname)
   const pageHelp = help ? { purpose: help.purpose, open: () => setHelpOpen(true) } : null
 
@@ -124,6 +126,15 @@ export function Layout() {
           >
             {dark ? <Sun size={16} /> : <Moon size={16} />}
           </button>
+          <button
+            className="btn btn-ghost btn-icon"
+            onClick={() => setShutdownOpen(true)}
+            title={tx({ en: 'Shut down workStuff', pt: 'Encerrar o workStuff' })}
+            aria-label={tx({ en: 'Shut down workStuff', pt: 'Encerrar o workStuff' })}
+            style={{ color: 'var(--crit, #ef4444)' }}
+          >
+            <Power size={16} />
+          </button>
         </header>
         <main className="content">
           {current?.item.mock && (
@@ -147,6 +158,7 @@ export function Layout() {
         <StatusBar />
       </div>
       {paletteOpen && <CommandPalette onClose={() => setPaletteOpen(false)} />}
+      {shutdownOpen && <ShutdownModal onClose={() => setShutdownOpen(false)} />}
     </div>
   )
 }

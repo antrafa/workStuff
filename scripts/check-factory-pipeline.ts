@@ -70,6 +70,79 @@ console.log(JSON.stringify({ type: 'system', session_id: 'fake-sess' }))
 console.log(JSON.stringify({ type: 'result', is_error: false, result: out, total_cost_usd: 0.01, usage: { input_tokens: 10, output_tokens: 5 } }))
 `)
 chmodSync(join(bin, 'claude'), 0o755)
+
+const { which } = await import('../server/lib/run.ts')
+if (!(await which('bwrap'))) {
+  writeFileSync(join(bin, 'bwrap'), `#!/usr/bin/env node
+const { spawn } = require('node:child_process')
+const fs = require('node:fs')
+const path = require('node:path')
+const args = process.argv.slice(2)
+let i = 0
+let cwd = process.cwd()
+const env = { ...process.env }
+
+while (i < args.length) {
+  const arg = args[i]
+  if (arg === '--ro-bind' || arg === '--bind' || arg === '--ro-bind-try') {
+    i += 3
+  } else if (arg === '--dev' || arg === '--proc') {
+    i += 2
+  } else if (arg === '--setenv') {
+    env[args[i + 1]] = args[i + 2]
+    i += 3
+  } else if (arg === '--chdir') {
+    cwd = args[i + 1]
+    i += 2
+  } else if (arg === '--unshare-pid' || arg === '--die-with-parent') {
+    i += 1
+  } else {
+    break
+  }
+}
+
+const targetBin = args[i]
+const targetArgs = args.slice(i + 1)
+const agentDir = process.env.WORKSTUFF_AGENT_HOME ? path.join(process.env.WORKSTUFF_AGENT_HOME, '.claude') : null
+
+if (agentDir && fs.existsSync(agentDir)) {
+  try { fs.chmodSync(agentDir, 0o555) } catch {}
+}
+
+const child = spawn(targetBin, targetArgs, {
+  cwd,
+  env,
+  stdio: ['inherit', 'pipe', 'pipe'],
+})
+
+child.stdout.pipe(process.stdout)
+child.stderr.pipe(process.stderr)
+
+const restore = () => {
+  if (agentDir && fs.existsSync(agentDir)) {
+    try { fs.chmodSync(agentDir, 0o755) } catch {}
+  }
+}
+
+process.on('SIGTERM', () => {
+  restore()
+  child.kill('SIGTERM')
+})
+
+child.on('exit', code => {
+  restore()
+  process.exit(code ?? 0)
+})
+
+child.on('error', err => {
+  restore()
+  console.error(err)
+  process.exit(1)
+})
+`)
+  chmodSync(join(bin, 'bwrap'), 0o755)
+}
+
 process.env.PATH = `${bin}:${process.env.PATH}`
 
 const repo = join(tmp, 'repo')

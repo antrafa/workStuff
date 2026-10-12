@@ -183,7 +183,7 @@ async function checkBuildGates(ctx: ExecContext, task: FactoryTask, worktreePath
   return { failure: `Comando: ${tests.command}\n${tests.output}`, fatal: false, tests }
 }
 
-// SSSF-style correction: a failed gate re-prompts the same CLI session (Claude) with exactly
+// Session-level correction: a failed gate re-prompts the same CLI session (Claude) with exactly
 // what failed, instead of starting over. Exhausted attempts: a broken diff aborts the run;
 // failing tests go on to the review rounds, which hand them back to the Implementer.
 async function implementWithGates(

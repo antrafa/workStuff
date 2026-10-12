@@ -550,25 +550,25 @@ O selfcheck de `agents.ts` falha se um agente da ordem ficar sem definição, e 
 
 Os [runbooks de dev da Fábrica](../dev-runbooks/factory/) cobrem os procedimentos manuais: limpar worktrees, reproduzir um portão, publicar a branch, resolver um merge local que falhou.
 
-## 21. Origem das ideias
+## 21. Princípios e Fundamentos da Fábrica
 
-| Ideia | De onde veio |
+| Mecanismo | Papel na Esteira |
 |---|---|
-| Fases de código e de agente; "o agente propõe, o código decide" | [super-simple-software-factory](https://github.com/disler/super-simple-software-factory) |
-| Envelopes tipados entre agentes; portões que verificam o que o agente declarou | super-simple-software-factory |
-| Correção na mesma sessão em vez de recomeçar | super-simple-software-factory |
-| Documenter; modelo caro para planejar e barato para construir | super-simple-software-factory |
-| Trace em raias por agente | super-simple-software-factory |
-| Especificação com critérios de aceite antes do plano; dúvidas que param a esteira | projeto de referência (triage e concept) |
-| Revisão em paralelo por especialistas; severidade por consequência; confiança mínima de 75; veredito em código | projeto de referência (review squad) |
-| Achado começa pela falha concreta; teste só conta se a asserção pode falhar; "não audite o arquivo inteiro" | projeto de referência (`REVIEW_FINDING_BAR`) |
-| Critério por id conferido contra a especificação; teste que prova comportamento | projeto de referência (sdd-compliance-reviewer e test-reviewer) |
-| Verifier adversarial, ferramentas de segurança, prontidão em código e MR automático | workStuff |
-| Até 3 tentativas de build e 2 rodadas automáticas de revisão | projeto de referência (`max_dev_retries`, `max_auto_rounds`) |
-| Worktree isolada, sandbox `bwrap`, aprovação local antes do MR | workStuff |
-| Piso de qualidade determinístico (sem `@ts-ignore` / `.skip()`) e regras anti-slop | [pstack / unslop](referencias-skills.md#31-portão-de-piso-de-qualidade--prompts-anti-slop) (Addy Osmani / Cursor plugins) |
-| Cálculo de raio de impacto (blast radius) via `git grep` e bloqueio na prontidão | [blast-radius](referencias-skills.md#32-raio-de-impacto-blast-radius--prontidão-de-entrega) (Lauren Tan / Cursor plugin) |
-| Reorganização cognitiva do diff em 4 camadas e review canvas na gaveta | [pr-review-canvas](referencias-skills.md#33-reorganização-cognitiva-do-diff--review-canvas) (Lauren Tan / Cursor plugin) |
+| Fases de código e de agente; "o agente propõe, o código decide" | Controle determinístico: o LLM sugere artefatos, mas o código avalia e executa |
+| Envelopes tipados entre agentes; portões que verificam o que o agente declarou | Contratos de dados estritos em JSON para evitar alucinações e perda de contexto |
+| Correção na mesma sessão em vez de recomeçar | Reenvio na sessão do provedor (`--resume`) com a falha exata do portão |
+| Documenter; modelo caro para planejar e barato para construir | Otimização de custo e especialização funcional por agente |
+| Trace em raias por agente | Observabilidade completa de tempo, custo em tokens e ferramentas |
+| Especificação com critérios de aceite antes do plano; dúvidas que param a esteira | Triage determinística: perguntas ao desenvolvedor antes de gerar código |
+| Revisão em paralelo por especialistas; severidade por consequência; confiança mínima de 75; veredito em código | Squad de revisão: Reviewer funcional e Security em paralelo |
+| Achado começa pela falha concreta; teste só conta se a asserção pode falhar | Régua objetiva contra falsos positivos ou comentários de estilo |
+| Critério por id conferido contra a especificação; teste que prova comportamento | Rastreabilidade formal (CA1, CA2...) da especificação ao teste |
+| Verifier adversarial, ferramentas de segurança, prontidão em código e MR automático | Validação dupla contra alucinações de revisão |
+| Limite estrito de 3 tentativas de build e 2 rodadas automáticas de revisão | Teto determinístico contra loops infinitos |
+| Worktree isolada, sandbox `bwrap`, aprovação local antes do MR | Isolamento e segurança operacional na máquina local |
+| Piso de qualidade determinístico (sem `@ts-ignore` / `.skip()`) e regras anti-slop | [pstack / unslop](referencias-skills.md#31-portão-de-piso-de-qualidade--prompts-anti-slop) |
+| Cálculo de raio de impacto (blast radius) via `git grep` e bloqueio na prontidão | [blast-radius](referencias-skills.md#32-raio-de-impacto-blast-radius--prontidão-de-entrega) |
+| Reorganização cognitiva do diff em 4 camadas e review canvas na gaveta | [pr-review-canvas](referencias-skills.md#33-reorganização-cognitiva-do-diff--review-canvas) |
 
-A análise comparativa aprofundada de todas as skills e o que foi aproveitado ou rejeitado está detalhada em [`docs/referencias-skills.md`](referencias-skills.md).
+A análise comparativa das skills de referência e o que foi aproveitado ou rejeitado está detalhada em [`docs/referencias-skills.md`](referencias-skills.md).
 O histórico das decisões está em [`superpowers/specs/2026-10-04-fabrica-dev-design.md`](superpowers/specs/2026-10-04-fabrica-dev-design.md).
