@@ -72,7 +72,7 @@ notify_desktop() {
   if [[ "$OSTYPE" == "darwin"* ]]; then
     osascript -e "display notification \"$message\" with title \"$title\"" 2>/dev/null || true
   elif command -v notify-send >/dev/null 2>&1; then
-    notify_send "$title" "$message" 2>/dev/null || true
+    notify-send "$title" "$message" 2>/dev/null || true
   fi
 }
 
@@ -102,6 +102,14 @@ is_port_open() {
   (echo >/dev/tcp/127.0.0.1/"$port") >/dev/null 2>&1
 }
 
+# Verdadeiro quando o PID lidera o próprio grupo de processos e é o npm iniciado pelo start
+is_launcher_group() {
+  local pid="$1" pgid command
+  pgid=$(ps -o pgid= -p "$pid" 2>/dev/null | tr -d ' ') || return 1
+  command=$(ps -o command= -p "$pid" 2>/dev/null) || return 1
+  [ "$pgid" = "$pid" ] && [[ "$command" == *npm* ]]
+}
+
 # 6. Ação: START
 start_app() {
   ensure_node_env
@@ -118,9 +126,12 @@ start_app() {
 
   cd "$ROOT_DIR"
 
-  # Executa npm run dev desacoplado com nohup
+  # Executa npm run dev desacoplado com nohup, num grupo de processos próprio (set -m):
+  # stop e o botão de encerrar do painel sinalizam o grupo inteiro, sem deixar o Vite órfão
+  set -m
   nohup npm run dev > "$LOG_FILE" 2>&1 &
   local pid=$!
+  set +m
   echo "$pid" > "$PID_FILE"
 
   # Aguarda a porta web responder (até 25 segundos)
@@ -142,7 +153,7 @@ start_app() {
       exit 1
     fi
     sleep 0.5
-    ((count++))
+    count=$((count + 1))
   done
 
   if [ $ready -eq 1 ]; then
@@ -165,10 +176,10 @@ stop_app() {
   if [ -f "$PID_FILE" ]; then
     local pid
     pid=$(cat "$PID_FILE" 2>/dev/null || true)
-    if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then
-      # Mata a árvore de processos do npm run dev
-      pkill -P "$pid" 2>/dev/null || true
-      kill "$pid" 2>/dev/null || true
+    # Só sinaliza se o PID ainda é o líder do grupo que o start criou rodando npm:
+    # depois de um reboot o número pode ter sido reusado por outro processo
+    if [ -n "$pid" ] && is_launcher_group "$pid"; then
+      kill -TERM -- "-$pid" 2>/dev/null || true
       stopped=1
     fi
     rm -f "$PID_FILE"
