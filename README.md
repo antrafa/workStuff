@@ -25,18 +25,27 @@ Architecture and the software factory are documented in [`docs/`](docs/README.md
 
 ## Features
 
-The menu is split into four groups.
+The menu groups, in this order: Overview, Tools, Development, Deploy, Kubernetes and AI. Each item shows a short tag beside its name saying what kind of page it is (`live`, `kubectl`, `ai`, `clone`…). Development holds the Factory and the Dev runbooks, described in [`docs/fabrica.md`](docs/fabrica.md).
+
+### Tools
+
+| Page | Route | What it does |
+|---|---|---|
+| **Machine** (Máquina) | `/maquina` | Checks the workstation and shows each item as ok, missing or warning, with a suggested fix. Covers base tools (git, curl, zip), credentials (git identity, SSH key, `~/.m2/settings.xml`, `~/.npmrc`), Java/Maven via SDKMAN, Node via NVM, Docker, kubectl and kubeconfigs, AI CLIs, IDEs, disk space and network reachability. The check itself changes nothing. A fix only runs when you click it, and only for items marked as automatic. |
+| **Local services** (Serviços locais) | `/servicos` | Two tabs. **Ports and Docker** lists listening ports with the owning process (flagging the ones open to the network) and lets you stop the owner of a port (TERM, or KILL with **Force**); it also lists Docker containers, images, volumes and compose projects, to start, stop, restart or delete. Every action shows the exact command first, and deleting a volume asks you to type its name. **Applications** registers local apps (folder, command, port, URL) to start, stop, restart and follow their log; the registry lives in `~/.workstuff/apps/`. |
+| **Team profile** (Perfil de equipe) | `/perfil` | Exports the Machine checks (versions, registries, URLs), the repository connections (never the tokens) and the Catalog folders and active items to a JSON file, and imports one with a preview of what changes. Catalog activations are listed to be done by hand. |
+| **Converters** (Conversores) | `/conversores` | JWT decoding with an expiry check, Base64/base64url, URL encoding, timestamp conversion, UUID v4, cron next-run preview, JSON format/minify/validate (with line and column of the error), JSON ↔ YAML, line diff, regex tester and SHA hashes. Runs in the browser. |
+| **Scheduled checks** (Verificações agendadas) | `/agenda` | While the server is running, periodically checks what you register (a broken pipeline, a certificate close to expiry, pods in a critical state, critical vulnerabilities in a project) and sends a desktop notification only when the state changes. |
+| **Data generator** (Gerador de dados) | `/gerador` | Generates Brazilian test data: people, CPF, CNPJ (including the new alphanumeric format), names, addresses and companies, with an optional state (UF) filter. Runs in the browser. |
 
 ### Deploy
 
 | Page | Route | What it does |
 |---|---|---|
-| **Machine** (Máquina) | `/maquina` | Checks the workstation and shows each item as ok, missing or warning, with a suggested fix. Covers base tools (git, curl, zip), credentials (git identity, SSH key, `~/.m2/settings.xml`, `~/.npmrc`), Java/Maven via SDKMAN, Node via NVM, Docker, kubectl and kubeconfigs, AI CLIs, IDEs, disk space and network reachability. The check itself changes nothing. A fix only runs when you click it, and only for items marked as automatic. |
-| **Team profile** (Perfil de equipe) | `/perfil` | Exports the Machine checks (versions, registries, URLs), the repository connections (never the tokens) and the Catalog folders and active items to a JSON file, and imports one with a preview of what changes. Catalog activations are listed to be done by hand. |
 | **Repositories** (Repositórios) | `/repositorios` | Connects to GitLab or GitHub, lets you browse groups and projects, and clones them into a workspace folder that mirrors the group hierarchy. A token can be typed in the UI, read from `GITLAB_TOKEN`/`GITHUB_TOKEN`, or taken from `gh auth token`. |
 | **Review before MR** (Revisão antes do MR) | `/revisao` | Diffs the current branch of a local repository against its base (`origin/HEAD` by default, optionally including uncommitted changes), and an AI agent in read-only mode, reading the surrounding code, lists the problems by severity with file and line, plus a paragraph for the MR description. |
 | **Vulnerabilities** (Vulnerabilidades) | `/vulnerabilidades` | Reads the direct dependencies of a project (`package.json` with the exact `package-lock.json` version, `pom.xml` with properties resolved), looks them up in the public [OSV](https://osv.dev) database and the public registries, and shows known vulnerabilities by severity, the fixed versions and how many major versions behind each dependency is. With [trivy](https://trivy.dev) installed, it also scans the whole project (transitive dependencies) and container images. |
-| **Pipelines** | `/pipelines` | Shows the latest GitLab CI or GitHub Actions pipeline of each project you follow, its jobs and their logs. For a failed job, **Explain failure** sends the end of the log to an AI agent in read-only mode, which also reads the code when the project is cloned. Refreshes every 30 s. |
+| **Pipelines** | `/pipelines` | Shows the latest GitLab CI or GitHub Actions pipeline of each project you follow, grouped by parent group (collapsed on load, with a count of failed and running ones); a row's pipelines and jobs open right under it. Projects are followed by browsing the connection's groups or by pasting the path or the full project URL, which also picks the connection on that host. For a failed job, **Explain failure** sends the end of the log to an AI agent in read-only mode, which also reads the code when the project is cloned. Refreshes every 30 s. |
 
 ### Kubernetes
 
@@ -51,15 +60,6 @@ The menu is split into four groups.
 | **Upgrade** | `/upgrade` | Before a Kubernetes upgrade, lists what breaks on the target version: objects applied with a removed API (read from the `kubectl apply` annotation), recent calls to deprecated APIs (apiserver metrics), and removed APIs in a repository's manifests. It also checks the TLS certificate served by each ingress host (without reading Secrets) and the client certificate expiry of each kubeconfig. Read-only. |
 | **Runbooks** | `/runbooks` | Markdown procedures from a folder you choose, where each line of a ```bash block is a `kubectl` step with optional `{{variables}}`. Read steps run directly; write steps go through the same command parser and environment policy as the Cluster Doctor and wait for your confirmation. Every run is audited. |
 | **Performance** | `/performance` | Creates *observations* of up to 20 pods and samples CPU, memory, restarts, throttling and events at a fixed interval (minimum 15 s). It can also read Rancher Monitoring Prometheus and Istio/Envoy ingress stats. Observations resume after a server restart, and an AI report can be generated from up to 72 h of history. |
-
-### Tools
-
-| Page | Route | What it does |
-|---|---|---|
-| **Converters** (Conversores) | `/conversores` | JWT decoding with an expiry check, Base64/base64url, URL encoding, timestamp conversion, UUID v4, cron next-run preview, JSON format/minify/validate (with line and column of the error), JSON ↔ YAML, line diff, regex tester and SHA hashes. Runs in the browser. |
-| **Local services** (Serviços locais) | `/servicos` | Listening ports with the owning process (flagging the ones open to the network), Docker containers and compose projects, with start, stop and restart behind a confirmation that shows the exact command. An Applications tab registers local apps (folder, command, port, URL) to start, stop, restart and follow their log; the registry lives in `~/.workstuff/apps/`. |
-| **Scheduled checks** (Verificações agendadas) | `/agenda` | While the server is running, periodically checks what you register (a broken pipeline, a certificate close to expiry, pods in a critical state, critical vulnerabilities in a project) and sends a desktop notification only when the state changes. |
-| **Data generator** (Gerador de dados) | `/gerador` | Generates Brazilian test data: people, CPF, CNPJ (including the new alphanumeric format), names, addresses and companies, with an optional state (UF) filter. Runs in the browser. |
 
 ### AI
 
