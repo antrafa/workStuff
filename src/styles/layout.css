@@ -148,6 +148,16 @@ kbd {
   width: 3px;
   background: var(--signal);
 }
+.nav-tag {
+  flex: none;
+  font: 600 10px var(--font-mono);
+  letter-spacing: 0.02em;
+  color: var(--muted);
+  opacity: 0.8;
+}
+.nav-link.active .nav-tag {
+  color: var(--signal);
+}
 .nav-link.active svg,
 .nav-link.is-favorite svg {
   color: var(--signal);

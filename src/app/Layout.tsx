@@ -230,7 +230,7 @@ function NavItemLink({ item, favorite, shortcut }: { item: NavItem; favorite?: b
     >
       <Icon size={15} />
       <span>{item.label}{item.mock && <span className="nav-mock">mock</span>}</span>
-      {shortcut && <kbd title={`Alt ${shortcut}`}>{shortcut}</kbd>}
+      {shortcut ? <kbd title={`Alt ${shortcut}`}>{shortcut}</kbd> : item.tag && <small className="nav-tag">{item.tag}</small>}
     </NavLink>
   )
 }

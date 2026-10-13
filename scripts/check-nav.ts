@@ -23,10 +23,10 @@ assert.deepEqual(tools.map(i => i.label), ['Machine', 'Team profile', 'Converter
 const paths = NAV.flatMap(g => g.items.map(i => i.path))
 assert.equal(new Set(paths).size, paths.length, 'rota repetida no menu')
 
-// Mover o item não pode mudar rótulo, dica, ícone nem o breadcrumb (findNav).
+// Mover o item não pode mudar rótulo, dica, etiqueta, ícone nem o breadcrumb (findNav).
 const moved = [
-  { path: '/maquina', label: 'Machine', hint: 'What is missing to get work done', icon: Stethoscope },
-  { path: '/perfil', label: 'Team profile', hint: 'Exports and imports the setup for someone else', icon: Users },
+  { path: '/maquina', label: 'Machine', hint: 'What is missing to get work done', tag: 'setup', icon: Stethoscope },
+  { path: '/perfil', label: 'Team profile', hint: 'Exports and imports the setup for someone else', tag: 'team', icon: Users },
 ]
 for (const expected of moved) {
   const found = findNav(expected.path)
