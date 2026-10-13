@@ -7,41 +7,36 @@ import { ExplainModal, LogModal } from './JobModals'
 import { STATUS, duration, fetchJobs, fetchPipelines, type Job, type Pipeline, type Watch } from './api'
 import { tx } from '@/lib/i18n'
 
-// A project's recent pipelines and the jobs of the chosen one (the latest by default).
+// A project's recent pipelines and the jobs of the chosen one (the latest by default), shown under its row.
 export function PipelineDetail({ watch }: { watch: Watch }) {
   const pipelines = useAsync(() => fetchPipelines(watch.id), [watch.id])
   const [pipelineId, setPipelineId] = useState<string | null>(null)
   const current = pipelines.data?.find(p => p.id === pipelineId) ?? pipelines.data?.[0] ?? null
 
   return (
-    <section className="card">
-      <div className="card-head">
-        <div className="card-title spacer">{watch.fullPath}</div>
-      </div>
-      <div className="card-pad stack">
-        <Async
-          state={pipelines}
-          isEmpty={d => d.length === 0}
-          skeleton={<SkeletonRows rows={2} height={32} />}
-          empty={<Empty icon={Workflow} title={tx({ en: 'No pipeline in this project', pt: 'Nenhuma pipeline neste projeto' })} />}
-        >
-          {data => (
-            <>
-              <div className="pl-runs">
-                {data.map(p => (
-                  <button key={p.id} className="chip" aria-pressed={p.id === current?.id} onClick={() => setPipelineId(p.id)} title={p.title}>
-                    <span className={`dot ${dotFor(p)}`} />
-                    <span className="mono">{p.ref}</span>
-                    <span className="count">{relTime(p.createdAt)}</span>
-                  </button>
-                ))}
-              </div>
-              {current && <Jobs key={current.id} watch={watch} pipeline={current} />}
-            </>
-          )}
-        </Async>
-      </div>
-    </section>
+    <div className="stack">
+      <Async
+        state={pipelines}
+        isEmpty={d => d.length === 0}
+        skeleton={<SkeletonRows rows={2} height={32} />}
+        empty={<Empty icon={Workflow} title={tx({ en: 'No pipeline in this project', pt: 'Nenhuma pipeline neste projeto' })} />}
+      >
+        {data => (
+          <>
+            <div className="pl-runs">
+              {data.map(p => (
+                <button key={p.id} className="chip" aria-pressed={p.id === current?.id} onClick={() => setPipelineId(p.id)} title={p.title}>
+                  <span className={`dot ${dotFor(p)}`} />
+                  <span className="mono">{p.ref}</span>
+                  <span className="count">{relTime(p.createdAt)}</span>
+                </button>
+              ))}
+            </div>
+            {current && <Jobs key={current.id} watch={watch} pipeline={current} />}
+          </>
+        )}
+      </Async>
+    </div>
   )
 }
 

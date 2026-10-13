@@ -1,14 +1,15 @@
 import './pipelines.css'
-import { ExternalLink, Plus, RotateCw, Trash2, Workflow } from 'lucide-react'
-import { useState } from 'react'
+import { ChevronDown, ChevronRight, ExternalLink, Plus, RotateCw, Trash2, Workflow } from 'lucide-react'
+import { Fragment, useState } from 'react'
 import { Link } from 'react-router'
-import { Async, ConfirmModal, Empty, Modal, Page, SkeletonRows, useToast } from '@/ui'
+import { Async, ConfirmModal, Empty, Page, SkeletonRows, useToast } from '@/ui'
 import { relTime } from '@/lib/format'
 import { useAsync } from '@/lib/useAsync'
 import { usePolling } from '@/features/cluster/usePolling'
-import { fetchSources, type Source } from '@/features/repos/api'
+import { fetchSources } from '@/features/repos/api'
+import { FollowModal } from './FollowModal'
 import { PipelineDetail } from './PipelineDetail'
-import { STATUS, addWatch, duration, fetchWatches, removeWatch, type Watch } from './api'
+import { STATUS, duration, fetchWatches, removeWatch, type Watch } from './api'
 import { tx } from '@/lib/i18n'
 
 export default function PipelinesPage() {
@@ -17,12 +18,17 @@ export default function PipelinesPage() {
   const [selected, setSelected] = useState<string | null>(null)
   const [adding, setAdding] = useState(false)
   const [removing, setRemoving] = useState<Watch | null>(null)
+  const [expanded, setExpanded] = useState<Set<string>>(new Set())
   const toast = useToast()
   usePolling(watches.reload, !adding)
 
   const list = watches.data ?? []
-  const current = list.find(w => w.id === selected) ?? null
   const noSources = sources.data?.length === 0
+  const toggleGroup = (key: string) => setExpanded(prev => {
+    const next = new Set(prev)
+    if (!next.delete(key)) next.add(key)
+    return next
+  })
 
   const remove = async (w: Watch) => {
     try {
@@ -84,11 +90,33 @@ export default function PipelinesPage() {
                       <th />
                     </tr>
                   </thead>
-                  <tbody>
-                    {data.map(w => (
-                      <WatchRow key={w.id} watch={w} selected={w.id === selected} onSelect={() => setSelected(w.id === selected ? null : w.id)} onRemove={() => setRemoving(w)} />
-                    ))}
-                  </tbody>
+                  {groupByParent(data).map(g => {
+                    const open = expanded.has(g.key)
+                    return (
+                      <tbody key={g.key}>
+                        <tr className="pl-group" onClick={() => toggleGroup(g.key)} aria-expanded={open}>
+                          <td colSpan={6}>
+                            <span className="row" style={{ ['--gap' as string]: '8px' }}>
+                              {open ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                              <span className="pl-group-name">{g.name}</span>
+                              <span className="badge">{g.watches.length}</span>
+                              <GroupHealth watches={g.watches} />
+                              <span className="spacer" />
+                              <span className="muted" title={g.parent}>{g.sourceLabel ?? tx({ en: 'connection removed', pt: 'conexão removida' })}</span>
+                            </span>
+                          </td>
+                        </tr>
+                        {open && g.watches.map(w => (
+                          <Fragment key={w.id}>
+                            <WatchRow watch={w} selected={w.id === selected} onSelect={() => setSelected(w.id === selected ? null : w.id)} onRemove={() => setRemoving(w)} />
+                            {w.id === selected && !w.error && (
+                              <tr className="pl-detail"><td colSpan={6}><PipelineDetail watch={w} /></td></tr>
+                            )}
+                          </Fragment>
+                        ))}
+                      </tbody>
+                    )
+                  })}
                 </table>
               </div>
             </section>
@@ -96,8 +124,7 @@ export default function PipelinesPage() {
         </Async>
       )}
 
-      {current && !current.error && <PipelineDetail key={current.id} watch={current} />}
-      {adding && <AddModal sources={sources.data ?? []} onClose={() => setAdding(false)} onAdded={() => (setAdding(false), watches.reload())} />}
+      {adding && <FollowModal sources={sources.data ?? []} watches={list} onClose={() => setAdding(false)} onAdded={() => (setAdding(false), watches.reload())} />}
       {removing && (
         <ConfirmModal title={tx({ en: 'Stop following', pt: 'Parar de acompanhar' })} confirmLabel={tx({ en: 'Stop following', pt: 'Parar de acompanhar' })} icon={Trash2} onConfirm={() => remove(removing)} onClose={() => setRemoving(null)}>
           <p>{tx({
@@ -117,8 +144,7 @@ function WatchRow({ watch: w, selected, onSelect, onRemove }: RowProps) {
   return (
     <tr className={`pl-row${selected ? ' pl-selected' : ''}`} onClick={w.error ? undefined : onSelect}>
       <td>
-        <div className="mono">{w.fullPath}</div>
-        <div className="muted" style={{ fontSize: 12 }}>{w.sourceLabel ?? tx({ en: 'connection removed', pt: 'conexão removida' })}</div>
+        <div className="mono" title={w.fullPath}>{w.fullPath.split('/').pop()}</div>
       </td>
       {w.error ? (
         <td colSpan={4}><span className="badge badge-crit">{tx({ en: 'error', pt: 'erro' })}</span> <span className="muted" style={{ fontSize: 12.5 }}>{w.error}</span></td>
@@ -142,58 +168,32 @@ function WatchRow({ watch: w, selected, onSelect, onRemove }: RowProps) {
   )
 }
 
-type AddProps = { sources: Source[]; onClose: () => void; onAdded: () => void }
+type WatchGroup = { key: string; name: string; parent: string; sourceLabel: string | null; watches: Watch[] }
 
-function AddModal({ sources, onClose, onAdded }: AddProps) {
-  const [sourceId, setSourceId] = useState(sources[0]?.id ?? '')
-  const [fullPath, setFullPath] = useState('')
-  const [saving, setSaving] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const source = sources.find(s => s.id === sourceId)
-  const example = source?.provider === 'github'
-    ? tx({ en: 'owner/repository', pt: 'dono/repositorio' })
-    : tx({ en: `${source?.basePath || 'group'}/project`, pt: `${source?.basePath || 'grupo'}/projeto` })
-
-  const save = async () => {
-    setSaving(true)
-    setError(null)
-    try {
-      await addWatch(sourceId, fullPath.trim())
-      onAdded()
-    } catch (e) {
-      setError((e as Error).message)
-    } finally {
-      setSaving(false)
-    }
+// Projects of the same parent group (e.g. ".../environments/team-a") side by side, groups and
+// projects in name order.
+function groupByParent(watches: Watch[]): WatchGroup[] {
+  const groups = new Map<string, WatchGroup>()
+  for (const w of watches) {
+    const parent = w.fullPath.split('/').slice(0, -1).join('/')
+    const key = `${w.sourceId}|${parent}`
+    const g = groups.get(key) ?? { key, name: parent.split('/').pop() ?? parent, parent, sourceLabel: w.sourceLabel, watches: [] }
+    g.watches.push(w)
+    groups.set(key, g)
   }
+  const byName = (a: string, b: string) => a.localeCompare(b, undefined, { sensitivity: 'base' })
+  for (const g of groups.values()) g.watches.sort((a, b) => byName(a.fullPath, b.fullPath))
+  return [...groups.values()].sort((a, b) => byName(a.name, b.name) || byName(a.parent, b.parent))
+}
 
+// A collapsed group still says whether something inside it broke.
+function GroupHealth({ watches }: { watches: Watch[] }) {
+  const failed = watches.filter(w => w.error || w.latest?.status === 'failed').length
+  const running = watches.filter(w => w.latest?.status === 'running' || w.latest?.status === 'pending').length
   return (
-    <Modal
-      title={tx({ en: 'Follow project', pt: 'Acompanhar projeto' })}
-      onClose={onClose}
-      footer={
-        <>
-          <button className="btn" onClick={onClose}>{tx({ en: 'Cancel', pt: 'Cancelar' })}</button>
-          <button className="btn btn-primary" disabled={!sourceId || !fullPath.trim() || saving} onClick={save}>
-            {saving ? tx({ en: 'Checking…', pt: 'Conferindo…' }) : tx({ en: 'Follow', pt: 'Acompanhar' })}
-          </button>
-        </>
-      }
-    >
-      <div className="stack">
-        <label className="field">
-          <span>{tx({ en: 'Connection', pt: 'Conexão' })}</span>
-          <select className="select" value={sourceId} onChange={e => setSourceId(e.target.value)}>
-            {sources.map(s => <option key={s.id} value={s.id}>{s.label} ({s.url})</option>)}
-          </select>
-        </label>
-        <label className="field">
-          <span>{tx({ en: 'Project', pt: 'Projeto' })}</span>
-          <input className="input mono" value={fullPath} onChange={e => setFullPath(e.target.value)} onKeyDown={e => e.key === 'Enter' && fullPath.trim() && save()} placeholder={example} autoFocus />
-          <small>{tx({ en: "Full path, as it shows in the project's URL. The panel checks that it exists before saving.", pt: 'Caminho completo, como aparece na URL do projeto. O painel confere que ele existe antes de salvar.' })}</small>
-        </label>
-        {error && <div className="callout callout-crit" style={{ fontSize: 12.5 }}>{error}</div>}
-      </div>
-    </Modal>
+    <>
+      {failed > 0 && <span className="badge badge-crit">{tx({ en: `${failed} failed`, pt: `${failed} com falha` })}</span>}
+      {running > 0 && <span className="badge badge-info">{tx({ en: `${running} running`, pt: `${running} rodando` })}</span>}
+    </>
   )
 }

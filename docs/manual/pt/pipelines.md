@@ -28,10 +28,10 @@ O que precisa estar pronto:
 
 | Parte | O que mostra |
 |---|---|
-| **Lista de projetos** | Um projeto acompanhado por linha, com a conexão, a **Última pipeline** (o status), a **Branch**, **Quando** ela rodou e a **Duração**. |
+| **Lista de projetos** | Os projetos acompanhados, agrupados pelo grupo em que estão (por exemplo, `team-a` e `team-b`). A linha do grupo mostra quantos projetos ele tem, quantos falharam ou estão rodando e a conexão (pare o mouse em cima para ver o caminho completo do grupo); os grupos começam fechados: clique na linha para abrir ou recolher. Cada linha de projeto mostra a **Última pipeline** (o status), a **Branch**, **Quando** ela rodou e a **Duração**. |
 | **Atualizar** | Lê tudo de novo agora. A lista também se atualiza sozinha a cada 30 segundos enquanto a aba está aberta. |
 | **Acompanhar projeto** | Adiciona um projeto à lista. |
-| **Detalhe do projeto** | Aparece abaixo da lista quando você clica numa linha: as pipelines recentes e os jobs da escolhida. |
+| **Detalhe do projeto** | Abre logo abaixo da linha em que você clica: as pipelines recentes e os jobs da escolhida. Clique na linha de novo para fechar. |
 
 O status de uma pipeline ou de um job:
 
@@ -51,13 +51,14 @@ Em cada linha, o ícone de seta abre a pipeline no navegador, e a lixeira para d
 
 1. Clique em **Acompanhar projeto**.
 2. Em **Conexão**, escolha a conexão onde o projeto está.
-3. Em **Projeto**, digite o caminho completo, do jeito que aparece na URL do projeto. Exemplo: para `https://gitlab.com/minha-empresa/area/pedidos-api`, digite `minha-empresa/area/pedidos-api`. No GitHub, é `dono/repositorio`.
-4. Clique em **Acompanhar** (ou aperte Enter). O painel confere que o projeto existe antes de salvar.
-5. O projeto entra na lista com o status da última pipeline.
+3. Escolha como achar o projeto:
+   - **Navegar pelos grupos** (o padrão): a janela abre no grupo base da conexão. Clique num grupo para entrar nele e use o caminho no topo para voltar. Digite em **Filtrar este grupo…** para encurtar a lista. No projeto que você quer, clique em **Acompanhar**. Os que já estão na lista aparecem como **acompanhado**.
+   - **Colar endereço**: em **Projeto**, cole a URL do projeto, como `https://gitlab.com/minha-empresa/area/pedidos-api/-/pipelines`, ou digite só o caminho, `minha-empresa/area/pedidos-api`. No GitHub, é `dono/repositorio`. Com uma URL, o painel escolhe a conexão daquele endereço e mostra abaixo do campo qual caminho vai acompanhar. Clique em **Acompanhar** (ou aperte Enter).
+4. O painel confere que o projeto existe antes de salvar, e o projeto entra na lista com o status da última pipeline.
 
 ## Passo a passo: entender por que um job falhou
 
-1. Na lista, clique na linha do projeto. O detalhe abre logo abaixo.
+1. Na lista, clique na linha do projeto. O detalhe abre logo abaixo dela.
 2. No topo do detalhe, cada botão é uma das 10 pipelines mais recentes, com a branch e há quanto tempo rodou. A bolinha é verde (passou), vermelha (falhou) ou amarela (outros casos). A mais recente já vem escolhida.
 3. Clique na pipeline que falhou. Aparecem o status, a mensagem do commit (a mudança que disparou a pipeline), o código curto do commit, a duração e o botão **Abrir**, que leva à pipeline no navegador.
 4. Na tabela de jobs, ache o job com **falhou**. Quando o provedor informa, a linha mostra também o **passo:** que falhou.
@@ -90,6 +91,6 @@ Em cada linha, o ícone de seta abre a pipeline no navegador, e a lixeira para d
 
 - **"informe o caminho completo do projeto (ex.: grupo/projeto)".** Faltou o grupo ou o dono. Digite o caminho inteiro, como `minha-empresa/area/pedidos-api`.
 - **A linha do projeto mostra erro e não abre.** A mensagem ao lado diz o motivo. O mais comum é a conexão sem token: corrija a conexão na tela [Repositórios](/repositorios).
-- **"conexão removida" embaixo do nome do projeto.** A conexão usada foi apagada em Repositórios. Pare de acompanhar o projeto e acompanhe de novo com outra conexão.
+- **"conexão removida" na linha do grupo.** A conexão usada foi apagada em Repositórios. Pare de acompanhar o projeto e acompanhe de novo com outra conexão.
 - **"Nenhuma pipeline neste projeto" ou "nenhuma pipeline ainda".** O projeto não tem pipeline configurada, ou ela nunca rodou.
 - **A explicação da IA falhou.** Confira em [Configurações](/configuracoes) se o assistente de IA está instalado e configurado, e clique em **Refazer** na janela.

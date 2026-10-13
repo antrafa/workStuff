@@ -2,3 +2,11 @@
 .table tbody tr.pl-selected td { background: var(--signal-soft); }
 .pl-runs { display: flex; flex-wrap: wrap; gap: 6px; }
 .pl-log { max-height: 60vh; overflow: auto; white-space: pre-wrap; word-break: break-word; font-size: 12px; }
+
+.table tbody tr.pl-group td { background: var(--surface-2); cursor: pointer; font-size: 12.5px; padding-top: 7px; padding-bottom: 7px; }
+.pl-group-name { font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; }
+.table tbody tr.pl-detail td,
+.table tbody tr.pl-detail:hover td { background: var(--surface); padding: 12px 16px 16px; cursor: default; }
+
+.pl-pick { max-height: 46vh; overflow: auto; }
+.pl-pick-group { width: 100%; border: 0; border-bottom: 1px solid var(--line); background: none; color: var(--ink); font: inherit; text-align: left; }

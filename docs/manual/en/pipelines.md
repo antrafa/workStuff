@@ -28,10 +28,10 @@ What must be ready:
 
 | Part | What it shows |
 |---|---|
-| **Project list** | One followed project per row, with its connection, the **Latest pipeline** (its status), the **Branch**, **When** it ran and the **Duration**. |
+| **Project list** | Followed projects grouped by the group they live in (for example, `team-a` and `team-b`). The group line shows how many projects it has, how many failed or are running and the connection (hover it to see the full path of the group); groups start closed: click the line to expand or collapse it. Each project row shows the **Latest pipeline** (its status), the **Branch**, **When** it ran and the **Duration**. |
 | **Refresh** | Reads everything again now. The list also refreshes on its own every 30 seconds while the tab is open. |
 | **Follow project** | Adds a project to the list. |
-| **Project detail** | Shows up below the list when you click a row: the recent pipelines and the jobs of the chosen one. |
+| **Project detail** | Opens right under the row you click: the recent pipelines and the jobs of the chosen one. Click the row again to close it. |
 
 The status of a pipeline or a job:
 
@@ -51,13 +51,14 @@ On each row, the arrow icon opens the pipeline in the browser, and the trash can
 
 1. Click **Follow project**.
 2. In **Connection**, pick the connection where the project lives.
-3. In **Project**, type the full path, the way it shows in the project's URL. Example: for `https://gitlab.com/my-company/area/orders-api`, type `my-company/area/orders-api`. On GitHub, it is `owner/repository`.
-4. Click **Follow** (or press Enter). The panel checks that the project exists before saving.
-5. The project joins the list with the status of its latest pipeline.
+3. Choose how to find the project:
+   - **Browse groups** (the default): the window opens on the connection's base group. Click a group to go into it, and use the path at the top to go back. Type in **Filter this group…** to narrow the list. On the project you want, click **Follow**. Projects already in the list show **followed**.
+   - **Paste address**: in **Project**, paste the project's URL, such as `https://gitlab.com/my-company/area/orders-api/-/pipelines`, or type just the path, `my-company/area/orders-api`. On GitHub, it is `owner/repository`. With a URL, the panel picks the connection on that address and shows below the field which path it will follow. Click **Follow** (or press Enter).
+4. The panel checks that the project exists before saving, and the project joins the list with the status of its latest pipeline.
 
 ## Step by step: understand why a job failed
 
-1. In the list, click the project's row. The detail opens right below.
+1. In the list, click the project's row. The detail opens right under it.
 2. At the top of the detail, each button is one of the 10 most recent pipelines, with the branch and how long ago it ran. The dot is green (passed), red (failed) or yellow (anything else). The latest one comes already selected.
 3. Click the pipeline that failed. You see its status, the commit message (the change that started the pipeline), the short commit code, the duration and the **Open** button, which takes you to the pipeline in the browser.
 4. In the jobs table, find the job marked **failed**. When the provider gives it, the row also shows the **step:** that failed.
@@ -90,6 +91,6 @@ On each row, the arrow icon opens the pipeline in the browser, and the trash can
 
 - **"enter the project's full path (e.g. group/project)".** The group or owner is missing. Type the whole path, such as `my-company/area/orders-api`.
 - **The project's row shows an error and does not open.** The message next to it says why. The most common cause is a connection with no token: fix the connection on the [Repositories](/repositorios) screen.
-- **"connection removed" under the project's name.** The connection it used was deleted in Repositories. Stop following the project and follow it again with another connection.
+- **"connection removed" on the group line.** The connection it used was deleted in Repositories. Stop following the project and follow it again with another connection.
 - **"No pipeline in this project" or "no pipeline yet".** The project has no pipeline set up, or it never ran.
 - **The AI explanation failed.** Check in [Settings](/configuracoes) that the AI assistant is installed and set up, and click **Run again** in the window.
