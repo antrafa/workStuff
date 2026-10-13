@@ -20,13 +20,13 @@ O menu à esquerda divide as telas em grupos. Cada grupo responde a um tipo de p
 
 Por onde você começa. O [Início](/) mostra de relance se algo precisa de você: tarefas da Fábrica de Software, o cluster conectado, a máquina e os serviços locais ([página do manual](/documentacao/inicio)). A **Documentação** é este manual.
 
-### Desenvolvimento
-
-A [Fábrica](/fabrica) transforma um pedido ("adicionar um filtro na tela de pedidos") em código escrito, testado e revisado por agentes de IA, numa cópia separada do repositório, e só envia alguma coisa depois que você aprova ([página do manual](/documentacao/fabrica)). Os [Runbooks de dev](/dev-runbooks) executam comandos prontos de Git, Docker e Node com confirmação ([página do manual](/documentacao/dev-runbooks)).
-
 ### Ferramentas
 
 Ajudantes do dia a dia para a sua máquina. A [Máquina](/maquina) diz o que falta para trabalhar e como resolver ([página do manual](/documentacao/maquina)). O [Perfil de equipe](/perfil) leva a sua configuração para outra pessoa ([página do manual](/documentacao/perfil)). Os [Conversores](/conversores) cuidam de JWT, Base64, datas, JSON e mais ([página do manual](/documentacao/conversores)). Os [Serviços locais](/servicos) mostram portas, containers e as suas aplicações locais ([página do manual](/documentacao/servicos)). As [Verificações agendadas](/agenda) avisam quando uma pipeline, um certificado ou um pod muda de estado ([página do manual](/documentacao/agenda)). O [Gerador de dados](/gerador) cria CPF, CNPJ, pessoas e empresas de teste ([página do manual](/documentacao/gerador)).
+
+### Desenvolvimento
+
+A [Fábrica](/fabrica) transforma um pedido ("adicionar um filtro na tela de pedidos") em código escrito, testado e revisado por agentes de IA, numa cópia separada do repositório, e só envia alguma coisa depois que você aprova ([página do manual](/documentacao/fabrica)). Os [Runbooks de dev](/dev-runbooks) executam comandos prontos de Git, Docker e Node com confirmação ([página do manual](/documentacao/dev-runbooks)).
 
 ### Deploy
 

@@ -22,23 +22,23 @@ export const NAV: NavGroup[] = [
     ],
   },
   {
+    id: 'tools',
+    label: tx({ en: 'Tools', pt: 'Ferramentas' }),
+    items: [
+      { path: '/maquina', label: tx({ en: 'Machine', pt: 'Máquina' }), hint: tx({ en: 'What is missing to get work done', pt: 'O que falta instalar para trabalhar' }), tag: 'setup', icon: Stethoscope },
+      { path: '/servicos', label: tx({ en: 'Local services', pt: 'Serviços locais' }), hint: tx({ en: 'Listening ports, containers, compose projects and your local applications', pt: 'Portas em escuta, containers, projetos compose e suas aplicações locais' }), tag: 'docker', icon: Server },
+      { path: '/perfil', label: tx({ en: 'Team profile', pt: 'Perfil de equipe' }), hint: tx({ en: 'Exports and imports the setup for someone else', pt: 'Exporta e importa a configuração para outra pessoa' }), tag: tx({ en: 'team', pt: 'time' }), icon: Users },
+      { path: '/conversores', label: tx({ en: 'Converters', pt: 'Conversores' }), hint: tx({ en: 'JWT, base64, URL, timestamp, UUID, cron, JSON, diff, regex, hash', pt: 'JWT, base64, URL, timestamp, UUID, cron, JSON, diff, regex, hash' }), tag: 'offline', icon: Wrench },
+      { path: '/agenda', label: tx({ en: 'Scheduled checks', pt: 'Verificações agendadas' }), hint: tx({ en: 'Alerts when a pipeline, certificate or pods change state', pt: 'Avisa quando pipeline, certificado ou pods mudam de estado' }), tag: tx({ en: 'alerts', pt: 'alertas' }), icon: BellRing },
+      { path: '/gerador', label: tx({ en: 'Data generator', pt: 'Gerador de dados' }), hint: tx({ en: 'Test CPF, CNPJ, person and company', pt: 'CPF, CNPJ, pessoa e empresa de teste' }), tag: tx({ en: 'test', pt: 'massa' }), icon: Dices },
+    ],
+  },
+  {
     id: 'development',
     label: tx({ en: 'Development', pt: 'Desenvolvimento' }),
     items: [
       { path: '/fabrica', label: tx({ en: 'Factory', pt: 'Fábrica' }), hint: tx({ en: 'Agent-driven development with worktrees and approval', pt: 'Desenvolvimento guiado por agentes com worktrees e aprovação' }), tag: tx({ en: 'agents', pt: 'agentes' }), icon: Factory },
       { path: '/dev-runbooks', label: tx({ en: 'Dev runbooks', pt: 'Runbooks de dev' }), hint: tx({ en: 'Local procedures and commands for day-to-day development', pt: 'Procedimentos e comandos locais para o dia a dia do dev' }), tag: 'local', icon: Terminal },
-    ],
-  },
-  {
-    id: 'tools',
-    label: tx({ en: 'Tools', pt: 'Ferramentas' }),
-    items: [
-      { path: '/maquina', label: tx({ en: 'Machine', pt: 'Máquina' }), hint: tx({ en: 'What is missing to get work done', pt: 'O que falta instalar para trabalhar' }), tag: 'setup', icon: Stethoscope },
-      { path: '/perfil', label: tx({ en: 'Team profile', pt: 'Perfil de equipe' }), hint: tx({ en: 'Exports and imports the setup for someone else', pt: 'Exporta e importa a configuração para outra pessoa' }), tag: tx({ en: 'team', pt: 'time' }), icon: Users },
-      { path: '/conversores', label: tx({ en: 'Converters', pt: 'Conversores' }), hint: tx({ en: 'JWT, base64, URL, timestamp, UUID, cron, JSON, diff, regex, hash', pt: 'JWT, base64, URL, timestamp, UUID, cron, JSON, diff, regex, hash' }), tag: 'offline', icon: Wrench },
-      { path: '/servicos', label: tx({ en: 'Local services', pt: 'Serviços locais' }), hint: tx({ en: 'Listening ports, containers, compose projects and your local applications', pt: 'Portas em escuta, containers, projetos compose e suas aplicações locais' }), tag: 'docker', icon: Server },
-      { path: '/agenda', label: tx({ en: 'Scheduled checks', pt: 'Verificações agendadas' }), hint: tx({ en: 'Alerts when a pipeline, certificate or pods change state', pt: 'Avisa quando pipeline, certificado ou pods mudam de estado' }), tag: tx({ en: 'alerts', pt: 'alertas' }), icon: BellRing },
-      { path: '/gerador', label: tx({ en: 'Data generator', pt: 'Gerador de dados' }), hint: tx({ en: 'Test CPF, CNPJ, person and company', pt: 'CPF, CNPJ, pessoa e empresa de teste' }), tag: tx({ en: 'test', pt: 'massa' }), icon: Dices },
     ],
   },
   {

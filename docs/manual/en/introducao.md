@@ -20,13 +20,13 @@ The menu on the left splits the screens into groups. Each group answers one kind
 
 Where you start. [Home](/) shows at a glance whether anything needs you: tasks in the Software Factory, the connected cluster, the machine and the local services ([manual page](/documentacao/inicio)). **Documentation** is this manual.
 
-### Development
-
-The [Factory](/fabrica) turns a request ("add a filter to the orders screen") into code written, tested and reviewed by AI agents, in a separate copy of the repository, and only sends anything after you approve ([manual page](/documentacao/fabrica)). [Dev runbooks](/dev-runbooks) run ready-made Git, Docker and Node commands with confirmation ([manual page](/documentacao/dev-runbooks)).
-
 ### Tools
 
 Everyday helpers for your machine. [Machine](/maquina) says what is missing to work and how to fix it ([manual page](/documentacao/maquina)). [Team profile](/perfil) takes your setup to someone else ([manual page](/documentacao/perfil)). [Converters](/conversores) handles JWT, Base64, dates, JSON and more ([manual page](/documentacao/conversores)). [Local services](/servicos) shows ports, containers and your local applications ([manual page](/documentacao/servicos)). [Scheduled checks](/agenda) warns you when a pipeline, certificate or pod changes state ([manual page](/documentacao/agenda)). [Data generator](/gerador) creates test CPFs, CNPJs, people and companies ([manual page](/documentacao/gerador)).
+
+### Development
+
+The [Factory](/fabrica) turns a request ("add a filter to the orders screen") into code written, tested and reviewed by AI agents, in a separate copy of the repository, and only sends anything after you approve ([manual page](/documentacao/fabrica)). [Dev runbooks](/dev-runbooks) run ready-made Git, Docker and Node commands with confirmation ([manual page](/documentacao/dev-runbooks)).
 
 ### Deploy
 

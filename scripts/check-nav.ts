@@ -6,19 +6,19 @@ import { NAV, findNav } from '../src/app/nav.ts'
 
 // Groups by their stable id: labels follow the language (English here, the default outside a browser)
 const layout = Object.fromEntries(NAV.map(g => [g.id, g.items.map(i => i.path)]))
-assert.deepEqual(Object.keys(layout), ['overview', 'development', 'tools', 'deploy', 'kubernetes', 'ai'])
+assert.deepEqual(Object.keys(layout), ['overview', 'tools', 'development', 'deploy', 'kubernetes', 'ai'])
 assert.deepEqual(layout, {
   overview: ['/', '/documentacao'],
+  tools: ['/maquina', '/servicos', '/perfil', '/conversores', '/agenda', '/gerador'],
   development: ['/fabrica', '/dev-runbooks'],
-  tools: ['/maquina', '/perfil', '/conversores', '/servicos', '/agenda', '/gerador'],
   deploy: ['/repositorios', '/pipelines', '/revisao', '/vulnerabilidades'],
   kubernetes: ['/cluster', '/recursos', '/logs', '/incidente', '/comparar', '/upgrade', '/runbooks', '/performance'],
   ai: ['/catalogo', '/analise', '/playbooks'],
 })
-assert.deepEqual(NAV.map(g => g.label), ['Overview', 'Development', 'Tools', 'Deploy', 'Kubernetes', 'AI'])
+assert.deepEqual(NAV.map(g => g.label), ['Overview', 'Tools', 'Development', 'Deploy', 'Kubernetes', 'AI'])
 
 const tools = NAV.find(g => g.id === 'tools')!.items
-assert.deepEqual(tools.map(i => i.label), ['Machine', 'Team profile', 'Converters', 'Local services', 'Scheduled checks', 'Data generator'])
+assert.deepEqual(tools.map(i => i.label), ['Machine', 'Local services', 'Team profile', 'Converters', 'Scheduled checks', 'Data generator'])
 
 const paths = NAV.flatMap(g => g.items.map(i => i.path))
 assert.equal(new Set(paths).size, paths.length, 'rota repetida no menu')
@@ -36,8 +36,8 @@ for (const expected of moved) {
   assert.equal(findNav(`${expected.path}/sub`)?.item.path, expected.path, 'subrota cai no mesmo item')
 }
 
-// A CommandPalette monta "Todas as telas" assim; Máquina e Perfil vêm antes do resto de Ferramentas.
+// A CommandPalette monta "Todas as telas" assim; Máquina e Serviços locais vêm antes do resto de Ferramentas.
 const palette = NAV.flatMap(g => g.items.map(item => ({ path: item.path, group: g.id }))).filter(e => e.group === 'tools')
-assert.deepEqual(palette.slice(0, 2).map(e => e.path), ['/maquina', '/perfil'])
+assert.deepEqual(palette.slice(0, 2).map(e => e.path), ['/maquina', '/servicos'])
 
 console.log(`check-nav: ok (${paths.length} itens)`)
