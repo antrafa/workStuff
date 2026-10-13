@@ -592,16 +592,13 @@ kbd {
   place-items: center;
   width: 26px;
   height: 26px;
-  border-radius: var(--r);
-  border: 1px solid var(--line-hi);
+  border: 0;
   background: transparent;
   color: var(--muted);
   cursor: pointer;
 }
 .page-help-icon:hover {
   color: var(--signal);
-  border-color: var(--signal-line);
-  background: var(--signal-soft);
 }
 .page-help-link {
   border: 0;
