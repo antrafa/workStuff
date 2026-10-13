@@ -183,6 +183,12 @@ function Sidebar({ currentGroup, favorites, onSearch }: SidebarProps) {
   return (
     <aside className="sidebar">
       <Link to="/" className="brand">
+        {/* The launcher icon (public/favicon.svg), drawn in the accent chosen in Settings. */}
+        <svg className="brand-icon" viewBox="0 0 32 32" width={26} height={26} aria-hidden="true">
+          <rect width="32" height="32" rx="7" fill="var(--signal)" />
+          <path d="M8.5 10.5 14 16l-5.5 5.5" fill="none" stroke="var(--signal-ink)" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
+          <path d="M16.5 22h7" stroke="var(--signal-ink)" strokeWidth="3" strokeLinecap="round" />
+        </svg>
         <span className="brand-name display">workStuff</span>
       </Link>
       <button className="nav-search" onClick={onSearch} title={tx({ en: 'Go to any screen by its name or what it does', pt: 'Ir para qualquer tela pelo nome ou pelo que ela faz' })}>

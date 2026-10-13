@@ -18,6 +18,11 @@
   padding: 18px 18px 14px;
   text-decoration: none;
 }
+.brand-icon {
+  flex: none;
+  margin-right: 10px;
+  border-radius: 6px;
+}
 .brand-name {
   font-size: 19px;
 }
