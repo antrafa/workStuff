@@ -1,4 +1,4 @@
-import { ExternalLink, FileText, Sparkles, Workflow } from 'lucide-react'
+import { ArrowDownUp, ExternalLink, FileText, Sparkles, Workflow } from 'lucide-react'
 import { useState } from 'react'
 import { Async, Empty, SkeletonRows } from '@/ui'
 import { relTime } from '@/lib/format'
@@ -6,6 +6,7 @@ import { useAsync } from '@/lib/useAsync'
 import { usePolling } from '@/features/cluster/usePolling'
 import { ExplainModal, LogModal } from './JobModals'
 import { STATUS, duration, fetchJobs, fetchPipelines, type Job, type Pipeline, type Watch } from './api'
+import { sortJobs, type JobSort, type JobSortKey } from './sort'
 import { tx } from '@/lib/i18n'
 
 // Only one project is open at a time, so its detail can poll faster than the list.
@@ -52,6 +53,18 @@ function Jobs({ watch, pipeline }: { watch: Watch; pipeline: Pipeline }) {
   usePolling(jobs.reload, true, DETAIL_POLL_MS)
   const [explaining, setExplaining] = useState<Job | null>(null)
   const [reading, setReading] = useState<Job | null>(null)
+  const [sort, setSort] = useState<JobSort>({ key: 'stage', desc: false })
+  const sortBy = (key: JobSortKey) => setSort(s => ({ key, desc: s.key === key && !s.desc }))
+  const th = (key: JobSortKey, label: string, className = '') => (
+    <th
+      className={`sortable ${className}`}
+      onClick={() => sortBy(key)}
+      aria-sort={sort.key === key ? (sort.desc ? 'descending' : 'ascending') : 'none'}
+      title={tx({ en: `Sort the jobs by ${label.toLowerCase()}; click again to reverse`, pt: `Ordena os jobs por ${label.toLowerCase()}; clique de novo para inverter` })}
+    >
+      {label} {sort.key === key && <ArrowDownUp size={10} />}
+    </th>
+  )
 
   return (
     <div className="stack" style={{ ['--gap' as string]: '10px' }}>
@@ -67,15 +80,15 @@ function Jobs({ watch, pipeline }: { watch: Watch; pipeline: Pipeline }) {
             <table className="table">
               <thead>
                 <tr>
-                  <th>Job</th>
-                  <th>{tx({ en: 'Stage', pt: 'Estágio' })}</th>
-                  <th>Status</th>
-                  <th className="num">{tx({ en: 'Duration', pt: 'Duração' })}</th>
+                  {th('name', 'Job')}
+                  {th('stage', tx({ en: 'Stage', pt: 'Estágio' }))}
+                  {th('status', 'Status')}
+                  {th('duration', tx({ en: 'Duration', pt: 'Duração' }), 'num')}
                   <th />
                 </tr>
               </thead>
               <tbody>
-                {data.map(j => (
+                {sortJobs(data, sort).map(j => (
                   <tr key={j.id}>
                     <td>
                       <div className="mono">{j.name}</div>

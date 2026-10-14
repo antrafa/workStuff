@@ -1,5 +1,5 @@
 import './pipelines.css'
-import { ChevronDown, ChevronRight, ExternalLink, Plus, RotateCw, Trash2, Workflow } from 'lucide-react'
+import { ArrowDownUp, ChevronDown, ChevronRight, ExternalLink, Plus, RotateCw, Trash2, Workflow } from 'lucide-react'
 import { Fragment, useState } from 'react'
 import { Link } from 'react-router'
 import { Async, ConfirmModal, Empty, Page, SkeletonRows, useToast } from '@/ui'
@@ -10,6 +10,7 @@ import { fetchSources } from '@/features/repos/api'
 import { FollowModal } from './FollowModal'
 import { PipelineDetail } from './PipelineDetail'
 import { STATUS, duration, fetchWatches, removeWatch, type Watch } from './api'
+import { byName, compareWatches, type Sort, type SortKey } from './sort'
 import { tx } from '@/lib/i18n'
 
 export default function PipelinesPage() {
@@ -19,6 +20,7 @@ export default function PipelinesPage() {
   const [adding, setAdding] = useState(false)
   const [removing, setRemoving] = useState<Watch | null>(null)
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
+  const [sort, setSort] = useState<Sort>({ key: 'project', desc: false })
   const toast = useToast()
   usePolling(watches.reload, !adding)
 
@@ -29,6 +31,18 @@ export default function PipelinesPage() {
     if (!next.delete(key)) next.add(key)
     return next
   })
+
+  const sortBy = (key: SortKey) => setSort(s => ({ key, desc: s.key === key && !s.desc }))
+  const th = (key: SortKey, label: string, className = '') => (
+    <th
+      className={`sortable ${className}`}
+      onClick={() => sortBy(key)}
+      aria-sort={sort.key === key ? (sort.desc ? 'descending' : 'ascending') : 'none'}
+      title={tx({ en: `Sort each group's projects by ${label.toLowerCase()}; click again to reverse`, pt: `Ordena os projetos de cada grupo por ${label.toLowerCase()}; clique de novo para inverter` })}
+    >
+      {label} {sort.key === key && <ArrowDownUp size={10} />}
+    </th>
+  )
 
   const remove = async (w: Watch) => {
     try {
@@ -82,15 +96,15 @@ export default function PipelinesPage() {
                 <table className="table">
                   <thead>
                     <tr>
-                      <th>{tx({ en: 'Project', pt: 'Projeto' })}</th>
-                      <th>{tx({ en: 'Latest pipeline', pt: 'Última pipeline' })}</th>
-                      <th>Branch</th>
-                      <th>{tx({ en: 'When', pt: 'Quando' })}</th>
-                      <th className="num">{tx({ en: 'Duration', pt: 'Duração' })}</th>
+                      {th('project', tx({ en: 'Project', pt: 'Projeto' }))}
+                      {th('status', tx({ en: 'Latest pipeline', pt: 'Última pipeline' }))}
+                      {th('ref', 'Branch')}
+                      {th('when', tx({ en: 'When', pt: 'Quando' }))}
+                      {th('duration', tx({ en: 'Duration', pt: 'Duração' }), 'num')}
                       <th />
                     </tr>
                   </thead>
-                  {groupByParent(data).map(g => {
+                  {groupByParent(data, sort).map(g => {
                     const open = expanded.has(g.key)
                     return (
                       <tbody key={g.key}>
@@ -170,9 +184,9 @@ function WatchRow({ watch: w, selected, onSelect, onRemove }: RowProps) {
 
 type WatchGroup = { key: string; name: string; parent: string; sourceLabel: string | null; watches: Watch[] }
 
-// Projects of the same parent group (e.g. ".../environments/team-a") side by side, groups and
-// projects in name order.
-function groupByParent(watches: Watch[]): WatchGroup[] {
+// Projects of the same parent group (e.g. ".../environments/team-a") side by side, groups in
+// name order and projects in the order chosen in the header.
+function groupByParent(watches: Watch[], sort: Sort): WatchGroup[] {
   const groups = new Map<string, WatchGroup>()
   for (const w of watches) {
     const parent = w.fullPath.split('/').slice(0, -1).join('/')
@@ -181,8 +195,7 @@ function groupByParent(watches: Watch[]): WatchGroup[] {
     g.watches.push(w)
     groups.set(key, g)
   }
-  const byName = (a: string, b: string) => a.localeCompare(b, undefined, { sensitivity: 'base' })
-  for (const g of groups.values()) g.watches.sort((a, b) => byName(a.fullPath, b.fullPath))
+  for (const g of groups.values()) g.watches.sort(compareWatches(sort))
   return [...groups.values()].sort((a, b) => byName(a.name, b.name) || byName(a.parent, b.parent))
 }
 

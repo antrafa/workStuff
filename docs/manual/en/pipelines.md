@@ -31,7 +31,8 @@ What must be ready:
 | **Project list** | Followed projects grouped by the group they live in (for example, `team-a` and `team-b`). The group line shows how many projects it has, how many failed or are running and the connection (hover it to see the full path of the group); groups start closed: click the line to expand or collapse it. Each project row shows the **Latest pipeline** (its status), the **Branch**, **When** it ran and the **Duration**. |
 | **Refresh** | Reads everything again now. The list also refreshes on its own every 30 seconds while the tab is open, and an open project (its pipelines and jobs) every 10 seconds. |
 | **Follow project** | Adds a project to the list. |
-| **Project detail** | Opens right under the row you click: the recent pipelines and the jobs of the chosen one. Click the row again to close it. |
+| **Table header** | Click a column name to sort each group's projects by it; click again to reverse. **Latest pipeline** puts first what needs attention (failed, running, pending) and **When** starts with the most recent. A project with no pipeline always stays last. |
+| **Project detail** | Opens right under the row you click: the recent pipelines and the jobs of the chosen one. Click the row again to close it. Click a column of the jobs table to sort it; **Stage** is the order the pipeline runs them in (the default) and **Status** puts failures first. |
 
 The status of a pipeline or a job:
 
