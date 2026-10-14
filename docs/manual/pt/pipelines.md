@@ -29,7 +29,7 @@ O que precisa estar pronto:
 | Parte | O que mostra |
 |---|---|
 | **Lista de projetos** | Os projetos acompanhados, agrupados pelo grupo em que estão (por exemplo, `team-a` e `team-b`). A linha do grupo mostra quantos projetos ele tem, quantos falharam ou estão rodando e a conexão (pare o mouse em cima para ver o caminho completo do grupo); os grupos começam fechados: clique na linha para abrir ou recolher. Cada linha de projeto mostra a **Última pipeline** (o status), a **Branch**, **Quando** ela rodou e a **Duração**. |
-| **Atualizar** | Lê tudo de novo agora. A lista também se atualiza sozinha a cada 30 segundos enquanto a aba está aberta. |
+| **Atualizar** | Lê tudo de novo agora. A lista também se atualiza sozinha a cada 30 segundos enquanto a aba está aberta, e o projeto aberto (pipelines e jobs) a cada 10 segundos. |
 | **Acompanhar projeto** | Adiciona um projeto à lista. |
 | **Detalhe do projeto** | Abre logo abaixo da linha em que você clica: as pipelines recentes e os jobs da escolhida. Clique na linha de novo para fechar. |
 

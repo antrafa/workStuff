@@ -29,7 +29,7 @@ What must be ready:
 | Part | What it shows |
 |---|---|
 | **Project list** | Followed projects grouped by the group they live in (for example, `team-a` and `team-b`). The group line shows how many projects it has, how many failed or are running and the connection (hover it to see the full path of the group); groups start closed: click the line to expand or collapse it. Each project row shows the **Latest pipeline** (its status), the **Branch**, **When** it ran and the **Duration**. |
-| **Refresh** | Reads everything again now. The list also refreshes on its own every 30 seconds while the tab is open. |
+| **Refresh** | Reads everything again now. The list also refreshes on its own every 30 seconds while the tab is open, and an open project (its pipelines and jobs) every 10 seconds. |
 | **Follow project** | Adds a project to the list. |
 | **Project detail** | Opens right under the row you click: the recent pipelines and the jobs of the chosen one. Click the row again to close it. |
 

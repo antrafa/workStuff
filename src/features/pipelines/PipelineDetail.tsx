@@ -3,13 +3,18 @@ import { useState } from 'react'
 import { Async, Empty, SkeletonRows } from '@/ui'
 import { relTime } from '@/lib/format'
 import { useAsync } from '@/lib/useAsync'
+import { usePolling } from '@/features/cluster/usePolling'
 import { ExplainModal, LogModal } from './JobModals'
 import { STATUS, duration, fetchJobs, fetchPipelines, type Job, type Pipeline, type Watch } from './api'
 import { tx } from '@/lib/i18n'
 
+// Only one project is open at a time, so its detail can poll faster than the list.
+const DETAIL_POLL_MS = 10_000
+
 // A project's recent pipelines and the jobs of the chosen one (the latest by default), shown under its row.
 export function PipelineDetail({ watch }: { watch: Watch }) {
   const pipelines = useAsync(() => fetchPipelines(watch.id), [watch.id])
+  usePolling(pipelines.reload, true, DETAIL_POLL_MS)
   const [pipelineId, setPipelineId] = useState<string | null>(null)
   const current = pipelines.data?.find(p => p.id === pipelineId) ?? pipelines.data?.[0] ?? null
 
@@ -44,6 +49,7 @@ const dotFor = (p: Pipeline) => (p.status === 'success' ? 'dot-ok' : p.status ==
 
 function Jobs({ watch, pipeline }: { watch: Watch; pipeline: Pipeline }) {
   const jobs = useAsync(() => fetchJobs(watch.id, pipeline.id), [watch.id, pipeline.id])
+  usePolling(jobs.reload, true, DETAIL_POLL_MS)
   const [explaining, setExplaining] = useState<Job | null>(null)
   const [reading, setReading] = useState<Job | null>(null)
 
