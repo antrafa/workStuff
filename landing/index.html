@@ -1,0 +1,361 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>workStuff — your workstation, clusters and AI agents</title>
+<meta name="description" content="A local panel for day-to-day developer and DevOps work: workstation checks, repositories, Kubernetes and read-only AI agents.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%235b9dff'/%3E%3Cpath d='M8.5 10.5 14 16l-5.5 5.5' fill='none' stroke='%23141511' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'/%3E%3Cpath d='M16.5 22h7' stroke='%23141511' stroke-width='3' stroke-linecap='round'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+/* Dark, like the panel itself, so the screenshot sits in its own light. Sober:
+   one accent (the icon's blue), generous space, no heavy outlines. Sections are
+   told apart by space and a slightly lighter surface. */
+:root {
+  --fundo: #0e1014;
+  --superficie: #15181e;
+  --superficie-2: #1b1f27;
+  --texto: #eceef3;
+  --texto-2: #a3aab8;
+  --texto-3: #727a8a;
+  --linha: #252a33;
+  --azul: #5b9dff;
+  --azul-escuro: #4a8af0;
+  --azul-fundo: rgba(91,157,255,.12);
+  --ok: #4ade80;
+  --nao: #f87171;
+  --fonte: "Plus Jakarta Sans", -apple-system, "Segoe UI", system-ui, sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, Menlo, Consolas, monospace;
+}
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; scroll-padding-top: 72px; }
+body { margin: 0; background: var(--fundo); color: var(--texto); font-family: var(--fonte); font-size: 16.5px; line-height: 1.6; -webkit-font-smoothing: antialiased; overflow-x: hidden; }
+a { color: inherit; text-decoration: none; }
+code, pre { font-family: var(--mono); font-size: .86em; }
+:focus-visible { outline: 2px solid var(--azul); outline-offset: 3px; border-radius: 4px; }
+img { max-width: 100%; height: auto; display: block; }
+.largura { max-width: 1160px; margin: 0 auto; padding: 0 24px; }
+svg.i { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; flex: none; }
+
+/* nav */
+.nav { position: sticky; top: 0; z-index: 10; background: rgba(14,16,20,.82); backdrop-filter: saturate(160%) blur(12px); -webkit-backdrop-filter: saturate(160%) blur(12px); border-bottom: 1px solid transparent; }
+.nav.scrolled { border-bottom-color: var(--linha); }
+.nav .largura { display: flex; align-items: center; gap: 32px; height: 64px; }
+.marca { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 17px; letter-spacing: -.01em; }
+.marca svg { width: 28px; height: 28px; }
+.nav nav { display: flex; gap: 28px; font-size: 15px; color: var(--texto-2); }
+.nav nav a:hover { color: var(--texto); }
+.nav .acao { margin-left: auto; }
+.botao { display: inline-flex; align-items: center; gap: 8px; height: 44px; padding: 0 20px; border-radius: 10px; background: var(--azul); color: #0b1220; font-weight: 600; font-size: 15.5px; border: 0; cursor: pointer; font-family: inherit; transition: background .15s; }
+.botao:hover { background: var(--azul-escuro); }
+.botao.secundario { background: transparent; color: var(--texto); box-shadow: inset 0 0 0 1px var(--linha); }
+.botao.secundario:hover { background: var(--superficie); }
+.nav .botao { height: 38px; padding: 0 16px; font-size: 14.5px; }
+
+/* hero: text left, screenshot bleeding off the right edge */
+.hero { position: relative; padding: 96px 0 112px; overflow: hidden; }
+.hero::before { content: ""; position: absolute; inset: -20% -10% auto 35%; height: 120%; background: radial-gradient(closest-side, rgba(91,157,255,.18), transparent 70%); pointer-events: none; }
+.hero .largura { position: relative; display: grid; grid-template-columns: 440px minmax(0, 1fr); gap: 56px; align-items: center; }
+.hero figure { margin: 0; min-width: 0; }
+.selo { display: inline-flex; align-items: center; gap: 8px; padding: 6px 12px; border-radius: 999px; background: var(--azul-fundo); color: var(--azul); font-size: 13.5px; font-weight: 500; }
+.selo i { width: 6px; height: 6px; border-radius: 50%; background: var(--azul); }
+.hero h1 { margin: 22px 0 0; font-size: clamp(36px, 4.6vw, 54px); line-height: 1.08; font-weight: 700; letter-spacing: -.035em; text-wrap: balance; }
+.hero .lede { margin: 20px 0 0; font-size: 18.5px; color: var(--texto-2); text-wrap: pretty; }
+.hero .acoes { display: flex; gap: 12px; margin-top: 32px; flex-wrap: wrap; }
+.tela { width: 880px; max-width: none; border-radius: 14px; overflow: hidden; background: #0a0b0d; box-shadow: 0 0 0 1px rgba(255,255,255,.08), 0 30px 80px -20px rgba(0,0,0,.7), 0 0 120px -40px rgba(91,157,255,.35); }
+.tela .barra { display: flex; align-items: center; gap: 7px; height: 36px; padding: 0 14px; background: #16181d; border-bottom: 1px solid #22252c; }
+.tela .barra i { width: 11px; height: 11px; border-radius: 50%; background: #34373f; }
+.tela .barra span { margin-left: 16px; font-size: 12.5px; color: #7d828e; font-family: var(--mono); }
+.legenda { margin: 14px 0 0; font-size: 13.5px; color: var(--texto-3); }
+
+/* sections */
+.secao { padding: 104px 0; }
+.secao.clara { background: var(--superficie); }
+.cabeca { max-width: 640px; margin-bottom: 56px; }
+.cabeca h2 { margin: 0; font-size: clamp(28px, 3.4vw, 40px); line-height: 1.12; font-weight: 700; letter-spacing: -.03em; text-wrap: balance; }
+.cabeca p { margin: 14px 0 0; font-size: 18px; color: var(--texto-2); }
+
+/* trust row */
+.confianca { border-top: 1px solid var(--linha); border-bottom: 1px solid var(--linha); padding: 36px 0; }
+.confianca ul { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(4, 1fr); gap: 32px; }
+.confianca li { display: flex; gap: 12px; font-size: 14.5px; color: var(--texto-2); }
+.confianca li svg.i { color: var(--azul); margin-top: 3px; }
+.confianca li b { display: block; color: var(--texto); font-weight: 600; font-size: 15px; }
+
+/* features */
+.recursos { display: grid; grid-template-columns: repeat(3, 1fr); gap: 48px 40px; }
+.recurso svg.i { width: 22px; height: 22px; color: var(--azul); }
+.recurso h3 { margin: 14px 0 6px; font-size: 17px; font-weight: 600; letter-spacing: -.01em; }
+.recurso p { margin: 0; color: var(--texto-2); font-size: 15.5px; }
+.mais { margin: 56px 0 0; padding-top: 28px; border-top: 1px solid var(--linha); font-size: 15px; color: var(--texto-2); }
+.mais b { color: var(--texto); font-weight: 600; }
+
+/* security */
+.dupla { display: grid; grid-template-columns: 1fr 1.1fr; gap: 72px; align-items: start; }
+.dupla .cabeca { margin-bottom: 0; }
+.regras { list-style: none; margin: 32px 0 0; padding: 0; }
+.regras li { display: flex; gap: 12px; padding: 14px 0; border-top: 1px solid var(--linha); color: var(--texto-2); font-size: 15.5px; }
+.regras li svg.i { color: var(--ok); margin-top: 3px; }
+.regras li b { color: var(--texto); font-weight: 600; }
+.registro { background: var(--fundo); border-radius: 14px; box-shadow: 0 0 0 1px var(--linha), 0 20px 48px -24px rgba(0,0,0,.6); overflow: hidden; }
+.registro h3 { margin: 0; padding: 18px 22px; font-size: 15px; font-weight: 600; border-bottom: 1px solid var(--linha); }
+.registro h3 span { display: block; font-weight: 400; color: var(--texto-2); font-size: 13.5px; margin-top: 2px; }
+.linha-reg { display: grid; grid-template-columns: 1fr auto; gap: 4px 16px; padding: 16px 22px; }
+.linha-reg + .linha-reg { border-top: 1px solid var(--linha); }
+.linha-reg code { color: var(--texto); font-size: 13.5px; word-break: break-all; }
+.linha-reg p { grid-column: 1 / -1; margin: 0; font-size: 14px; color: var(--texto-2); }
+.veredito { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 600; white-space: nowrap; }
+.veredito svg.i { width: 15px; height: 15px; }
+.veredito.sim { color: var(--ok); }
+.veredito.pede { color: var(--azul); }
+.veredito.nao { color: var(--nao); }
+
+/* install */
+.passos { list-style: none; counter-reset: p; margin: 32px 0 0; padding: 0; }
+.passos li { counter-increment: p; display: grid; grid-template-columns: 28px 1fr; gap: 12px; padding: 10px 0; color: var(--texto-2); font-size: 15.5px; }
+.passos li::before { content: counter(p); width: 24px; height: 24px; border-radius: 50%; background: var(--azul-fundo); color: var(--azul); font-size: 13px; font-weight: 600; display: grid; place-items: center; margin-top: 1px; }
+.passos li b { color: var(--texto); font-weight: 600; }
+.abas { display: inline-flex; gap: 4px; padding: 4px; border-radius: 10px; background: var(--superficie); box-shadow: inset 0 0 0 1px var(--linha); }
+.abas button { font-family: inherit; font-size: 14px; font-weight: 500; border: 0; background: transparent; color: var(--texto-2); padding: 7px 14px; border-radius: 7px; cursor: pointer; }
+.abas button[aria-selected="true"] { background: var(--superficie-2); color: var(--texto); box-shadow: 0 0 0 1px var(--linha); }
+.painel[hidden] { display: none; }
+.comando { margin-top: 16px; border-radius: 12px; background: #090a0d; box-shadow: 0 0 0 1px var(--linha); overflow: hidden; }
+.comando .cab { display: flex; align-items: center; justify-content: space-between; padding: 10px 12px 10px 18px; border-bottom: 1px solid var(--linha); font-size: 13px; color: var(--texto-3); }
+.copiar { font-family: inherit; font-size: 13px; font-weight: 500; color: var(--texto); background: var(--superficie-2); border: 0; border-radius: 7px; padding: 6px 12px; cursor: pointer; }
+.copiar:hover { background: #262b35; }
+.comando pre { margin: 0; padding: 18px; white-space: pre-wrap; word-break: break-all; font-size: 14px; line-height: 1.7; color: var(--texto); }
+.nota { margin: 14px 0 0; font-size: 14.5px; color: var(--texto-2); }
+.nota code { color: var(--texto); }
+.requisitos { list-style: none; margin: 28px 0 0; padding: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 14px 28px; font-size: 14.5px; color: var(--texto-2); }
+.requisitos b { display: block; color: var(--texto); font-weight: 600; font-size: 15px; }
+
+/* data */
+.arvore { margin: 0; padding: 24px 26px; background: var(--fundo); border-radius: 14px; box-shadow: 0 0 0 1px var(--linha); font-size: 13.5px; line-height: 1.9; overflow-x: auto; color: var(--texto); }
+.arvore i { font-style: normal; color: var(--texto-3); }
+.dados dl { margin: 32px 0 0; }
+.dados dt { font-weight: 600; margin-top: 18px; }
+.dados dd { margin: 2px 0 0; color: var(--texto-2); font-size: 15.5px; }
+
+.rodape { padding: 32px 0 48px; border-top: 1px solid var(--linha); font-size: 14.5px; color: var(--texto-2); }
+.rodape .largura { display: flex; gap: 28px; flex-wrap: wrap; align-items: center; }
+.rodape a:hover { color: var(--texto); }
+
+@media (max-width: 1080px) {
+  .hero .largura { grid-template-columns: 1fr; }
+}
+@media (max-width: 1000px) {
+  .nav nav { display: none; }
+  .tela { width: 100%; }
+  .confianca ul { grid-template-columns: 1fr 1fr; }
+  .recursos { grid-template-columns: 1fr 1fr; }
+  .dupla { grid-template-columns: 1fr; gap: 48px; }
+}
+@media (max-width: 600px) {
+  .hero { padding: 56px 0 72px; }
+  .confianca ul, .recursos, .requisitos { grid-template-columns: 1fr; }
+  .secao { padding: 72px 0; }
+}
+@media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } .botao { transition: none; } }
+</style>
+</head>
+<body>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="lock" viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></symbol>
+  <symbol id="eye" viewBox="0 0 24 24"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></symbol>
+  <symbol id="hand" viewBox="0 0 24 24"><path d="M9 11V6a2 2 0 0 1 4 0v5"/><path d="M13 10V4a2 2 0 0 1 4 0v7"/><path d="M17 8a2 2 0 0 1 4 0v6a8 8 0 0 1-8 8h-1a8 8 0 0 1-6.6-3.5L3 15.4a2 2 0 0 1 3.2-2.4L9 16V8a2 2 0 0 1 4 0"/></symbol>
+  <symbol id="folder" viewBox="0 0 24 24"><path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.7-.9l-.8-1.2A2 2 0 0 0 7.9 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/></symbol>
+  <symbol id="steth" viewBox="0 0 24 24"><path d="M4.8 2.3A.3.3 0 1 0 5 2H4a2 2 0 0 0-2 2v5a6 6 0 0 0 6 6 6 6 0 0 0 6-6V4a2 2 0 0 0-2-2h-1a.2.2 0 1 0 .3.3"/><path d="M8 15v1a6 6 0 0 0 6 6 6 6 0 0 0 6-6v-4"/><circle cx="20" cy="10" r="2"/></symbol>
+  <symbol id="branch" viewBox="0 0 24 24"><line x1="6" x2="6" y1="3" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/></symbol>
+  <symbol id="flow" viewBox="0 0 24 24"><rect width="8" height="8" x="3" y="3" rx="2"/><path d="M7 11v4a2 2 0 0 0 2 2h4"/><rect width="8" height="8" x="13" y="13" rx="2"/></symbol>
+  <symbol id="pr" viewBox="0 0 24 24"><circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><path d="M13 6h3a2 2 0 0 1 2 2v7"/><line x1="6" x2="6" y1="9" y2="21"/></symbol>
+  <symbol id="cpu" viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="2"/><rect x="9" y="9" width="6" height="6"/><path d="M9 1v3M15 1v3M9 20v3M15 20v3M20 9h3M20 14h3M1 9h3M1 14h3"/></symbol>
+  <symbol id="history" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l4 2"/></symbol>
+  <symbol id="check" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></symbol>
+  <symbol id="x" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></symbol>
+  <symbol id="user" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></symbol>
+</svg>
+
+<header class="nav" id="nav">
+  <div class="largura">
+    <a class="marca" href="#"><svg viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="7" fill="#5b9dff"/><path d="M8.5 10.5 14 16l-5.5 5.5" fill="none" stroke="#141511" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><path d="M16.5 22h7" stroke="#141511" stroke-width="3" stroke-linecap="round"/></svg>workStuff</a>
+    <nav>
+      <a href="#features">Features</a>
+      <a href="#security">Security</a>
+      <a href="#data">Your data</a>
+    </nav>
+    <a class="botao acao" href="#install">Install</a>
+  </div>
+</header>
+
+<section class="hero">
+  <div class="largura">
+    <div>
+      <span class="selo"><i></i>Runs entirely on localhost</span>
+      <h1>Your workstation, repos, clusters and AI agents in one panel.</h1>
+      <p class="lede">workStuff checks that your machine is ready, clones repositories, follows pipelines and pods, and runs AI coding agents in read-only mode. It drives the CLIs you already have.</p>
+      <div class="acoes">
+        <a class="botao" href="#install">Install workStuff</a>
+        <a class="botao secundario" href="https://github.com/antrafa/workStuff">View on GitHub</a>
+      </div>
+    </div>
+    <figure>
+      <div class="tela">
+        <div class="barra"><i></i><i></i><i></i><span>localhost:5180/maquina</span></div>
+        <img src="panel.webp" width="2880" height="1800" alt="The workStuff Machine page: 32 items ok, no blockers, 2 warnings with a suggested fix for each.">
+      </div>
+      <figcaption class="legenda">The Machine page, checking a real workstation.</figcaption>
+    </figure>
+  </div>
+</section>
+
+<section class="confianca" aria-label="Why you can trust it">
+  <div class="largura">
+    <ul>
+      <li><svg class="i"><use href="#lock"/></svg><span><b>Local only</b>The API listens on 127.0.0.1 and refuses other origins.</span></li>
+      <li><svg class="i"><use href="#eye"/></svg><span><b>Read-only AI</b>No agent runs with auto-approve.</span></li>
+      <li><svg class="i"><use href="#hand"/></svg><span><b>You approve changes</b>A cluster write waits for your click.</span></li>
+      <li><svg class="i"><use href="#folder"/></svg><span><b>Your data, one folder</b>Everything lives in ~/.workstuff.</span></li>
+    </ul>
+  </div>
+</section>
+
+<section class="secao" id="features">
+  <div class="largura">
+    <div class="cabeca">
+      <h2>From a fresh laptop to a cluster incident.</h2>
+      <p>25 pages in six groups. Ctrl K jumps to any of them by name or by what it does.</p>
+    </div>
+    <div class="recursos">
+      <div class="recurso"><svg class="i"><use href="#steth"/></svg><h3>Machine</h3><p>What is missing to get work done, with a suggested fix. Nothing is installed until you click.</p></div>
+      <div class="recurso"><svg class="i"><use href="#branch"/></svg><h3>Repositories</h3><p>Browse GitLab or GitHub groups and clone into a workspace that mirrors the hierarchy.</p></div>
+      <div class="recurso"><svg class="i"><use href="#flow"/></svg><h3>Pipelines</h3><p>The latest CI run of every project you follow. A failed job gets explained by AI.</p></div>
+      <div class="recurso"><svg class="i"><use href="#pr"/></svg><h3>Review before MR</h3><p>An AI agent reads your branch diff and lists problems by severity, with file and line.</p></div>
+      <div class="recurso"><svg class="i"><use href="#cpu"/></svg><h3>Cluster Doctor</h3><p>An agent investigates the cluster with kubectl. Every change it suggests waits for you.</p></div>
+      <div class="recurso"><svg class="i"><use href="#history"/></svg><h3>Incident timeline</h3><p>Events, restarts and rollouts of a namespace in one timeline, plus a post-mortem draft.</p></div>
+    </div>
+    <p class="mais">Also: <b>Local services</b>, <b>Scheduled checks</b>, <b>Vulnerabilities</b>, <b>Compare environments</b>, <b>Upgrade</b>, <b>Performance</b>, the agent-driven <b>Factory</b> and the <b>Catalog</b> of skills and rules for Claude Code, Codex, Gemini and OpenCode.</p>
+  </div>
+</section>
+
+<section class="secao clara" id="security">
+  <div class="largura dupla">
+    <div>
+      <div class="cabeca">
+        <h2>The agents read. You decide what changes.</h2>
+        <p>workStuff runs commands on your machine and against real clusters, so every default leans toward doing less.</p>
+      </div>
+      <ul class="regras">
+        <li><svg class="i"><use href="#check"/></svg><span><b>Read-only AI.</b> Claude gets only Read, Grep and Glob; Codex runs in its read-only sandbox; Antigravity runs inside bubblewrap.</span></li>
+        <li><svg class="i"><use href="#check"/></svg><span><b>Clusters by risk.</b> PRO, and any kubeconfig it cannot classify, never accepts a write. DES never deletes.</span></li>
+        <li><svg class="i"><use href="#check"/></svg><span><b>Scoped access.</b> The agent gets a temporary kubeconfig with only the context you picked.</span></li>
+      </ul>
+    </div>
+    <div class="registro" aria-label="Commands a Cluster Doctor agent tried, and what happened">
+      <h3>What the Cluster Doctor agent tried<span>Every command is checked before it runs, and logged.</span></h3>
+      <div class="linha-reg"><code>kubectl logs api-6d8f --previous</code><span class="veredito sim"><svg class="i"><use href="#check"/></svg>ran</span><p>Reading is free.</p></div>
+      <div class="linha-reg"><code>kubectl get pods | grep api</code><span class="veredito nao"><svg class="i"><use href="#x"/></svg>refused</span><p>Exactly one kubectl call: no pipes, chaining, redirection or substitution.</p></div>
+      <div class="linha-reg"><code>kubectl --context pro get pods</code><span class="veredito nao"><svg class="i"><use href="#x"/></svg>refused</span><p>Flags that change the target cluster are rejected.</p></div>
+      <div class="linha-reg"><code>kubectl rollout restart deploy/api</code><span class="veredito pede"><svg class="i"><use href="#user"/></svg>asks you</span><p>A change becomes a card you approve or reject.</p></div>
+    </div>
+  </div>
+</section>
+
+<section class="secao" id="install">
+  <div class="largura dupla">
+    <div>
+      <div class="cabeca">
+        <h2>One script installs, updates and removes.</h2>
+        <p>No token and no <code>sudo</code>: access is your own git credential, and nothing is written outside your home folder.</p>
+      </div>
+      <ol class="passos">
+        <li><span><b>Clones the repository</b> into <code>~/.local/share/workstuff</code>.</span></li>
+        <li><span><b>Checks Node</b> 22.18 or newer, in your PATH or in nvm.</span></li>
+        <li><span><b>Closes the panel</b> if the launcher opened it.</span></li>
+        <li><span><b>Updates the code</b> with <code>git pull</code>; with local changes, it warns and moves on.</span></li>
+        <li><span><b>Installs the dependencies</b> and adds a workStuff launcher to the app menu.</span></li>
+      </ol>
+    </div>
+    <div>
+      <div class="abas" role="tablist">
+        <button role="tab" aria-selected="true" data-aba="unix">macOS and Linux</button>
+        <button role="tab" aria-selected="false" data-aba="windows">Windows</button>
+      </div>
+      <div class="painel" data-painel="unix">
+        <div class="comando"><div class="cab"><span>Terminal</span><button class="copiar">Copy</button></div><pre>git clone https://github.com/antrafa/workStuff.git ~/.local/share/workstuff &amp;&amp; bash ~/.local/share/workstuff/landing/install.sh</pre></div>
+        <p class="nota">Update: <code>bash ~/.local/share/workstuff/landing/install.sh</code>. Remove: add <code>--uninstall</code>.</p>
+      </div>
+      <div class="painel" data-painel="windows" hidden>
+        <div class="comando"><div class="cab"><span>PowerShell</span><button class="copiar">Copy</button></div><pre>git clone https://github.com/antrafa/workStuff.git "$env:LOCALAPPDATA\workStuff"; powershell -ExecutionPolicy Bypass -File "$env:LOCALAPPDATA\workStuff\landing\install.ps1"</pre></div>
+        <p class="nota">To update, run only the second part; to remove, add <code>-Uninstall</code> to it. Windows support is young: the <code>winget</code> fixes have not been tested on real machines yet.</p>
+      </div>
+      <ul class="requisitos">
+        <li><b>Node 22.18 or newer</b>the server runs TypeScript natively</li>
+        <li><b>Access to the repository</b>it is private on GitHub</li>
+        <li><b>Optional: kubectl</b>for the Kubernetes pages</li>
+        <li><b>Optional: an AI CLI</b>Claude Code, Codex or Antigravity</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section class="secao clara dados" id="data">
+  <div class="largura dupla">
+    <div>
+      <div class="cabeca">
+        <h2>Your data lives in one folder you own.</h2>
+        <p>Updating or removing the program takes nothing with it.</p>
+      </div>
+      <dl>
+        <dt>Plain JSON</dt>
+        <dd>Settings, connections and environment classes can be edited by hand.</dd>
+        <dt>Tokens readable only by you</dt>
+        <dd>Repository tokens are stored with mode 600.</dd>
+        <dt>What leaves the machine</dt>
+        <dd>Only calls to your Git host, your clusters and the AI CLI you chose.</dd>
+      </dl>
+    </div>
+    <pre class="arvore">~/.workstuff/
+├── settings.json             <i>AI provider, model</i>
+├── doctor-config.json        <i>expected versions</i>
+├── repo-sources.json         <i>Git connections</i>
+├── git-credentials.json      <i>tokens, mode 600</i>
+├── cluster-environments.json <i>DES, ITG, HML, PRO</i>
+├── doctor-audit.log          <i>every agent command</i>
+├── analysis/                 <i>AI reports</i>
+└── performance/              <i>pod samples</i></pre>
+  </div>
+</section>
+
+<footer class="rodape">
+  <div class="largura">
+    <a href="https://github.com/antrafa/workStuff">Repository</a>
+    <a href="https://github.com/antrafa/workStuff/blob/main/README.md">README</a>
+    <a href="https://github.com/antrafa/workStuff/blob/main/landing/install.sh">Read the macOS / Linux installer</a>
+    <a href="https://github.com/antrafa/workStuff/blob/main/landing/install.ps1">Read the Windows installer</a>
+  </div>
+</footer>
+
+<script>
+var nav = document.getElementById('nav');
+addEventListener('scroll', function () { nav.classList.toggle('scrolled', scrollY > 8); }, { passive: true });
+document.querySelectorAll('.abas button').forEach(function (tab) {
+  tab.addEventListener('click', function () {
+    document.querySelectorAll('.abas button').forEach(function (b) { b.setAttribute('aria-selected', String(b === tab)); });
+    document.querySelectorAll('.painel').forEach(function (p) { p.hidden = p.dataset.painel !== tab.dataset.aba; });
+  });
+});
+document.querySelectorAll('.copiar').forEach(function (button) {
+  button.addEventListener('click', function () {
+    var text = button.closest('.comando').querySelector('pre').textContent;
+    navigator.clipboard.writeText(text).then(function () {
+      button.textContent = 'Copied';
+      setTimeout(function () { button.textContent = 'Copy'; }, 1600);
+    }, function () { button.textContent = 'Select and copy'; });
+  });
+});
+</script>
+</body>
+</html>
