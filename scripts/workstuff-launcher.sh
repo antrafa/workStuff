@@ -150,7 +150,7 @@ start_app() {
 
   if is_port_open "$PORT_WEB"; then
     echo "workStuff já está rodando em $URL_WEB."
-    notify_desktop "workStuff" "Aplicação já em execução. Abrindo no navegador..."
+    notify_desktop "workStuff" "Já em execução em $URL_WEB. Abrindo no navegador..."
     open_browser "$URL_WEB"
     exit 0
   fi
