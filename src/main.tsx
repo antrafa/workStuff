@@ -5,6 +5,7 @@ import './styles/tokens.css'
 import './styles/base.css'
 import './styles/layout.css'
 import './app/theme'
+import './app/background'
 import { loadLanguage } from './lib/i18n'
 
 // Everything with interface text is imported only after the language is known, so even a

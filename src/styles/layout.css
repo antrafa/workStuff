@@ -186,7 +186,6 @@ kbd {
   height: 56px;
   padding: 0 24px 0 16px;
   border-bottom: 1px solid var(--line);
-  background: var(--bg);
   flex: none;
 }
 /* Language switch: the settings Segmented, sized for the top bar */

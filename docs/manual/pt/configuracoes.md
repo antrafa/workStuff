@@ -1,6 +1,6 @@
 # Configurações
 
-Escolhe qual programa de IA o painel chama e com qual modelo, e ajusta como o painel aparece para você: idioma, tema, cor de destaque e quais telas aparecem no menu.
+Escolhe qual programa de IA o painel chama e com qual modelo, e ajusta como o painel aparece para você: idioma, tema, cor de destaque, fundo e quais telas aparecem no menu.
 
 ## Quando usar
 
@@ -21,7 +21,7 @@ Abra pelo item **Configurações**, no pé do menu. À esquerda ficam três seç
 | Seção | O que tem | Onde fica salvo |
 |---|---|---|
 | **Provedor de IA** | O programa de IA, o modelo e o esforço. A etiqueta ao lado mostra o programa escolhido. | No seu computador (`~/.workstuff/settings.json`), depois de **Salvar alterações**. |
-| **Aparência** | **Idioma**, **Tema** e **Cor de destaque**. | O idioma no seu computador, na hora. Tema e cor neste navegador, na hora. |
+| **Aparência** | **Idioma**, **Tema**, **Cor de destaque** e **Fundo**. | O idioma no seu computador, na hora. Tema, cor e fundo neste navegador, na hora. |
 | **Itens do menu** | Um interruptor por tela, para mostrar ou esconder no menu. A etiqueta mostra quantas estão ocultas. | Neste navegador, na hora. |
 
 O botão no canto superior direito diz **Salvar alterações** quando há uma mudança não salva em **Provedor de IA**, e **Salvo** quando não há nada a salvar. Só a seção do provedor de IA precisa dele: o resto aplica sozinho.
@@ -71,6 +71,16 @@ Aplica na hora. O ícone de sol ou de lua no topo de todas as telas também alte
 
 A cor de destaque marca a ação principal, o item ativo e os filtros ligados. O painel ajusta a cor sozinho para ela continuar legível nos dois temas.
 
+### Trocar o fundo
+
+1. Clique em **Aparência**.
+2. Em **Fundo**, clique em **Escolher imagem** e escolha uma imagem do seu computador. Ela preenche o fundo do painel, por trás dos cards e do menu.
+3. Em **Cor base**, escolha a cor que fica por trás da imagem. **Usar a do tema** volta para o fundo do próprio tema.
+4. Arraste **Transparência** para esmaecer a imagem: com 0% a imagem aparece inteira, com 100% só a cor base aparece.
+5. Em **Ajuste**, escolha como a imagem ocupa a tela: **Cobrir a tela** preenche tudo e corta o que sobra, **Caber inteira** mostra a imagem toda com a cor base em volta, **Tamanho original** não redimensiona. Em **Posição**, escolha que parte fica à vista, como **Topo ao centro** para manter o alto da foto quando ela é cortada.
+
+Para voltar a um fundo liso, clique em **Remover imagem**. Sem imagem, o fundo é só a cor base.
+
 ### Esconder telas do menu
 
 1. Clique em **Itens do menu**. As telas aparecem agrupadas como no menu.
@@ -82,7 +92,7 @@ A cor de destaque marca a ação principal, o item ativo e os filtros ligados. O
 - Todo provedor de IA roda em modo leitura sobre o seu código e os seus clusters. O Antigravity só roda no Linux, dentro do bubblewrap (`bwrap`), porque ele grava no disco mesmo quando pedem que não grave.
 - A escolha feita aqui é usada pelas telas que chamam a IA, como o Cluster Doctor, a [Análise](/analise) e a revisão de itens do [Catálogo](/catalogo). A [Fábrica](/fabrica) pode escolher um modelo por agente em cada tarefa.
 - Uma tela escondida continua abrindo pelo endereço e continua aparecendo na busca do **Ctrl+K**.
-- Tema, cor de destaque e telas escondidas ficam salvos neste navegador: outro navegador ou computador começa com o padrão. Provedor, modelo, esforço e idioma ficam salvos no seu computador e valem para qualquer navegador.
+- Tema, cor de destaque, fundo e telas escondidas ficam salvos neste navegador: outro navegador ou computador começa com o padrão. Provedor, modelo, esforço e idioma ficam salvos no seu computador e valem para qualquer navegador.
 
 ## Problemas comuns
 

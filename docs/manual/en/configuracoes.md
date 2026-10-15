@@ -1,6 +1,6 @@
 # Settings
 
-Chooses which AI program the panel calls and with which model, and adjusts how the panel looks to you: language, theme, accent color and which screens show in the menu.
+Chooses which AI program the panel calls and with which model, and adjusts how the panel looks to you: language, theme, accent color, background and which screens show in the menu.
 
 ## When to use
 
@@ -21,7 +21,7 @@ Open it from **Settings**, at the bottom of the menu. On the left there are thre
 | Section | What it holds | Where it is saved |
 |---|---|---|
 | **AI provider** | The AI program, the model and the effort. The label next to it shows the chosen program. | On your computer (`~/.workstuff/settings.json`), after **Save changes**. |
-| **Appearance** | **Language**, **Theme** and **Accent color**. | Language on your computer, right away. Theme and color in this browser, right away. |
+| **Appearance** | **Language**, **Theme**, **Accent color** and **Background**. | Language on your computer, right away. Theme, color and background in this browser, right away. |
 | **Menu items** | One switch per screen, to show it or hide it in the menu. The label shows how many are hidden. | In this browser, right away. |
 
 The button at the top right says **Save changes** when there is an unsaved change in **AI provider**, and **Saved** when there is nothing to save. Only the AI provider section needs it: everything else applies on its own.
@@ -71,6 +71,16 @@ It applies right away. The sun or moon icon at the top of every screen also swit
 
 The accent color marks the main action, the active item and the filters that are on. The panel adjusts it on its own so it stays readable in both themes.
 
+### Change the background
+
+1. Click **Appearance**.
+2. Under **Background**, click **Choose image** and pick an image from your computer. It fills the panel's background, behind the cards and the menu.
+3. In **Base color**, choose the color that sits behind the image. **Use the theme's** goes back to the theme's own background.
+4. Drag **Transparency** to fade the image: at 0% the image shows in full, at 100% only the base color shows.
+5. In **Fit**, choose how the image fills the screen: **Cover the screen** fills everything and crops what is left over, **Fit whole** shows the whole image with the base color around it, **Original size** does not resize it. In **Position**, choose which part stays in view, such as **Top center** to keep the top of the photo when it is cropped.
+
+To go back to a plain background, click **Remove image**. Without an image, the base color alone is the background.
+
 ### Hide screens from the menu
 
 1. Click **Menu items**. The screens appear grouped as in the menu.
@@ -82,7 +92,7 @@ The accent color marks the main action, the active item and the filters that are
 - Every AI provider runs in read-only mode on your code and clusters. Antigravity only runs on Linux, inside bubblewrap (`bwrap`), because it writes to disk even when asked not to.
 - The choice made here is used by the screens that call the AI, such as the Cluster Doctor, [Analysis](/analise) and the item review in the [Catalog](/catalogo). The [Factory](/fabrica) can pick a model per agent in each task.
 - A hidden screen still opens by its address and is still found by the search in **Ctrl+K**.
-- Theme, accent color and hidden screens are saved in this browser: another browser or computer starts with the defaults. The provider, model, effort and language are saved on your computer and apply to any browser.
+- Theme, accent color, background and hidden screens are saved in this browser: another browser or computer starts with the defaults. The provider, model, effort and language are saved on your computer and apply to any browser.
 
 ## Common problems
 

@@ -1,8 +1,9 @@
 import { useState } from 'react'
-import { Check, Languages, Monitor, Moon, Pipette, RotateCcw, Sun } from 'lucide-react'
+import { Check, ImagePlus, Languages, Monitor, Moon, Pipette, RotateCcw, Sun, Trash2 } from 'lucide-react'
 import { NAV } from '@/app/nav'
 import { setHiddenPaths, useHiddenPaths } from '@/app/menu'
 import { ACCENTS, setAccent, setTheme, useAccent, useTheme, type Theme } from '@/app/theme'
+import { BACKGROUND_POSITIONS, removeBackgroundImage, saveBackgroundImage, setBackgroundColor, setBackgroundFit, setBackgroundPosition, setBackgroundTransparency, useBackground, type BackgroundFit } from '@/app/background'
 import { Meter, Segmented } from '@/ui'
 import { language, tx } from '@/lib/i18n'
 import type { Lang } from '../../../server/lib/lang.ts'
@@ -13,6 +14,24 @@ const THEMES: { id: Theme; label: string; hint: string; icon: typeof Sun }[] = [
   { id: 'light', label: tx({ en: 'Light', pt: 'Claro' }), hint: tx({ en: 'For shared screens and bright rooms', pt: 'Para tela compartilhada e ambiente iluminado' }), icon: Sun },
   { id: 'auto', label: tx({ en: 'Automatic', pt: 'Automático' }), hint: tx({ en: 'Follows the operating system theme', pt: 'Segue o tema do sistema operacional' }), icon: Monitor },
 ]
+
+const FITS: { id: BackgroundFit; label: string }[] = [
+  { id: 'cover', label: tx({ en: 'Cover the screen', pt: 'Cobrir a tela' }) },
+  { id: 'contain', label: tx({ en: 'Fit whole', pt: 'Caber inteira' }) },
+  { id: 'auto', label: tx({ en: 'Original size', pt: 'Tamanho original' }) },
+]
+
+const POSITION_LABELS: Record<(typeof BACKGROUND_POSITIONS)[number], string> = {
+  'top left': tx({ en: 'Top left', pt: 'Topo à esquerda' }),
+  'top center': tx({ en: 'Top center', pt: 'Topo ao centro' }),
+  'top right': tx({ en: 'Top right', pt: 'Topo à direita' }),
+  'center left': tx({ en: 'Center left', pt: 'Centro à esquerda' }),
+  center: tx({ en: 'Center', pt: 'Centro' }),
+  'center right': tx({ en: 'Center right', pt: 'Centro à direita' }),
+  'bottom left': tx({ en: 'Bottom left', pt: 'Base à esquerda' }),
+  'bottom center': tx({ en: 'Bottom center', pt: 'Base ao centro' }),
+  'bottom right': tx({ en: 'Bottom right', pt: 'Base à direita' }),
+}
 
 // Saved on the server with the other settings (the server answers errors in it too).
 export function LanguageSection() {
@@ -107,6 +126,78 @@ export function AccentSection() {
           <span className="mono muted">{accent}</span>
         </div>
       </div>
+    </section>
+  )
+}
+
+export function BackgroundSection() {
+  const { color, transparency, fit, position, image } = useBackground()
+  useTheme() // re-renders on a theme switch, so the default base color below follows it
+  const themeBg = getComputedStyle(document.documentElement).getPropertyValue('--bg').trim()
+  const [error, setError] = useState<string | null>(null)
+
+  const run = async (action: () => Promise<void>) => {
+    setError(null)
+    try {
+      await action()
+    } catch (e) {
+      setError(tx({ en: `The image was not saved: ${(e as Error).message}`, pt: `A imagem não foi salva: ${(e as Error).message}` }))
+    }
+  }
+  const pick = (file: File | undefined) => {
+    if (!file) return
+    if (!file.type.startsWith('image/')) {
+      setError(tx({ en: 'Choose an image file (PNG, JPG, WebP…).', pt: 'Escolha um arquivo de imagem (PNG, JPG, WebP…).' }))
+      return
+    }
+    run(() => saveBackgroundImage(file))
+  }
+
+  return (
+    <section className="card card-pad stack">
+      <div>
+        <div className="card-title">{tx({ en: 'Background', pt: 'Fundo' })}</div>
+        <small className="muted">
+          {tx({
+            en: 'An image from your computer over a base color. Raising the transparency fades the image into the base color. Applies right away and is saved in this browser.',
+            pt: 'Uma imagem do seu computador sobre uma cor base. Aumentar a transparência faz a imagem sumir na cor base. Aplica na hora e fica salvo neste navegador.',
+          })}
+        </small>
+      </div>
+      <div className="row">
+        <label className="btn btn-sm">
+          <ImagePlus size={13} /> {image ? tx({ en: 'Change image', pt: 'Trocar imagem' }) : tx({ en: 'Choose image', pt: 'Escolher imagem' })}
+          <input type="file" accept="image/*" hidden onChange={e => { pick(e.target.files?.[0]); e.target.value = '' }} />
+        </label>
+        <button className="btn btn-sm" disabled={!image} onClick={() => run(removeBackgroundImage)}>
+          <Trash2 size={13} /> {tx({ en: 'Remove image', pt: 'Remover imagem' })}
+        </button>
+      </div>
+      {image && (
+        <div className="row">
+          <span className="eyebrow">{tx({ en: 'Fit', pt: 'Ajuste' })}</span>
+          <Segmented<BackgroundFit> options={FITS} value={fit} onChange={setBackgroundFit} />
+          <span className="eyebrow">{tx({ en: 'Position', pt: 'Posição' })}</span>
+          <select className="select" value={position} onChange={e => setBackgroundPosition(e.target.value)}>
+            {BACKGROUND_POSITIONS.map(p => <option key={p} value={p}>{POSITION_LABELS[p]}</option>)}
+          </select>
+        </div>
+      )}
+      <div className="row">
+        <span className="eyebrow">{tx({ en: 'Base color', pt: 'Cor base' })}</span>
+        <input type="color" value={color || themeBg} onChange={e => setBackgroundColor(e.target.value)} />
+        <span className="mono muted">{color || themeBg}</span>
+        <button className="btn btn-sm" disabled={!color} onClick={() => setBackgroundColor('')}>
+          <RotateCcw size={13} /> {tx({ en: "Use the theme's", pt: 'Usar a do tema' })}
+        </button>
+      </div>
+      <label className="row">
+        <span className="eyebrow">{tx({ en: 'Transparency', pt: 'Transparência' })}</span>
+        <input type="range" min={0} max={100} value={transparency} disabled={!image} style={{ accentColor: 'var(--signal)' }}
+          onChange={e => setBackgroundTransparency(Number(e.target.value))} />
+        <span className="mono muted">{transparency}%</span>
+      </label>
+      {error && <div className="callout callout-crit">{error}</div>}
     </section>
   )
 }

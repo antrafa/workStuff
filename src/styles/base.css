@@ -12,11 +12,23 @@ body,
 }
 
 body {
-  background: var(--bg);
+  background: var(--bg-base, var(--bg));
   color: var(--ink);
   font: 400 14px/1.5 var(--font-sans);
   font-variation-settings: 'wdth' 100;
   -webkit-font-smoothing: antialiased;
+}
+
+/* Background image chosen in Settings (app/background.ts), over the base color; its opacity is
+   what the transparency slider lowers */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  background: var(--bg-image, none) var(--bg-image-position, center) / var(--bg-image-size, cover) no-repeat;
+  opacity: var(--bg-image-opacity, 1);
+  pointer-events: none;
 }
 
 /* Título em Archivo estreito: a largura cai, o peso sobe. Só título e rótulo de placa. */

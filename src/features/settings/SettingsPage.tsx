@@ -6,7 +6,7 @@ import { Async, Page, SkeletonRows, useToast } from '@/ui'
 import { useAsync } from '@/lib/useAsync'
 import { useHiddenPaths } from '@/app/menu'
 import { AiSection } from './AiSection'
-import { AccentSection, AppearanceSection, LanguageSection, MenuSection } from './Sections'
+import { AccentSection, AppearanceSection, BackgroundSection, LanguageSection, MenuSection } from './Sections'
 import { tx } from '@/lib/i18n'
 import { fetchSettings, saveSettings, type Settings } from './api'
 
@@ -51,7 +51,7 @@ export default function SettingsPage() {
   return (
     <Page
       title={tx({ en: 'Settings', pt: 'Configurações' })}
-      hint={tx({ en: 'AI provider, language, theme, accent color and which screens show in the menu.', pt: 'Provedor de IA, idioma, tema, cor de destaque e quais telas aparecem no menu.' })}
+      hint={tx({ en: 'AI provider, language, theme, accent color, background and which screens show in the menu.', pt: 'Provedor de IA, idioma, tema, cor de destaque, fundo e quais telas aparecem no menu.' })}
       actions={
         <button className="btn btn-primary" disabled={!draft || saving} onClick={save}
           title={draft ? tx({ en: 'Writes provider, model and effort to ~/.workstuff/settings.json', pt: 'Grava provedor, modelo e esforço em ~/.workstuff/settings.json' }) : tx({ en: 'Nothing changed', pt: 'Nada alterado' })}>
@@ -79,6 +79,7 @@ export default function SettingsPage() {
                     <LanguageSection />
                     <AppearanceSection />
                     <AccentSection />
+                    <BackgroundSection />
                   </div>
                 )}
                 {secao === 'menu' && <MenuSection />}
