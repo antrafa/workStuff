@@ -39,7 +39,7 @@ export function spawnCli(provider: ProviderId, model: string, { bin, args, stdin
   const stallMs = req.stallMs ?? 3 * 60_000
 
   return new Promise((resolve, reject) => {
-    const child = spawn(bin, args, { cwd: req.cwd, env: req.env ? { ...process.env, ...req.env } : process.env, stdio: [stdin === undefined ? 'ignore' : 'pipe', 'pipe', 'pipe'], shell: false })
+    const child = spawn(bin, args, { cwd: req.cwd, env: req.env ? { ...process.env, ...req.env } : process.env, stdio: ['pipe', 'pipe', 'pipe'], shell: false })
     let buffer = ''
     let stderr = ''
     let lastOutput = Date.now()
@@ -47,8 +47,9 @@ export function spawnCli(provider: ProviderId, model: string, { bin, args, stdin
     let failure: Error | null = null
     let result: AiEvent | null = null
     // A CLI that exits before reading its prompt raises EPIPE here; the exit itself is reported by 'close'.
-    child.stdin?.on('error', e => (stderr += `\nstdin: ${e.message}`))
-    if (stdin !== undefined) child.stdin?.end(stdin)
+    child.stdin.on('error', e => (stderr += `\nstdin: ${e.message}`))
+    // Without a prompt on stdin it closes empty at once, which a CLI reads like /dev/null
+    child.stdin.end(stdin ?? '')
 
     const kill = (reason: Error | null) => {
       failure ??= reason
