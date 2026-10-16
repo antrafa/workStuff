@@ -59,6 +59,13 @@ const COMPONENTS: Components = {
     )
   },
   code: ({ children }) => <code className="inline">{children}</code>,
+  // An image would load on its own: text read from a third-party MR could tell the model to put a file's
+  // contents in an image URL, and the browser would send it out. The address shows, never loads.
+  img: ({ src, alt }) => (
+    <span className="muted" title={tx({ en: 'Image not loaded', pt: 'Imagem não carregada' })}>
+      [{alt || tx({ en: 'image', pt: 'imagem' })}: <code className="inline">{String(src ?? '')}</code>]
+    </span>
+  ),
   table: ({ children }) => (
     <div className="table-wrap">
       <table className="table">{children}</table>
