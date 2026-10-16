@@ -60,7 +60,7 @@ This tab refreshes on its own every 3 seconds while it is visible.
 
 ### K8s Tunnels tab
 
-Manages named `kubectl port-forward` tunnels grouped into **Tunnel profiles** (for example, starting a `DES` database and queue together). Shows the environment stamp (`DES`, `ITG`, `HML` or `PRO`), detects dropped connections (**dropped**), requires explicit confirmation before opening a tunnel to `HML` or `PRO` (or an unclassified cluster), whether you connect, restart or start a profile. The environment comes from the kubeconfig name and its contexts, never from the namespace. To edit a tunnel, stop it first and displays an indicator in the footer status bar while tunnels are active.
+Manages named `kubectl port-forward` tunnels grouped into **Tunnel profiles** (for example, starting a `DES` database and queue together). Shows the environment stamp (`DES`, `ITG`, `HML` or `PRO`), detects dropped connections (**dropped**), requires explicit confirmation before opening a tunnel to `HML` or `PRO` (or an unclassified cluster), whether you connect, restart or start a profile, and displays an indicator in the footer status bar while tunnels are active. The environment comes from the kubeconfig name and its contexts, never from the namespace. To edit a tunnel, stop it first. If a tunnel does not end with **Stop**, the button becomes **Force stop**, which ends the process at once.
 
 ## Step by step: free a taken port
 

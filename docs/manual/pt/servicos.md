@@ -60,7 +60,7 @@ Esta aba se atualiza sozinha a cada 3 segundos enquanto está visível.
 
 ### Aba Túneis K8s
 
-Gerencia túneis `kubectl port-forward` nomeados e agrupados em **Perfis de túneis** (por exemplo, subir banco e fila de `DES` juntos). Mostra o selo de ambiente (`DES`, `ITG`, `HML` ou `PRO`), detecta queda do túnel (**queda detectada**), exige confirmação explícita antes de abrir túnel para `HML` ou `PRO` (ou cluster sem classificação), seja ao conectar, reiniciar ou subir um perfil. O ambiente vem do nome do kubeconfig e dos contextos, nunca do namespace. Para editar um túnel, pare-o antes e exibe um indicador na barra de rodapé enquanto houver túneis ativos.
+Gerencia túneis `kubectl port-forward` nomeados e agrupados em **Perfis de túneis** (por exemplo, subir banco e fila de `DES` juntos). Mostra o selo de ambiente (`DES`, `ITG`, `HML` ou `PRO`), detecta queda do túnel (**queda detectada**), exige confirmação explícita antes de abrir túnel para `HML` ou `PRO` (ou cluster sem classificação), seja ao conectar, reiniciar ou subir um perfil, e exibe um indicador na barra de rodapé enquanto houver túneis ativos. O ambiente vem do nome do kubeconfig e dos contextos, nunca do namespace. Para editar um túnel, pare-o antes. Se um túnel não parar com **Parar**, o botão vira **Forçar parada**, que encerra o processo na hora.
 
 ## Passo a passo: liberar uma porta ocupada
 

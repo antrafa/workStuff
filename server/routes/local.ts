@@ -218,6 +218,7 @@ localRouter.post('/tunnels/profile/:action', async (req, res) => {
   const profile = typeof req.body?.profile === 'string' ? req.body.profile.trim() : ''
   const confirmSensitive = req.body?.confirmSensitive === true
   if (!profile) return res.status(400).json({ error: say({ en: 'profile name is required', pt: 'o nome do perfil é obrigatório' }) })
+  if (req.params.action !== 'start' && req.params.action !== 'stop') return res.status(400).json({ error: say({ en: 'invalid action', pt: 'ação inválida' }) })
   const items = tunnels.list().filter(t => t.profile === profile)
   const started: string[] = []
   const stopped: string[] = []
@@ -231,11 +232,10 @@ localRouter.post('/tunnels/profile/:action', async (req, res) => {
         }
       } else if (req.params.action === 'stop') {
         if (tunnels.pidOf(t.id)) {
-          await tunnels.stop(t.id, req.body?.force === true)
-          stopped.push(t.name)
+          const { stillAlive } = await tunnels.stop(t.id, req.body?.force === true)
+          if (stillAlive) errors.push(`${t.name}: ${say({ en: 'the process did not stop', pt: 'o processo não parou' })}`)
+          else stopped.push(t.name)
         }
-      } else {
-        return res.status(400).json({ error: say({ en: 'invalid action', pt: 'ação inválida' }) })
       }
     } catch (e) {
       errors.push(`${t.name}: ${(e as Error).message}`)

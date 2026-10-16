@@ -68,6 +68,7 @@ export type TunnelStatus = Tunnel & {
   environment: TunnelEnvironment
   sensitive: boolean
   lastError: string | null
+  kubeconfigFile: string
 }
 
 export const fetchTunnels = () => api.get<TunnelStatus[]>('/local/tunnels')
@@ -80,6 +81,6 @@ export const tunnelProfileAction = (profile: string, action: 'start' | 'stop', c
   api.post<{ started: string[]; stopped: string[]; errors: string[] }>(`/local/tunnels/profile/${action}`, { profile, confirmSensitive })
 export const tunnelLogsUrl = (id: string) => `/api/local/tunnels/${encodeURIComponent(id)}/logs`
 
-export const tunnelCommandLine = (t: Pick<Tunnel, 'kubeconfigId' | 'context' | 'namespace' | 'targetKind' | 'targetName' | 'localPort' | 'remotePort'>) =>
-  `kubectl --kubeconfig ~/.kube/${t.kubeconfigId}${t.context ? ` --context ${t.context}` : ''} -n ${t.namespace} port-forward ${t.targetKind}/${t.targetName} ${t.localPort}:${t.remotePort}`
+export const tunnelCommandLine = (t: Pick<TunnelStatus, 'kubeconfigFile' | 'context' | 'namespace' | 'targetKind' | 'targetName' | 'localPort' | 'remotePort'>) =>
+  `kubectl --kubeconfig ${t.kubeconfigFile}${t.context ? ` --context ${t.context}` : ''} -n ${t.namespace} port-forward ${t.targetKind}/${t.targetName} ${t.localPort}:${t.remotePort}`
 

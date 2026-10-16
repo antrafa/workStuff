@@ -14,7 +14,7 @@ import { say } from '../i18n.ts'
 import { readJson, writeJson } from '../jsonFile.ts'
 import { KUBE_DIR } from '../k8s/kubeconfigs.ts'
 import { detectEnvironment, type Environment } from '../k8s/policy.ts'
-import { dataFile } from '../paths.ts'
+import { dataFile, tildify } from '../paths.ts'
 import { PLATFORM } from '../platform.ts'
 import { run } from '../run.ts'
 
@@ -42,6 +42,8 @@ export type TunnelStatus = Tunnel & {
   environment: Environment | null
   sensitive: boolean
   lastError: string | null
+  /** The file kubectl gets, as the confirmation shows it (WORKSTUFF_KUBE_DIR may move it off ~/.kube). */
+  kubeconfigFile: string
 }
 
 const K8S_NAME = /^[a-z0-9]([-a-z0-9.]*[a-z0-9])?$/
@@ -121,6 +123,20 @@ const alive = (pid: number) => {
 
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms))
 
+// Start time in clock ticks (field 22 of /proc/<pid>/stat), null where there is no /proc (macOS, Windows).
+// Stored beside the PID: after a reboot the same number can belong to an unrelated process.
+function startTimeOf(pid: number): string | null {
+  try {
+    const stat = readFileSync(`/proc/${pid}/stat`, 'utf-8')
+    return stat.slice(stat.lastIndexOf(')') + 2).split(' ')[19] ?? null
+  } catch {
+    return null
+  }
+}
+
+// Ids the profile route owns: a tunnel named "Profile" must not shadow it
+const RESERVED_IDS = new Set(['profile'])
+
 type StoreOptions = {
   kubeDir?: string
   envFile?: string
@@ -164,19 +180,28 @@ export function createTunnelsStore(dir: string = dataFile('tunnels'), opts: Stor
   }
 
   function pidOf(id: string): number | null {
+    let pid: number
+    let started: string | undefined
     try {
-      const pid = Number(readFileSync(pidFile(id), 'utf-8').trim())
-      return pid > 1 && alive(pid) ? pid : null
+      const [pidText, startText] = readFileSync(pidFile(id), 'utf-8').trim().split(/\s+/)
+      pid = Number(pidText)
+      started = startText
     } catch {
       return null
     }
+    if (!(pid > 1) || !alive(pid)) return null
+    // A different start time means the PID was reused by another process: that one is not ours to stop
+    const now = startTimeOf(pid)
+    return started && now && started !== now ? null : pid
   }
+
+  const starting = new Set<string>()
 
   function create(input: TunnelInput): Tunnel {
     const all = list()
     const base = slug(input.name)
     let id = base
-    for (let i = 2; all.some(t => t.id === id); i++) id = `${base}-${i}`
+    for (let i = 2; RESERVED_IDS.has(id) || all.some(t => t.id === id); i++) id = `${base}-${i}`
     const tunnel: Tunnel = { ...input, id }
     save([...all, tunnel])
     return tunnel
@@ -201,8 +226,17 @@ export function createTunnelsStore(dir: string = dataFile('tunnels'), opts: Stor
 
   async function start(id: string, startOpts?: { confirmSensitive?: boolean }) {
     const t = find(id)
-    if (pidOf(id)) throw new Error(say({ en: 'tunnel is already running', pt: 'o túnel já está ativo' }))
+    // Two clicks in a row would both pass the pid check before either writes the pid file
+    if (pidOf(id) || starting.has(id)) throw new Error(say({ en: 'tunnel is already running', pt: 'o túnel já está ativo' }))
+    starting.add(id)
+    try {
+      return await spawnTunnel(id, t, startOpts)
+    } finally {
+      starting.delete(id)
+    }
+  }
 
+  async function spawnTunnel(id: string, t: Tunnel, startOpts?: { confirmSensitive?: boolean }) {
     const env = resolveEnv(t)
     if (isSensitiveEnvironment(env) && !startOpts?.confirmSensitive) {
       const label = env ?? 'PRO (não classificado)'
@@ -237,7 +271,7 @@ export function createTunnelsStore(dir: string = dataFile('tunnels'), opts: Stor
         child.once('spawn', resolve)
         child.once('error', reject)
       })
-      writeFileSync(pidFile(id), String(child.pid))
+      writeFileSync(pidFile(id), `${child.pid} ${startTimeOf(child.pid!) ?? ''}`)
       child.unref()
       console.log(`[tunnels] start ${id} (pid ${child.pid}, env ${env ?? 'unclassified'}): ${t.localPort}->${t.targetKind}/${t.targetName}:${t.remotePort}`)
       return child.pid!
@@ -324,6 +358,7 @@ export function createTunnelsStore(dir: string = dataFile('tunnels'), opts: Stor
         environment,
         sensitive: isSensitiveEnvironment(environment),
         lastError: pid ? null : lastErrorOf(t.id),
+        kubeconfigFile: tildify(join(kubeDir, t.kubeconfigId)),
       }
     })
   }
@@ -433,8 +468,21 @@ if (import.meta.main && process.argv.includes('--selfcheck')) {
     for (let i = 0; i < 30 && !store.readLog(desTunnel.id).text.includes('Forwarding'); i++) await sleep(100)
     assert.match(store.readLog(desTunnel.id).text, /Forwarding from 127\.0\.0\.1:15432/)
 
+    await assert.rejects(store.start(desTunnel.id), /running|ativo/)
+    // A reused PID (same number, other start time) is not the tunnel
+    if (existsSync(`/proc/${pid}/stat`)) {
+      const pidPath = join(tmp, 'tunnels', desTunnel.id, 'pid')
+      const real = readFileSync(pidPath, 'utf-8')
+      writeFileSync(pidPath, `${pid} 1`)
+      assert.equal(store.pidOf(desTunnel.id), null, 'pid reaproveitado não conta como túnel ativo')
+      writeFileSync(pidPath, real)
+    }
+
     assert.deepEqual(await store.stop(desTunnel.id), { stillAlive: false })
     assert.equal(store.activeSummary().count, 0)
+    const reserved = store.create({ ...proTunnel, name: 'Profile' })
+    assert.notEqual(reserved.id, 'profile', 'o id da rota de perfis fica reservado')
+    store.remove(reserved.id)
     store.remove(desTunnel.id)
     store.remove(proTunnel.id)
     assert.equal(store.list().length, 0)

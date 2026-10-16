@@ -70,6 +70,8 @@ export function TunnelsTab() {
   const [confirmProfile, setConfirmProfile] = useState<{ profile: string; sensitive: TunnelStatus[] } | null>(null)
   const [logsOf, setLogsOf] = useState<string | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
+  // Tunnels a plain Stop did not end: their Stop button becomes Force stop (KILL)
+  const [stuck, setStuck] = useState<Set<string>>(new Set())
   const toast = useToast()
 
   useEffect(() => {
@@ -86,6 +88,29 @@ export function TunnelsTab() {
     try {
       await tunnelAction(t.id, action, { confirmSensitive })
       if (action !== 'stop') setLogsOf(t.id)
+    } catch (e) {
+      toast((e as Error).message)
+    } finally {
+      setBusy(null)
+      state.reload()
+    }
+  }
+
+  const stop = async (t: TunnelStatus, force: boolean) => {
+    setBusy(t.id)
+    try {
+      const r = await tunnelAction(t.id, 'stop', { force })
+      setStuck(s => {
+        const next = new Set(s)
+        if (r.stillAlive) next.add(t.id)
+        else next.delete(t.id)
+        return next
+      })
+      if (r.stillAlive) {
+        toast(force
+          ? tx({ en: `${t.name} is still alive even after Force stop; check it in Listening ports`, pt: `${t.name} continua vivo mesmo depois de Forçar parada; confira em Portas em escuta` })
+          : tx({ en: `${t.name} did not stop. Click Force stop to end it at once.`, pt: `${t.name} não parou. Clique em Forçar parada para encerrar de vez.` }))
+      }
     } catch (e) {
       toast((e as Error).message)
     } finally {
@@ -272,9 +297,15 @@ export function TunnelsTab() {
                               <div className="row" style={{ gap: 6, flexWrap: 'nowrap', justifyContent: 'flex-end' }}>
                                 {t.pid ? (
                                   <>
-                                    <button className="btn btn-sm" disabled={busy === t.id} onClick={() => act(t, 'stop')}>
-                                      <Square size={12} /> {tx({ en: 'Stop', pt: 'Parar' })}
-                                    </button>
+                                    {stuck.has(t.id) ? (
+                                      <button className="btn btn-sm btn-danger" disabled={busy === t.id} onClick={() => stop(t, true)} title={tx({ en: 'Ends the process at once (KILL), without letting it close on its own', pt: 'Encerra o processo na hora (KILL), sem esperar que ele feche sozinho' })}>
+                                        <Square size={12} /> {tx({ en: 'Force stop', pt: 'Forçar parada' })}
+                                      </button>
+                                    ) : (
+                                      <button className="btn btn-sm" disabled={busy === t.id} onClick={() => stop(t, false)}>
+                                        <Square size={12} /> {tx({ en: 'Stop', pt: 'Parar' })}
+                                      </button>
+                                    )}
                                     <button className="btn btn-sm" disabled={busy === t.id} onClick={() => act(t, 'restart')}>
                                       <RotateCw size={12} /> {tx({ en: 'Restart', pt: 'Reiniciar' })}
                                     </button>
