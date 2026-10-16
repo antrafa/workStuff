@@ -2,7 +2,7 @@ import {
   Archive, Code, FolderGit2, GitBranch, GitPullRequest, HardDrive, RefreshCw, Scissors, Trash2,
 } from 'lucide-react'
 import { useState } from 'react'
-import { useNavigate } from 'react-router'
+import { useLocation, useNavigate, useSearchParams } from 'react-router'
 import { Async, ConfirmModal, Empty, Segmented, SkeletonRows, useToast } from '@/ui'
 import { useAsync } from '@/lib/useAsync'
 import { locale, tx } from '@/lib/i18n'
@@ -16,6 +16,7 @@ import {
 } from './api'
 
 type FilterKind = 'all' | 'dirty' | 'stash' | 'sync' | 'artifacts'
+const FILTER_KINDS: FilterKind[] = ['all', 'dirty', 'stash', 'sync', 'artifacts']
 
 export function formatBytes(bytes: number): string {
   if (bytes <= 0) return '0 B'
@@ -32,10 +33,23 @@ export function formatBytes(bytes: number): string {
 export function WorkspaceRadar() {
   const state = useAsync(fetchWorkspace)
   const navigate = useNavigate()
+  const location = useLocation()
   const toast = useToast()
 
-  const [query, setQuery] = useState('')
-  const [filter, setFilter] = useState<FilterKind>('all')
+  // Search and filter live in the URL, so coming back from the review restores the same list
+  const [searchParams, setSearchParams] = useSearchParams()
+  const query = searchParams.get('q') ?? ''
+  const filterParam = searchParams.get('filtro') as FilterKind | null
+  const filter: FilterKind = filterParam && FILTER_KINDS.includes(filterParam) ? filterParam : 'all'
+  const setParam = (key: string, value: string) =>
+    setSearchParams(prev => {
+      const next = new URLSearchParams(prev)
+      if (value) next.set(key, value)
+      else next.delete(key)
+      return next
+    }, { replace: true })
+  const setQuery = (v: string) => setParam('q', v)
+  const setFilter = (v: FilterKind) => setParam('filtro', v === 'all' ? '' : v)
   const [busyPath, setBusyPath] = useState<string | null>(null)
   const [pruning, setPruning] = useState<WorkspaceRepo | null>(null)
   const [cleaning, setCleaning] = useState<WorkspaceRepo | null>(null)
@@ -257,7 +271,7 @@ export function WorkspaceRadar() {
                               </button>
                               <button
                                 className="btn btn-sm"
-                                onClick={() => navigate(`/revisao?repo=${encodeURIComponent(r.path)}`)}
+                                onClick={() => navigate(`/revisao?repo=${encodeURIComponent(r.path)}`, { state: { from: location.pathname + location.search } })}
                                 title={tx({ en: 'Inspect Cognitive Diff and Blast Radius on the Review screen', pt: 'Inspecionar Diff Cognitivo e Raio de Impacto na tela de Revisão' })}
                               >
                                 <GitPullRequest size={12} /> {tx({ en: 'Review', pt: 'Revisar' })}

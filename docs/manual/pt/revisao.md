@@ -27,6 +27,7 @@ Veja também [Conceitos e termos](/documentacao/conceitos).
 
 - **Abas (`Branch local` e `MR / PR aberto`)**: alterna entre revisar uma branch de um repositório clonado na máquina e inspecionar um Merge Request / Pull Request aberto dos projetos acompanhados (ou colando a URL do GitLab/GitHub).
 - **Campo do caminho**: onde vai a pasta do repositório, por exemplo `/home/voce/workspace/loja-api`. O botão **Escolher** abre o seletor de pastas do sistema. A tela lembra a última pasta aberta.
+- **Voltar**: aparece quando você chega pelo botão **Revisar** de Meu Workspace (em Repositórios) e volta para aquela lista com a mesma busca e o mesmo filtro.
 - **Linha da branch**: depois de abrir, a tela mostra "Branch `sua-branch` contra" e uma lista com as branches do repositório para escolher a base.
 - **incluir não commitado**: inclui na revisão o que você alterou e ainda não fez commit. Entre parênteses aparece quantos arquivos estão nessa situação.
 - **Diff cognitivo & Raio de Impacto**: assim que a branch base (ou um MR/PR aberto) é selecionada, a tela exibe o diff agrupado por categoria cognitiva (**Lógica central**, **Integração & API**, **Testes**, **Docs & Metadados**) e destaca o **Raio de Impacto** determinístico (módulos fora do diff que importam os arquivos alterados e se contam com testes) antes mesmo de rodar a IA.

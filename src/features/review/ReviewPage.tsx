@@ -1,6 +1,6 @@
-import { FolderOpen, GitPullRequest, Sparkles } from 'lucide-react'
+import { ArrowLeft, FolderOpen, GitPullRequest, Sparkles } from 'lucide-react'
 import { useEffect, useState } from 'react'
-import { useSearchParams } from 'react-router'
+import { useLocation, useNavigate, useSearchParams } from 'react-router'
 import { AiStream, Empty, Page, type AiStreamEvent } from '@/ui'
 import { api } from '@/lib/api'
 import { streamPost } from '@/lib/stream'
@@ -22,6 +22,10 @@ const read = () => {
 
 export default function ReviewPage() {
   const [searchParams, setSearchParams] = useSearchParams()
+  const navigate = useNavigate()
+  const location = useLocation()
+  // Set by whoever sent the user here (Meu Workspace), with that screen's own filters in the URL
+  const backTo = (location.state as { from?: string } | null)?.from
   const tab: Tab = searchParams.get('aba') === 'mr' ? 'mr' : 'local'
   const repoParam = searchParams.get('repo')
   const [path, setPath] = useState(() => repoParam || read())
@@ -65,6 +69,11 @@ export default function ReviewPage() {
   return (
     <Page
       title={tx({ en: 'Pre-MR review', pt: 'Revisão antes do MR' })}
+      actions={backTo && (
+        <button className="btn" onClick={() => navigate(backTo)}>
+          <ArrowLeft size={14} /> {tx({ en: 'Back', pt: 'Voltar' })}
+        </button>
+      )}
       hint={tx({
         en: 'Inspect the cognitive diff and Blast Radius of your local branch or an open MR/PR, and ask the AI in read-only mode to point out problems by severity with file and line.',
         pt: 'Inspecione o diff cognitivo e o Raio de Impacto da sua branch local ou de um MR/PR aberto, e peça à IA em modo leitura os problemas por severidade com arquivo e linha.',
@@ -72,7 +81,7 @@ export default function ReviewPage() {
     >
       <div className="tabs" role="tablist">
         {([['local', tx({ en: 'Local branch', pt: 'Branch local' })], ['mr', tx({ en: 'Open MR / PR', pt: 'MR / PR aberto' })]] as [Tab, string][]).map(([id, label]) => (
-          <button key={id} role="tab" aria-selected={tab === id} onClick={() => setSearchParams(id === 'local' ? {} : { aba: id })}>{label}</button>
+          <button key={id} role="tab" aria-selected={tab === id} onClick={() => setSearchParams(id === 'local' ? {} : { aba: id }, { state: location.state })}>{label}</button>
         ))}
       </div>
       {tab === 'mr' ? <MrReviewTab /> : (
