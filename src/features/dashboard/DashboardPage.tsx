@@ -32,6 +32,7 @@ import { fetchWorkspace, type WorkspaceRepo } from '@/features/repos/api'
 import type { FactoryTask } from '../../../server/lib/factory/types.ts'
 import { FactoryStatusChip } from '@/features/factory/timeline/FactoryStatusChip'
 import { isTaskRunning } from '../factory/factoryRun'
+import { NeedFinder } from './NeedFinder'
 import { DailyCard } from './DailyCard'
 import { locale, tx } from '@/lib/i18n'
 
@@ -142,7 +143,7 @@ export default function DashboardPage() {
   return (
     <Page
       title={tx({ en: 'Home', pt: 'Início' })}
-      hint={tx({ en: 'Consolidated view of the Kubernetes cluster health, active Software Factory runs and quick shortcuts for the development environment.', pt: 'Painel consolidado com a saúde do cluster Kubernetes, execuções ativas da Fábrica de Software e atalhos rápidos do ambiente de desenvolvimento.' })}
+      hint={tx({ en: 'Start here: say what you need and the panel points to the screen that does it. Below, what is waiting for you, the stand-up summary and the state of the machine, the cluster and the Factory.', pt: 'Comece por aqui: diga o que você precisa e o painel aponta a tela que faz isso. Abaixo, o que está esperando você, o resumo da daily e o estado da máquina, do cluster e da Fábrica.' })}
       actions={
         <div className="row" style={{ gap: 8 }}>
           <button
@@ -162,6 +163,8 @@ export default function DashboardPage() {
       }
     >
       <div className="stack" style={{ gap: 20 }}>
+        <NeedFinder />
+
         {/* 1. Main figures (hero stats) */}
         <div className="grid" style={{ ['--min' as string]: '220px' }}>
           {/* Card: Software Factory */}

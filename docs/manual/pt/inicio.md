@@ -1,9 +1,10 @@
 # Início
 
-A primeira tela do painel: mostra de relance se algo precisa de você, monta o resumo para a daily e resume a Fábrica de Software, o cluster Kubernetes conectado, a sua máquina e os serviços rodando nela, com atalhos para as telas que você mais usa.
+A primeira tela do painel: você diz o que precisa fazer e ela aponta a tela que faz isso, com os primeiros passos. Logo abaixo, mostra de relance se algo precisa de você, monta o resumo para a daily e resume a Fábrica de Software, o cluster Kubernetes conectado, a sua máquina e os serviços rodando nela.
 
 ## Quando usar
 
+- Você sabe o que quer fazer ("testar um endpoint", "a esteira falhou") mas não sabe qual tela faz isso.
 - Você vai entrar na daily e quer o resumo do que fez desde o último dia útil.
 - Você acabou de abrir o painel e quer saber se alguma tarefa espera a sua aprovação ou se um cluster tem pods com problema.
 - Você quer conferir se a máquina continua pronta para trabalhar depois de instalar ou atualizar alguma coisa.
@@ -11,7 +12,9 @@ A primeira tela do painel: mostra de relance se algo precisa de você, monta o r
 
 ## Conhecendo a tela
 
-A tela tem seis partes, de cima para baixo.
+A tela tem sete partes, de cima para baixo.
+
+**O que você precisa fazer?** Um campo onde você descreve a tarefa com as suas palavras, em português ou em inglês, e atalhos para as tarefas mais comuns, agrupados pelas fases do dia: **Codar** (como **Testar uma API**), **Entregar** (como **Esteira falhou**), **Rodar local** (como **Porta ocupada**) e **Produção** (como **Ver logs**). Cada resposta traz a tarefa, o nome da tela, os primeiros passos e os botões **Abrir** (vai para a tela) e **Como usar** (abre a página da tela neste manual). A primeira resposta tem a moldura em destaque: Enter abre ela.
 
 **Cartões de status.** Quatro cartões, cada um é um link para a tela que ele resume:
 
@@ -40,6 +43,15 @@ A tela tem seis partes, de cima para baixo.
 4. Olhe o cartão **Máquina & Doctor**. Se ele mostrar **pendências**, clique nele, ou em **Resolver pendências agora** no cartão **Ambiente de Desenvolvimento Local**, para ver o que falta e como resolver.
 5. Para ler tudo de novo sem esperar, clique em **Atualizar** no canto superior direito.
 
+### Achar a tela que faz o que você precisa
+
+1. No campo **O que você precisa fazer?**, escreva a tarefa como você falaria, por exemplo `testar o endpoint de pedidos em HML` ou `liberar a porta 8080`. Ou clique num dos atalhos embaixo do campo.
+2. Leia as respostas. Cada uma diz a tela e os primeiros passos.
+3. Clique em **Abrir** para ir à tela, ou aperte Enter para abrir a primeira resposta.
+4. Para o passo a passo completo, clique em **Como usar**.
+
+> **Dica:** se nenhuma resposta servir, tente outras palavras ou aperte **Ctrl K** para ver a lista de todas as telas.
+
 ### Montar o resumo para a daily
 
 1. No cartão **Para a daily**, clique em **Montar resumo**.
@@ -57,6 +69,7 @@ Se nenhuma tarefa foi criada ainda, o cartão **Fábrica de Software e Agentes A
 ## Bom saber
 
 - A tela lê tudo de novo sozinha a cada 10 segundos, sem chamar atenção. **Atualizar** só força uma leitura agora.
+- O campo **O que você precisa fazer?** procura numa lista que vem com o painel; o texto que você digita não sai da máquina.
 - O resumo da daily só é montado quando você clica, porque ele roda o git em todos os clones e consulta o GitLab ou o GitHub. Um clone sem `user.email` configurado no git fica de fora, e o cartão avisa quantos foram assim.
 - A tela só lê: nada aqui altera a sua máquina, o seu cluster ou as suas tarefas. Toda ação acontece na tela que o cartão abre.
 - O cartão do cluster mostra o cluster conectado no [Cluster](/cluster). Para olhar outro, troque por lá.

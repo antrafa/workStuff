@@ -1,9 +1,10 @@
 # Home
 
-The first screen of the panel: it tells you at a glance whether anything needs you, builds your stand-up summary and sums up the Software Factory, the connected Kubernetes cluster, your machine and the services running on it, with shortcuts to the screens you use most.
+The first screen of the panel: you say what you need to do and it points to the screen that does it, with the first steps. Below that, it tells you at a glance whether anything needs you, builds your stand-up summary and sums up the Software Factory, the connected Kubernetes cluster, your machine and the services running on it.
 
 ## When to use
 
+- You know what you want to do ("test an endpoint", "the pipeline failed") but not which screen does it.
 - You are about to join the stand-up and want a summary of what you did since the last working day.
 - You just opened the panel and want to know whether a task is waiting for your approval or a cluster has pods with problems.
 - You want to check that your machine is still ready to work after installing or updating something.
@@ -11,7 +12,9 @@ The first screen of the panel: it tells you at a glance whether anything needs y
 
 ## Getting to know the screen
 
-The screen has six parts, from top to bottom.
+The screen has seven parts, from top to bottom.
+
+**What do you need to do?** A field where you describe the task in your own words, in English or Portuguese, and shortcuts to the most common tasks, grouped by phase of the day: **Coding** (such as **Test an API**), **Delivering** (such as **Pipeline failed**), **Running locally** (such as **Busy port**) and **Production** (such as **See the logs**). Each answer brings the task, the screen's name, the first steps and the **Open** (goes to the screen) and **How to use** (opens that screen's page of this manual) buttons. The first answer has a highlighted frame: Enter opens it.
 
 **Status cards.** Four cards, each one a link to the screen it sums up:
 
@@ -40,6 +43,15 @@ The screen has six parts, from top to bottom.
 4. Look at the **Machine & Doctor** card. If it shows items **pending**, click it, or click **Fix pending items now** in the **Local development environment** card, to see what is missing and how to fix it.
 5. To read everything again without waiting, click **Refresh** at the top right.
 
+### Find the screen that does what you need
+
+1. In the **What do you need to do?** field, write the task the way you would say it, for example `test the orders endpoint in HML` or `free port 8080`. Or click one of the shortcuts under the field.
+2. Read the answers. Each one names the screen and the first steps.
+3. Click **Open** to go to the screen, or press Enter to open the first answer.
+4. For the full step by step, click **How to use**.
+
+> **Tip:** if no answer fits, try other words or press **Ctrl K** to see the list of every screen.
+
 ### Build the stand-up summary
 
 1. In the **For the stand-up** card, click **Build summary**.
@@ -57,6 +69,7 @@ If no task was ever created, the **Software Factory and autonomous agents** card
 ## Good to know
 
 - The screen reads everything again on its own every 10 seconds, quietly. **Refresh** only forces a read now.
+- The **What do you need to do?** field searches a list that ships with the panel; what you type does not leave the machine.
 - The stand-up summary is built only when you click, because it runs git in every clone and asks GitLab or GitHub. A clone without a git `user.email` is left out, and the card says how many were.
 - The screen only reads: nothing here changes your machine, your cluster or your tasks. Every action is done on the screen the card opens.
 - The cluster card shows the cluster connected in [Cluster](/cluster). To look at another one, switch it there.

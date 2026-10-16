@@ -1,0 +1,70 @@
+/* ── O que você precisa fazer? ── */
+.need-input {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+.need-input > svg {
+  position: absolute;
+  left: 12px;
+  color: var(--muted);
+  pointer-events: none;
+}
+.need-input .input {
+  width: 100%;
+  height: 40px;
+  padding-left: 36px;
+  font-size: 14px;
+}
+.need-input .btn {
+  position: absolute;
+  right: 6px;
+}
+.need-results {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(300px, 100%), 1fr));
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.need-results > li {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  background: var(--surface-2);
+}
+/* The best answer is the one Enter opens: its frame says so */
+.need-results > li.need-best {
+  border-color: var(--signal);
+}
+.need-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 13px;
+}
+.need-steps {
+  margin: 0;
+  padding-left: 18px;
+  color: var(--ink-2);
+  font-size: 12.5px;
+  line-height: 1.45;
+}
+.need-steps li + li {
+  margin-top: 3px;
+}
+.need-presets {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(260px, 100%), 1fr));
+  gap: 10px 16px;
+}
+.need-preset-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
