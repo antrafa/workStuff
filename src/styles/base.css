@@ -336,6 +336,8 @@ textarea {
   display: flex;
   flex-direction: column;
   gap: 5px;
+  /* lets a grid or flex cell shrink below the browser's intrinsic input width */
+  min-width: 0;
 }
 .field > span {
   font-size: 12px;

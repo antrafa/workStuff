@@ -1,13 +1,11 @@
 .tools-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(420px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(420px, 100%), 1fr));
   gap: 16px;
   align-items: start;
 }
-@media (max-width: 560px) {
-  .tools-grid {
-    grid-template-columns: 1fr;
-  }
+.tools-grid > .card {
+  min-width: 0;
 }
 .tool-output {
   display: flex;

@@ -216,10 +216,13 @@ export function JvmMemoryTool() {
             <span className="mono" style={{ fontSize: 12 }}>
               {result.value.totalMiB} MiB / {limitMiB} MiB ({result.value.usagePct}%)
             </span>
-            <span className="muted" style={{ fontSize: 12 }}>
-              · Heap {result.value.heapMiB} MiB + Non-Heap {result.value.nonHeapMiB} MiB (Threads: {result.value.threadsMiB} MiB)
-            </span>
           </div>
+          <div className={`meter ${result.value.status === 'ok' ? '' : result.value.status}`} title={`${result.value.usagePct}%`}>
+            <i style={{ width: `${Math.min(result.value.usagePct, 100)}%` }} />
+          </div>
+          <small className="muted mono">
+            Heap {result.value.heapMiB} MiB + Non-Heap {result.value.nonHeapMiB} MiB (Threads {result.value.threadsMiB} MiB)
+          </small>
           <span className="eyebrow">
             {tx({
               en: `Suggested JAVA_TOOL_OPTIONS (safe Xmx ≤ ${result.value.safeXmxMiB} MiB)`,
@@ -283,7 +286,7 @@ export function PemCertTool() {
                     pt: `válido (faltam ${result.value.daysRemaining}d)`,
                   })}
             </span>
-            <span className="muted mono" style={{ fontSize: 11 }}>
+            <span className="muted mono" style={{ fontSize: 11, minWidth: 0, overflowWrap: 'anywhere' }}>
               {result.value.serialNumber}
             </span>
           </div>
