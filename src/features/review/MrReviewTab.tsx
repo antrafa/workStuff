@@ -129,7 +129,7 @@ type RemoteMrDiffResult = {
   clonePath: string | null
 }
 
-type DiffEvent = AiStreamEvent & { files?: number; truncated?: boolean; base?: string; mergeBase?: string }
+type DiffEvent = AiStreamEvent & { files?: number; truncated?: boolean; base?: string; head?: string }
 
 export function MrReviewTab() {
   const list = useAsync(() => api.get<{ mrs: RemoteMrSummary[]; errors: { fullPath: string; error: string }[] }>('/review/mrs'))
@@ -347,8 +347,8 @@ export function MrReviewTab() {
                 describe={e =>
                   e.type === 'diff'
                     ? tx({
-                        en: `${e.files} file(s) (${e.mergeBase} → ${e.base})${e.truncated ? ', diff cut' : ''}; the AI is reviewing…`,
-                        pt: `${e.files} arquivo(s) (${e.mergeBase} → ${e.base})${e.truncated ? ', diff cortado' : ''}; a IA está revisando…`,
+                        en: `${e.files} file(s) (${e.head} → ${e.base})${e.truncated ? ', diff cut' : ''}; the AI is reviewing…`,
+                        pt: `${e.files} arquivo(s) (${e.head} → ${e.base})${e.truncated ? ', diff cortado' : ''}; a IA está revisando…`,
                       })
                     : null
                 }

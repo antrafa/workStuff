@@ -11,7 +11,8 @@ import { say } from '../i18n.ts'
 import { tildify } from '../paths.ts'
 import { connFor, listWatches, localClone } from '../pipelines/watch.ts'
 import { normalizePath } from '../repos/layout.ts'
-import { call, type Conn } from '../repos/providers.ts'
+import { allPages, call, type Conn } from '../repos/providers.ts'
+import { run } from '../run.ts'
 import { parseRemote, sourceForRemote } from '../repos/remote.ts'
 import { getSource, listSources, RepoError, type ProviderKind, type Source } from '../repos/sources.ts'
 
@@ -52,7 +53,12 @@ export type RemoteMrDiffResult = {
   changedFiles: string[]
   blastRadius: BlastRadiusReport | null
   clonePath: string | null
+  /** Where the local clone stands: it is whatever was checked out, not the MR's branch. */
+  cloneRef: { branch: string; commit: string } | null
 }
+
+// GitHub lists at most 3000 files of a PR
+const MAX_MR_FILES = 3000
 
 // Parses a GitLab MR URL (.../group/project/-/merge_requests/123) or GitHub PR URL (.../owner/repo/pull/45)
 export function parseMrUrl(rawUrl: string): ParsedMrUrl | null {
@@ -272,6 +278,15 @@ function resolveTarget(input: {
         }),
       )
     }
+    // A /pull/5 address on a GitLab host would otherwise fetch MR !5, a different change
+    if (matched.provider !== parsed.provider) {
+      throw new RepoError(
+        say({
+          en: `This is a ${parsed.provider === 'gitlab' ? 'GitLab' : 'GitHub'} address, but the connection for ${parsed.host} is ${matched.provider === 'gitlab' ? 'GitLab' : 'GitHub'}.`,
+          pt: `Este é um endereço do ${parsed.provider === 'gitlab' ? 'GitLab' : 'GitHub'}, mas a conexão de ${parsed.host} é ${matched.provider === 'gitlab' ? 'GitLab' : 'GitHub'}.`,
+        }),
+      )
+    }
     return { source: matched, fullPath: parsed.fullPath, iid: parsed.iid }
   }
 
@@ -305,9 +320,9 @@ export async function fetchRemoteMrDiff(input: {
   let changedFiles: string[] = []
 
   if (conn.provider === 'gitlab') {
-    const [mrRes, diffsRes] = await Promise.all([
+    const [mrRes, diffItems] = await Promise.all([
       call(conn, `/projects/${enc(fullPath)}/merge_requests/${iid}`),
-      call(conn, `/projects/${enc(fullPath)}/merge_requests/${iid}/diffs?per_page=100`),
+      gitLabDiffItems(conn, fullPath, iid),
     ])
     const m = mrRes.data as GlMr
     mr = {
@@ -326,14 +341,14 @@ export async function fetchRemoteMrDiff(input: {
       draft: Boolean(m.draft || m.work_in_progress),
       localClone: localLabel,
     }
-    const built = buildUnifiedDiffFromGitLab(diffsRes.data as GlDiffItem[])
+    const built = buildUnifiedDiffFromGitLab(diffItems)
     rawDiff = built.diff
     changedFiles = built.changedFiles
   } else {
     const repoPath = fullPath.split('/').map(enc).join('/')
-    const [prRes, filesRes] = await Promise.all([
+    const [prRes, prFiles] = await Promise.all([
       call(conn, `/repos/${repoPath}/pulls/${iid}`),
-      call(conn, `/repos/${repoPath}/pulls/${iid}/files?per_page=100`),
+      allPages<GhPullFile>(conn, `/repos/${repoPath}/pulls/${iid}/files`, MAX_MR_FILES),
     ])
     const p = prRes.data as GhPr
     mr = {
@@ -352,11 +367,12 @@ export async function fetchRemoteMrDiff(input: {
       draft: Boolean(p.draft),
       localClone: localLabel,
     }
-    const built = buildUnifiedDiffFromGitHub(filesRes.data as GhPullFile[])
+    const built = buildUnifiedDiffFromGitHub(prFiles)
     rawDiff = built.diff
     changedFiles = built.changedFiles
   }
 
+  const cloneRef = clonePath ? await cloneHead(clonePath) : null
   const blastRadius = clonePath && changedFiles.length > 0
     ? await computeBlastRadius(clonePath, changedFiles).catch(() => null)
     : null
@@ -364,11 +380,37 @@ export async function fetchRemoteMrDiff(input: {
   return {
     mr,
     diff: rawDiff.slice(0, MAX_DIFF),
-    truncated: rawDiff.length > MAX_DIFF,
+    truncated: rawDiff.length > MAX_DIFF || changedFiles.length >= MAX_MR_FILES,
     files: changedFiles.length,
     changedFiles,
     blastRadius,
     clonePath,
+    cloneRef,
+  }
+}
+
+// Every page of the MR's files. /diffs exists from GitLab 15.7; an older server answers 404 there and
+// still serves the deprecated /changes, which returns all files in one response.
+async function gitLabDiffItems(conn: Conn, fullPath: string, iid: number): Promise<GlDiffItem[]> {
+  const base = `/projects/${enc(fullPath)}/merge_requests/${iid}`
+  try {
+    return await allPages<GlDiffItem>(conn, `${base}/diffs`, MAX_MR_FILES)
+  } catch (e) {
+    if ((e as RepoError).status !== 404) throw e
+    return ((await call(conn, `${base}/changes`)).data as { changes: GlDiffItem[] }).changes
+  }
+}
+
+async function cloneHead(clonePath: string): Promise<{ branch: string; commit: string } | null> {
+  try {
+    const [branch, commit] = await Promise.all([
+      run('git', ['-C', clonePath, 'rev-parse', '--abbrev-ref', 'HEAD']),
+      run('git', ['-C', clonePath, 'rev-parse', '--short', 'HEAD']),
+    ])
+    return { branch: branch.trim(), commit: commit.trim() }
+  } catch {
+    // a clone without commits has no HEAD: the prompt then just does not name a branch
+    return null
   }
 }
 
@@ -436,6 +478,26 @@ export function runMrSelfcheck() {
 
 if (import.meta.main && process.argv.includes('--selfcheck')) {
   runMrSelfcheck()
+
+  // GitLab: every page of /diffs, and /changes when the server predates /diffs (404)
+  const realFetch = globalThis.fetch
+  const item = (n: number): GlDiffItem => ({ old_path: `f${n}.ts`, new_path: `f${n}.ts`, diff: '@@ -1 +1 @@\n-a\n+b\n' })
+  const conn = { provider: 'gitlab', url: 'https://gl.test', token: null } as Conn
+  try {
+    globalThis.fetch = (async (url: string) => {
+      const page = Number(new URL(url).searchParams.get('page'))
+      return page === 1
+        ? new Response(JSON.stringify(Array.from({ length: 100 }, (_, i) => item(i))), { headers: { 'x-next-page': '2' } })
+        : new Response(JSON.stringify([item(100), item(101)]))
+    }) as typeof fetch
+    assert.equal((await gitLabDiffItems(conn, 'g/p', 1)).length, 102, 'lê além da primeira página de 100')
+
+    globalThis.fetch = (async (url: string) =>
+      url.includes('/diffs') ? new Response('{}', { status: 404 }) : new Response(JSON.stringify({ changes: [item(1)] }))) as typeof fetch
+    assert.deepEqual((await gitLabDiffItems(conn, 'g/p', 1)).map(i => i.new_path), ['f1.ts'], 'GitLab antigo cai para /changes')
+  } finally {
+    globalThis.fetch = realFetch
+  }
   assert.equal(fenced('a'), '```\na\n```')
   assert.equal(fenced('x ``` y', 'diff'), '````diff\nx ``` y\n````', 'a cerca é maior que qualquer sequência de crases do texto')
   console.log('review mr selfcheck: ok')

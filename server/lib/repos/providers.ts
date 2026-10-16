@@ -54,7 +54,7 @@ export async function send(c: Conn, path: string): Promise<Response> {
 }
 
 // Todas as páginas: GitLab informa X-Next-Page; GitHub, o cabeçalho Link com rel="next".
-async function all<T>(c: Conn, path: string, max = 5000): Promise<T[]> {
+export async function allPages<T>(c: Conn, path: string, max = 5000): Promise<T[]> {
   const out: T[] = []
   const sep = path.includes('?') ? '&' : '?'
   for (let page = 1; out.length < max; page++) {
@@ -92,13 +92,13 @@ export async function children(c: Conn, rawPath: string): Promise<Children> {
   if (c.provider === 'gitlab') {
     if (!path) {
       // Raiz: grupos de topo que o token enxerga.
-      const groups = await all<GlGroup>(c, '/groups?top_level_only=true&min_access_level=10&order_by=name&sort=asc', 500)
+      const groups = await allPages<GlGroup>(c, '/groups?top_level_only=true&min_access_level=10&order_by=name&sort=asc', 500)
       return { path, webUrl: c.url, groups: groups.map(g => ({ name: g.name, fullPath: g.full_path, description: g.description ?? '' })), projects: [] }
     }
     const { data: group } = await call(c, `/groups/${enc(path)}`) as { data: GlGroup }
     const [subgroups, projects] = await Promise.all([
-      all<GlGroup>(c, `/groups/${group.id}/subgroups?order_by=name&sort=asc&all_available=true`),
-      all<GlProject>(c, `/groups/${group.id}/projects?include_subgroups=false&with_shared=false&order_by=name&sort=asc&simple=false`),
+      allPages<GlGroup>(c, `/groups/${group.id}/subgroups?order_by=name&sort=asc&all_available=true`),
+      allPages<GlProject>(c, `/groups/${group.id}/projects?include_subgroups=false&with_shared=false&order_by=name&sort=asc&simple=false`),
     ])
     return {
       path, webUrl: group.web_url,
@@ -108,7 +108,7 @@ export async function children(c: Conn, rawPath: string): Promise<Children> {
   }
 
   if (!path) {
-    const orgs = c.token ? await all<{ login: string; description: string | null }>(c, '/user/orgs', 500) : []
+    const orgs = c.token ? await allPages<{ login: string; description: string | null }>(c, '/user/orgs', 500) : []
     const me = c.token ? await whoami(c) : null
     return { path, webUrl: c.url, groups: [...(me ? [{ name: say({ en: `${me} (you)`, pt: `${me} (você)` }), fullPath: me, description: say({ en: 'your repositories', pt: 'seus repositórios' }) }] : []), ...orgs.map(o => ({ name: o.login, fullPath: o.login, description: o.description ?? '' }))], projects: [] }
   }
@@ -119,10 +119,10 @@ export async function children(c: Conn, rawPath: string): Promise<Children> {
 
 async function reposOf(c: Conn, owner: string): Promise<GhRepo[]> {
   const { data } = await call(c, `/users/${enc(owner)}`) as { data: { type: string } }
-  if (data.type === 'Organization') return all<GhRepo>(c, `/orgs/${enc(owner)}/repos?type=all`)
+  if (data.type === 'Organization') return allPages<GhRepo>(c, `/orgs/${enc(owner)}/repos?type=all`)
   // Repositórios do próprio usuário (inclui privados) só pelo /user/repos; de outro usuário, os públicos.
   const me = c.token ? await whoami(c).catch(() => null) : null
-  return me === owner ? all<GhRepo>(c, '/user/repos?affiliation=owner') : all<GhRepo>(c, `/users/${enc(owner)}/repos?type=owner`)
+  return me === owner ? allPages<GhRepo>(c, '/user/repos?affiliation=owner') : allPages<GhRepo>(c, `/users/${enc(owner)}/repos?type=owner`)
 }
 
 // Todos os projetos abaixo de um grupo, inclusive em subgrupos (para clonar o grupo inteiro).
@@ -131,7 +131,7 @@ export async function projectsUnder(c: Conn, rawPath: string): Promise<Project[]
   if (!path) throw new RepoError(say({ en: 'choose a group to clone; cloning the whole root is not allowed', pt: 'escolha um grupo para clonar; clonar a raiz inteira não é permitido' }))
   if (c.provider === 'gitlab') {
     const { data: group } = await call(c, `/groups/${enc(path)}`) as { data: GlGroup }
-    return (await all<GlProject>(c, `/groups/${group.id}/projects?include_subgroups=true&with_shared=false&order_by=path&sort=asc`)).map(fromGl)
+    return (await allPages<GlProject>(c, `/groups/${group.id}/projects?include_subgroups=true&with_shared=false&order_by=path&sort=asc`)).map(fromGl)
   }
   return (await reposOf(c, path)).map(fromGh)
 }
