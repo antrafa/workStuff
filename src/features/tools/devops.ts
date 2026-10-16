@@ -305,6 +305,8 @@ export type PemCertInfo = {
   daysRemaining: number
   expired: boolean
   sans: string[]
+  /** Certificates in the pasted text (a fullchain.pem has several); only the first is decoded. */
+  chainLength: number
 }
 
 type Asn1Node = {
@@ -335,10 +337,12 @@ function parseAsn1(buf: Uint8Array, offset = 0): Asn1Node {
     const numBytes = length & 0x7f
     if (numBytes === 0 || numBytes > 4 || pos + numBytes > buf.length) throw new Error('ASN.1 invalid length')
     length = 0
-    for (let i = 0; i < numBytes; i++) length = (length << 8) | buf[pos++]
+    // Multiplication, not <<: with 4 length bytes a bit shift goes negative and the child loop below
+    // walks backwards forever, freezing the tab.
+    for (let i = 0; i < numBytes; i++) length = length * 256 + buf[pos++]
   }
   const headerLen = pos - offset
-  if (pos + length > buf.length) throw new Error('ASN.1 value exceeds buffer')
+  if (length > buf.length - pos) throw new Error('ASN.1 value exceeds buffer')
   const valueBytes = buf.subarray(pos, pos + length)
   const node: Asn1Node = { tag, headerLen, length, offset, bytes: valueBytes }
 
@@ -349,8 +353,9 @@ function parseAsn1(buf: Uint8Array, offset = 0): Asn1Node {
     const end = pos + length
     while (childPos < end) {
       const child = parseAsn1(buf, childPos)
-      children.push(child)
       childPos += child.headerLen + child.length
+      if (childPos > end) throw new Error('ASN.1 child exceeds its parent')
+      children.push(child)
     }
     node.children = children
   }
@@ -411,11 +416,18 @@ function decodeAsn1Time(node: Asn1Node): Date {
   return new Date(iso)
 }
 
+function formatIpv6(bytes: Uint8Array): string {
+  const groups: string[] = []
+  for (let i = 0; i < 16; i += 2) groups.push(((bytes[i] << 8) | bytes[i + 1]).toString(16))
+  return groups.join(':')
+}
+
 export function decodePemCertificate(pem: string, nowMs = Date.now()): PemCertInfo {
-  const cleaned = pem
-    .replace(/-----BEGIN CERTIFICATE-----/g, '')
-    .replace(/-----END CERTIFICATE-----/g, '')
-    .replace(/\s+/g, '')
+  // Each block is decoded on its own: joining a chain's base64 breaks on the first block's "=" padding,
+  // and text such as `openssl x509 -text` output around the block is not base64 at all.
+  const blocks = [...pem.matchAll(/-----BEGIN CERTIFICATE-----([\s\S]*?)-----END CERTIFICATE-----/g)].map(m => m[1])
+  const chainLength = Math.max(1, blocks.length)
+  const cleaned = (blocks[0] ?? pem).replace(/\s+/g, '')
   if (!cleaned) {
     throw new Error(tx({
       en: 'Paste a PEM certificate (-----BEGIN CERTIFICATE-----).',
@@ -472,19 +484,21 @@ export function decodePemCertificate(pem: string, nowMs = Date.now()): PemCertIn
       if (decodeOid(oidNode.bytes) === '2.5.29.17') {
         const sanSeq = parseAsn1(octetNode.bytes, 0)
         for (const gn of sanSeq.children ?? []) {
-          if (gn.tag === 0x82) {
-            // dNSName
+          // rfc822Name (email), dNSName and uniformResourceIdentifier are IA5 strings
+          if (gn.tag === 0x81 || gn.tag === 0x82 || gn.tag === 0x86) {
             sans.push(new TextDecoder('utf-8').decode(gn.bytes))
           } else if (gn.tag === 0x87 && gn.bytes.length === 4) {
-            // IPv4
             sans.push([...gn.bytes].join('.'))
+          } else if (gn.tag === 0x87 && gn.bytes.length === 16) {
+            sans.push(formatIpv6(gn.bytes))
           }
         }
       }
     }
 
     const expired = notAfter.getTime() < nowMs
-    const daysRemaining = Math.ceil((notAfter.getTime() - nowMs) / 86_400_000)
+    // `|| 0` turns the -0 of a certificate that expired less than a day ago into 0
+    const daysRemaining = Math.ceil((notAfter.getTime() - nowMs) / 86_400_000) || 0
 
     return {
       subject: subject || '(empty)',
@@ -495,6 +509,7 @@ export function decodePemCertificate(pem: string, nowMs = Date.now()): PemCertIn
       daysRemaining,
       expired,
       sans,
+      chainLength,
     }
   } catch (e) {
     throw new Error(tx({

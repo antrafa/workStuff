@@ -286,6 +286,14 @@ export function PemCertTool() {
                     pt: `válido (faltam ${result.value.daysRemaining}d)`,
                   })}
             </span>
+            {result.value.chainLength > 1 && (
+              <span className="badge">
+                {tx({
+                  en: `first of ${result.value.chainLength} in the chain`,
+                  pt: `primeiro de ${result.value.chainLength} da cadeia`,
+                })}
+              </span>
+            )}
             <span className="muted mono" style={{ fontSize: 11, minWidth: 0, overflowWrap: 'anywhere' }}>
               {result.value.serialNumber}
             </span>

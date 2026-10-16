@@ -114,4 +114,30 @@ assert.equal(cert.issuer, 'CN=api.workstuff.local, O=workStuff')
 assert.equal(cert.expired, false)
 assert.deepEqual(cert.sans, ['api.workstuff.local', 'localhost', '127.0.0.1'])
 
+const chain = decodePemCertificate(`${samplePem}\n${samplePem}`, Date.parse('2026-10-16T02:00:00Z'))
+assert.equal(chain.subject, cert.subject, 'cadeia: o primeiro bloco é lido mesmo com padding "=" no fim dele')
+assert.equal(chain.chainLength, 2)
+assert.equal(decodePemCertificate(`Certificate:\n    Data: x\n${samplePem}`).subject, cert.subject, 'texto do openssl em volta do bloco')
+assert.equal(decodePemCertificate(samplePem, Date.parse('2036-10-13T02:52:03Z')).daysRemaining, 0, 'sem -0 logo após expirar')
+
+const sanPem = [
+  '-----BEGIN CERTIFICATE-----',
+  'MIIB3DCCAYGgAwIBAgIUfjuZ7XhPeRMgyK0N3ZZDqQtq/ZcwCgYIKoZIzj0EAwIw',
+  'EzERMA8GA1UEAwwIc2FuLnRlc3QwHhcNMjYxMDE2MTY0MzEzWhcNMzYxMDEzMTY0',
+  'MzEzWjATMREwDwYDVQQDDAhzYW4udGVzdDBZMBMGByqGSM49AgEGCCqGSM49AwEH',
+  'A0IABHHIDOu137OsMYybg8s6qDi95UnfTLoCZ5kBzx5m27o/H5BdfJm/jV2LaCbQ',
+  'Hv/S42IUqb/flbnSASVd0BnSl2ijgbIwga8wHQYDVR0OBBYEFH6zVKeBO8HufiFk',
+  '1iGf29jp1IbCMB8GA1UdIwQYMBaAFH6zVKeBO8HufiFk1iGf29jp1IbCMA8GA1Ud',
+  'EwEB/wQFMAMBAf8wXAYDVR0RBFUwU4IIc2FuLnRlc3SHEAAAAAAAAAAAAAAAAAAA',
+  'AAGHECABDbgAAAAAAAAAAAAAAAWBDG9wc0BzYW4udGVzdIYVc3BpZmZlOi8vc2Fu',
+  'LnRlc3QvYXBpMAoGCCqGSM49BAMCA0kAMEYCIQCXnyOtRC/XYwBPYtXD2FDr4L4m',
+  'LN89GaYZKbv3ne2XgQIhAI/5DNmbI708nydqKwvRy9QjFoWHahLvoLSpQgf0eYwA',
+  '-----END CERTIFICATE-----',
+].join('\n')
+assert.deepEqual(decodePemCertificate(sanPem).sans, ['san.test', '0:0:0:0:0:0:0:1', '2001:db8:0:0:0:0:0:5', 'ops@san.test', 'spiffe://san.test/api'])
+
+// DER com comprimento de 4 bytes e bit alto ligado: antes andava para trás para sempre
+const hostile = btoa(String.fromCharCode(0x30, 0x0c, 0x02, 0x01, 0x00, 0x31, 0x84, 0xff, 0xff, 0xff, 0xf7, 0x00, 0x00, 0x00))
+assert.throws(() => decodePemCertificate(`-----BEGIN CERTIFICATE-----\n${hostile}\n-----END CERTIFICATE-----`), /X\.509/)
+
 console.log('check-text: ok')
