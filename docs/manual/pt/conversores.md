@@ -17,7 +17,7 @@ A tela tem um cartão para cada ferramenta. O resultado aparece no próprio cart
 | Cartão | O que faz |
 |---|---|
 | **JWT** | Abre um token JWT (o "crachá" que muitos sistemas usam para provar quem você é) e mostra as duas partes legíveis, **Header** e **Payload**, e se o token está **válido** ou **expirado**. |
-| **SQL Bind** | Junta uma query SQL parametrizada (`?`) com as linhas de bind de log do Hibernate, JDBC ou MyBatis e devolve a query formatada com os valores preenchidos. |
+| **SQL Bind** | Junta uma query SQL parametrizada (`?`) com as linhas de bind de log do Hibernate, JDBC ou MyBatis e devolve a query formatada com os valores preenchidos. Aceita também `$1` do Postgres e linhas com o prefixo de log do Spring Boot; `?` dentro de texto entre aspas ou de comentário não conta como parâmetro. |
 | **Memória JVM & K8s** | Calcula se o Heap do Java (`MaxRAMPercentage` ou `-Xmx`) somado ao Non-Heap (`Metaspace`, `Direct`, pilhas de threads e code cache) cabe no limite de memória do pod no Kubernetes sem causar `OOMKilled` (código 137). |
 | **X.509 PEM** | Decodifica um certificado `-----BEGIN CERTIFICATE-----` no navegador e mostra Subject, Issuer, número de série, datas de validade e SANs (domínios, IPs, e-mails e URIs cobertos). Numa cadeia (`fullchain.pem`), lê o primeiro certificado e diz quantos há. |
 | **Base64** | Codifica texto em Base64 (um jeito de escrever qualquer dado só com letras e números) e decodifica de volta. Aceita também a variante base64url. |

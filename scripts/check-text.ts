@@ -84,6 +84,39 @@ assert.equal(sqlMb.boundCount, 2)
 assert.ok(sqlMb.sql.includes("WHERE nome = 'D''Ávila'"))
 assert.ok(sqlMb.sql.includes('AND id = 42'))
 
+// Literais preservados: espaços dentro de string e o valor como foi logado
+const sqlSpaces = interpolateSql("select * from t where a = '  x  y ' and b = ?\nbinding parameter [1] as [VARCHAR] - [  pad  ]")
+assert.ok(sqlSpaces.sql.includes("'  x  y '"), 'não comprime espaços dentro de literal')
+assert.ok(sqlSpaces.sql.includes("b = '  pad  '"), 'não apara o valor do parâmetro')
+
+// Linha de Parameters com prefixo do logback (Spring Boot) e lista vazia
+const sqlLogback = interpolateSql([
+  '2024-05-01 10:00:00.123 DEBUG 1 --- [main] c.e.UserMapper.find : ==>  Preparing: select * from users where id = ?',
+  '2024-05-01 10:00:00.124 DEBUG 1 --- [main] c.e.UserMapper.find : ==> Parameters: 7(Integer)',
+  '2024-05-01 10:00:00.130 DEBUG 1 --- [main] c.e.UserMapper.find : <==      Total: 1',
+].join('\n'))
+assert.equal(sqlLogback.boundCount, 1)
+assert.equal(sqlLogback.sql, 'SELECT *\nFROM users\nWHERE id = 7')
+assert.equal(interpolateSql('==>  Preparing: select 1\n==> Parameters: ').sql, 'SELECT 1')
+
+// MyBatis: vírgula dentro do valor e BigDecimal como número
+const sqlComma = interpolateSql("==>  Preparing: insert into p (nome, id, preco) values (?, ?, ?)\n==> Parameters: Silva, Joao(String), 1(Integer), 3.14(BigDecimal)")
+assert.equal(sqlComma.boundCount, 3)
+assert.ok(sqlComma.sql.includes("('Silva, Joao', 1, 3.14)"))
+assert.deepEqual(interpolateSql('select ?, ?\n==> Parameters: null, 2(Long)').sql, 'SELECT NULL, 2')
+
+// Postgres $n, e aspas mantêm o texto: '007' não vira número
+const sqlDollar = interpolateSql("select * from t where a = $2 and b = $1\n$1 = '007'\n$2 = 5")
+assert.equal(sqlDollar.boundCount, 2)
+assert.ok(sqlDollar.sql.includes("a = 5") && sqlDollar.sql.includes("b = '007'"))
+
+// Comentários e escape com barra não consomem parâmetros
+const sqlComment = interpolateSql("select * from t -- why?\nwhere a = ? /* b = ? */ and c = 'it\\'s?'\nbinding parameter [1] as [INTEGER] - [9]")
+assert.equal(sqlComment.boundCount, 1)
+assert.equal(sqlComment.unboundCount, 0)
+assert.ok(sqlComment.sql.includes('-- why?\nWHERE a = 9'), 'o comentário de linha termina na quebra de linha')
+assert.ok(sqlComment.sql.includes("'it\\'s?'"))
+
 // JVM & K8s Memory
 const jvmOom = calculateJvmMemory({ limitMiB: 1024, heapMode: 'pct', maxRamPct: 80, xmxMiB: 800, metaspaceMiB: 256, directMiB: 64, threads: 200, xssKiB: 1024, codeCacheMiB: 128 })
 assert.equal(jvmOom.status, 'crit', '80% heap + 648 MiB non-heap ultrapassa 1024 MiB')

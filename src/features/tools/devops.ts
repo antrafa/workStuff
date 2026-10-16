@@ -15,11 +15,12 @@ type SqlParam = { raw: string; type?: string }
 
 const NUMERIC_SQL_TYPES = new Set([
   'INTEGER', 'INT', 'BIGINT', 'LONG', 'SMALLINT', 'SHORT', 'TINYINT', 'BYTE',
-  'DECIMAL', 'NUMERIC', 'DOUBLE', 'FLOAT', 'REAL', 'NUMBER',
+  'DECIMAL', 'NUMERIC', 'DOUBLE', 'FLOAT', 'REAL', 'NUMBER', 'BIGDECIMAL', 'BIGINTEGER',
 ])
 
 const BOOLEAN_SQL_TYPES = new Set(['BOOLEAN', 'BOOL', 'BIT'])
 
+// The value is classified trimmed but quoted as logged: spaces inside a string change which rows match.
 function formatSqlValue(param: SqlParam): string {
   const val = param.raw.trim()
   const upperType = param.type?.trim().toUpperCase() ?? ''
@@ -34,91 +35,119 @@ function formatSqlValue(param: SqlParam): string {
     if (/^(true|false)$/i.test(val)) return val.toUpperCase()
     if (/^-?\d+(\.\d+)?$/.test(val)) return val
   }
-  return `'${val.replace(/'/g, "''")}'`
+  return `'${param.raw.replace(/'/g, "''")}'`
 }
 
-// Formats major SQL clauses onto new lines outside single/double-quoted literals
-export function formatSqlQuery(sql: string): string {
-  const compact = sql.trim().replace(/\s+/g, ' ')
-  if (!compact) return ''
-  const clauses = [
-    'SELECT', 'FROM', 'LEFT OUTER JOIN', 'RIGHT OUTER JOIN', 'FULL OUTER JOIN',
-    'INNER JOIN', 'LEFT JOIN', 'RIGHT JOIN', 'CROSS JOIN', 'JOIN',
-    'WHERE', 'GROUP BY', 'HAVING', 'ORDER BY', 'LIMIT', 'OFFSET', 'VALUES', 'SET',
-  ]
-  const indentClauses = new Set(['AND', 'OR'])
-  let out = ''
+type SqlSegment = { kind: 'code' | 'string' | 'comment'; text: string }
+
+// Splits SQL into code, quoted literals and comments, so binding and formatting only ever touch code:
+// a ? inside 'texto ?' or after -- is not a parameter.
+function sqlSegments(sql: string): SqlSegment[] {
+  const out: SqlSegment[] = []
+  let code = ''
+  const flush = () => {
+    if (code) out.push({ kind: 'code', text: code })
+    code = ''
+  }
   let i = 0
-  let quote: string | null = null
-  let depth = 0
-
-  while (i < compact.length) {
-    const ch = compact[i]
-    if (quote) {
-      out += ch
-      if (ch === quote) {
-        if (compact[i + 1] === quote) {
-          out += compact[++i]
-        } else {
-          quote = null
-        }
-      }
-      i++
-      continue
-    }
+  while (i < sql.length) {
+    const ch = sql[i]
     if (ch === "'" || ch === '"') {
-      quote = ch
-      out += ch
-      i++
-      continue
-    }
-    if (ch === '(') {
-      depth++
-      out += ch
-      i++
-      continue
-    }
-    if (ch === ')') {
-      depth = Math.max(0, depth - 1)
-      out += ch
-      i++
-      continue
-    }
-
-    if (depth === 0 && (i === 0 || compact[i - 1] === ' ')) {
-      const rest = compact.slice(i)
-      let matched = false
-      for (const kw of clauses) {
-        const re = new RegExp(`^${kw}\\b`, 'i')
-        const m = re.exec(rest)
-        if (m) {
-          out = out.trimEnd() + (out.trim() ? '\n' : '') + kw
-          i += m[0].length
-          matched = true
-          break
-        }
+      let j = i + 1
+      while (j < sql.length) {
+        // ponytail: \' is read as an escape (MySQL); a Postgres literal ending in a backslash then runs on
+        // to the end, which only loses the formatting of what follows, never a binding.
+        if (sql[j] === '\\') j += 2
+        else if (sql[j] === ch && sql[j + 1] === ch) j += 2
+        else if (sql[j] === ch) break
+        else j++
       }
-      if (matched) continue
-
-      for (const kw of indentClauses) {
-        const re = new RegExp(`^${kw}\\b`, 'i')
-        const m = re.exec(rest)
-        if (m) {
-          out = out.trimEnd() + '\n  ' + kw
-          i += m[0].length
-          matched = true
-          break
-        }
-      }
-      if (matched) continue
+      flush()
+      out.push({ kind: 'string', text: sql.slice(i, j + 1) })
+      i = j + 1
+      continue
     }
-
-    out += ch
+    if (sql.startsWith('--', i) || sql.startsWith('/*', i)) {
+      const line = sql.startsWith('--', i)
+      const close = line ? sql.indexOf('\n', i) : sql.indexOf('*/', i + 2)
+      const end = close < 0 ? sql.length : line ? close : close + 2
+      flush()
+      out.push({ kind: 'comment', text: sql.slice(i, end) })
+      i = end
+      continue
+    }
+    code += ch
     i++
   }
+  flush()
+  return out
+}
 
+const SQL_CLAUSES = [
+  'SELECT', 'FROM', 'LEFT OUTER JOIN', 'RIGHT OUTER JOIN', 'FULL OUTER JOIN',
+  'INNER JOIN', 'LEFT JOIN', 'RIGHT JOIN', 'CROSS JOIN', 'JOIN',
+  'WHERE', 'GROUP BY', 'HAVING', 'ORDER BY', 'LIMIT', 'OFFSET', 'VALUES', 'SET',
+].map(kw => ({ kw, re: new RegExp(`^${kw}\\b`, 'i') }))
+const SQL_CONNECTIVES = ['AND', 'OR'].map(kw => ({ kw, re: new RegExp(`^${kw}\\b`, 'i') }))
+
+// Major clauses go on their own line at parenthesis depth 0; literals and comments are kept as written.
+export function formatSqlQuery(sql: string): string {
+  let out = ''
+  let depth = 0
+  for (const seg of sqlSegments(sql.trim())) {
+    if (seg.kind === 'string') {
+      out += seg.text
+      continue
+    }
+    if (seg.kind === 'comment') {
+      out += seg.text.startsWith('--') ? `${seg.text}\n` : seg.text
+      continue
+    }
+    const code = seg.text.replace(/\s+/g, ' ')
+    let i = 0
+    while (i < code.length) {
+      const ch = code[i]
+      if (ch === '(') depth++
+      if (ch === ')') depth = Math.max(0, depth - 1)
+      if (depth === 0 && (i === 0 || code[i - 1] === ' ')) {
+        const rest = code.slice(i)
+        const clause = SQL_CLAUSES.find(c => c.re.test(rest))
+        const connective = clause ? null : SQL_CONNECTIVES.find(c => c.re.test(rest))
+        if (clause || connective) {
+          const { kw } = (clause ?? connective)!
+          out = out.trimEnd() + (clause ? (out.trim() ? '\n' : '') : '\n  ') + kw
+          i += kw.length
+          continue
+        }
+      }
+      out += ch
+      i++
+    }
+  }
   return out.trim()
 }
+
+// MyBatis "Parameters:" list: `value(Type)` or `null`, separated by ", ". A value may itself hold ", "
+// ("Silva, Joao(String)"), so a parameter ends only at its (Type) or at null.
+function parseMyBatisParams(list: string): SqlParam[] {
+  const params: SqlParam[] = []
+  const re = /null(?=, |$)|([\s\S]*?)\(([A-Za-z0-9_.]+)\)(?=, |$)/y
+  let pos = 0
+  while (pos < list.length) {
+    re.lastIndex = pos
+    const m = re.exec(list)
+    if (!m) {
+      params.push({ raw: list.slice(pos) })
+      break
+    }
+    params.push(m[2] ? { raw: m[1], type: m[2] } : { raw: 'null' })
+    pos = re.lastIndex + 2
+  }
+  return params
+}
+
+// Result rows and counters that Hibernate and MyBatis log after the statement; none of them is SQL.
+const SQL_LOG_NOISE = /extracted value|<==|BasicExtractor/i
 
 export function interpolateSql(input: string): SqlBindResult {
   const lines = input.split(/\r?\n/)
@@ -128,7 +157,7 @@ export function interpolateSql(input: string): SqlBindResult {
 
   for (const rawLine of lines) {
     const line = rawLine.trim()
-    if (!line) continue
+    if (!line || SQL_LOG_NOISE.test(line)) continue
 
     // 1. Hibernate 5: binding parameter [1] as [VARCHAR] - [value]
     const h5 = /binding parameter \[(\d+)\]\s+as\s+\[([^\]]+)\]\s*-\s*\[(.*)\]$/i.exec(line)
@@ -144,40 +173,32 @@ export function interpolateSql(input: string): SqlBindResult {
       continue
     }
 
-    // 3. MyBatis / Spring JDBC / P6Spy: "Parameters: val1(String), 42(Long), null"
-    const mybatis = /^(?:==>|\d{2}:\d{2}:\d{2}\.\d+.*)?\s*Parameters:\s*(.+)$/i.exec(line)
+    // 3. MyBatis / Spring JDBC / P6Spy, with or without a logback prefix: "==> Parameters: 7(Integer), null"
+    const mybatis = /^(?:.*?(?:==>|\s))?Parameters:[ \t]?(.*)$/i.exec(line)
     if (mybatis) {
-      const parts = mybatis[1].split(/,\s*(?![^()]*\))/)
-      for (const part of parts) {
-        const p = part.trim()
-        if (/^null$/i.test(p)) {
-          sequentialParams.push({ raw: 'null' })
-        } else {
-          const typed = /^(.*)\(([A-Za-z0-9_]+)\)$/.exec(p)
-          if (typed) sequentialParams.push({ raw: typed[1], type: typed[2] })
-          else sequentialParams.push({ raw: p })
-        }
-      }
+      if (mybatis[1].trim()) sequentialParams.push(...parseMyBatisParams(mybatis[1]))
       continue
     }
 
-    // 4. Simple numbered binding: "[1] = value" or "$1 = 'value'"
+    // 4. Simple numbered binding: "[1] = value" or "$1 = 'value'"; quotes mean a string, so '007' stays text
     const simple = /^(?:\[(\d+)\]|\$(\d+))\s*=\s*(.+)$/.exec(line)
     if (simple) {
-      const idx = Number(simple[1] ?? simple[2])
-      const cleaned = simple[3].trim().replace(/^'(.*)'$/, '$1')
-      indexedParams.set(idx, { raw: cleaned })
+      const value = simple[3].trim()
+      const quoted = /^'(.*)'$/.exec(value)
+      indexedParams.set(Number(simple[1] ?? simple[2]), quoted ? { raw: quoted[1].replace(/''/g, "'"), type: 'VARCHAR' } : { raw: value })
       continue
     }
 
-    // Strip logger prefix before "Hibernate:" or "==>  Preparing:"
+    // Strip the logger prefix before "Hibernate:", "==>  Preparing:" or the org.hibernate.SQL category
     const cleanedSql = line
       .replace(/^.*?\bHibernate:\s*/i, '')
       .replace(/^.*?==>\s*Preparing:\s*/i, '')
+      .replace(/^.*?\b(?:org\.hibernate|o\.h)\.SQL\s*:?\s*/, '')
     sqlLines.push(cleanedSql)
   }
 
-  const rawSql = sqlLines.join(' ').trim()
+  // Lines stay apart: joined with a space, a -- comment would swallow the line after it
+  const rawSql = sqlLines.join('\n').trim()
   if (!rawSql) {
     throw new Error(tx({
       en: 'Paste a SQL statement (with ? placeholders) and optional parameter binding lines.',
@@ -188,38 +209,19 @@ export function interpolateSql(input: string): SqlBindResult {
   let paramIndex = 0
   let boundCount = 0
   let unboundCount = 0
-  let interpolated = ''
-  let quote: string | null = null
-
-  for (let i = 0; i < rawSql.length; i++) {
-    const ch = rawSql[i]
-    if (quote) {
-      interpolated += ch
-      if (ch === quote) {
-        if (rawSql[i + 1] === quote) interpolated += rawSql[++i]
-        else quote = null
-      }
-      continue
-    }
-    if (ch === "'" || ch === '"') {
-      quote = ch
-      interpolated += ch
-      continue
-    }
-    if (ch === '?') {
-      paramIndex++
-      const param = indexedParams.get(paramIndex) ?? sequentialParams[paramIndex - 1]
-      if (param) {
-        interpolated += formatSqlValue(param)
-        boundCount++
-      } else {
-        interpolated += '?'
+  const interpolated = sqlSegments(rawSql)
+    .map(seg => seg.kind !== 'code' ? seg.text : seg.text.replace(/\?|\$(\d+)/g, (placeholder, dollar?: string) => {
+      // ? takes the next parameter in order; Postgres $n names its own
+      const n = dollar ? Number(dollar) : ++paramIndex
+      const param = indexedParams.get(n) ?? sequentialParams[n - 1]
+      if (!param) {
         unboundCount++
+        return placeholder
       }
-      continue
-    }
-    interpolated += ch
-  }
+      boundCount++
+      return formatSqlValue(param)
+    }))
+    .join('')
 
   return {
     sql: formatSqlQuery(interpolated),
