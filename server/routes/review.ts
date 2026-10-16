@@ -10,6 +10,7 @@ import { openSse } from '../lib/sse.ts'
 import { resolveProject } from '../lib/analysis/store.ts'
 import { branchDiff, repoInfo } from '../lib/review/git.ts'
 import { fenced, fetchRemoteMrDiff, formatBlastPromptNote, listWatchedOpenMrs } from '../lib/review/mr.ts'
+import { myQueue } from '../lib/review/queue.ts'
 import { say } from '../lib/i18n.ts'
 
 export const reviewRouter = Router()
@@ -45,6 +46,14 @@ reviewRouter.post('/diff', async (req, res) => {
 reviewRouter.get('/mrs', async (_req, res) => {
   try {
     res.json(await listWatchedOpenMrs())
+  } catch (e) {
+    res.status(400).json({ error: (e as Error).message })
+  }
+})
+
+reviewRouter.get('/queue', async (_req, res) => {
+  try {
+    res.json(await myQueue())
   } catch (e) {
     res.status(400).json({ error: (e as Error).message })
   }

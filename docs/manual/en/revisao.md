@@ -7,6 +7,7 @@ Asks the AI to review what your branch brings before you open the merge request:
 - You finished a task on a branch and want to catch bugs before the team's reviewer does.
 - You want a ready-made paragraph for the merge request description.
 - You changed code you do not know well and want a second opinion on what could break.
+- You want to know which MRs wait for your review and what blocks the MRs you opened.
 
 Some terms on this page:
 
@@ -25,7 +26,8 @@ See also [Concepts and terms](/documentacao/conceitos).
 
 ## Getting to know the screen
 
-- **Tabs (`Local branch` and `Open MR / PR`)**: switch between reviewing a branch in a repository cloned on your machine and inspecting an open Merge Request / Pull Request from followed projects (or by pasting its GitLab/GitHub URL). The AI review of an MR/PR needs bwrap, because its title, description and diff were written by someone else.
+- **Tabs (`Local branch`, `Open MR / PR` and `My queue`)**: switch between reviewing a branch in a repository cloned on your machine, inspecting an open Merge Request / Pull Request from followed projects (or by pasting its GitLab/GitHub URL) and seeing your MR queue.
+- **My queue**: two lists, built from every connection of the [Repositories](/repositorios) screen. **Waiting for your review** has the MRs where you are reviewer or assignee (except your own). **Opened by you** has yours. The **State** column says what blocks the merge: **conflict**, **needs rebase**, **pipeline failed**, **pipeline running**, **waiting for approval**, **changes requested**, **open threads**, **draft** or **ready to merge**. The AI review of an MR/PR needs bwrap, because its title, description and diff were written by someone else.
 - **Path field**: where the repository folder goes, for example `/home/you/workspace/shop-api`. The **Choose** button opens the system folder picker. The screen remembers the last folder you opened.
 - **Back**: shows when you arrive from the **Review** button in My Workspace (in Repositories) and returns to that list with the same search and filter.
 - **Branch line**: once opened, the screen shows "Branch `your-branch` against" and a list of the repository's branches to pick the base from.
@@ -50,6 +52,13 @@ See also [Concepts and terms](/documentacao/conceitos).
 1. While the AI is working, click **Stop**.
 2. Whatever already arrived stays on screen.
 
+### See what is waiting for you
+
+1. Open the **My queue** tab.
+2. Under **Waiting for your review**, click **Inspect** on an MR. The **Open MR / PR** tab opens with its diff.
+3. Click **Review with AI** if you want the AI's opinion before reviewing.
+4. Under **Opened by you**, read the **State** column to know what each MR of yours still needs. The icon next to **Inspect** opens the MR on GitLab or GitHub.
+
 ## Good to know
 
 - The AI only reads. It does not change files, commit or run commands.
@@ -58,6 +67,7 @@ See also [Concepts and terms](/documentacao/conceitos).
 - The review is always written in Portuguese.
 - A very large diff is cut before it goes to the AI; the progress line then says "diff cut" and the AI reads the missing files straight from the folder.
 - A review has a 20-minute limit.
+- **My queue** needs a connection with a token: the token is what tells GitLab or GitHub who you are. Connections without a token are left out. On GitHub, the search does not say what blocks the merge, and the state shows as **see on the server**.
 
 ## Common problems
 

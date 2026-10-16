@@ -6,10 +6,11 @@ import { api } from '@/lib/api'
 import { streamPost } from '@/lib/stream'
 import { tx } from '@/lib/i18n'
 import { LocalDiffSection, MrReviewTab } from './MrReviewTab'
+import { QueueTab } from './QueueTab'
 
 type Info = { path: string; label: string; current: string; defaultBase: string | null; branches: string[]; dirty: number }
 type DiffEvent = AiStreamEvent & { files?: number; truncated?: boolean; base?: string; mergeBase?: string }
-type Tab = 'local' | 'mr'
+type Tab = 'local' | 'mr' | 'fila'
 
 const KEY = 'review-path'
 const read = () => {
@@ -26,7 +27,8 @@ export default function ReviewPage() {
   const location = useLocation()
   // Set by whoever sent the user here (Meu Workspace), with that screen's own filters in the URL
   const backTo = (location.state as { from?: string } | null)?.from
-  const tab: Tab = searchParams.get('aba') === 'mr' ? 'mr' : 'local'
+  const aba = searchParams.get('aba')
+  const tab: Tab = aba === 'mr' || aba === 'fila' ? aba : 'local'
   const repoParam = searchParams.get('repo')
   const [path, setPath] = useState(() => repoParam || read())
   const [info, setInfo] = useState<Info | null>(null)
@@ -80,11 +82,11 @@ export default function ReviewPage() {
       })}
     >
       <div className="tabs" role="tablist">
-        {([['local', tx({ en: 'Local branch', pt: 'Branch local' })], ['mr', tx({ en: 'Open MR / PR', pt: 'MR / PR aberto' })]] as [Tab, string][]).map(([id, label]) => (
+        {([['local', tx({ en: 'Local branch', pt: 'Branch local' })], ['mr', tx({ en: 'Open MR / PR', pt: 'MR / PR aberto' })], ['fila', tx({ en: 'My queue', pt: 'Minha fila' })]] as [Tab, string][]).map(([id, label]) => (
           <button key={id} role="tab" aria-selected={tab === id} onClick={() => setSearchParams(id === 'local' ? {} : { aba: id }, { state: location.state })}>{label}</button>
         ))}
       </div>
-      {tab === 'mr' ? <MrReviewTab /> : (
+      {tab === 'fila' ? <QueueTab /> : tab === 'mr' ? <MrReviewTab /> : (
       <>
       <section className="card card-pad stack">
         <form className="row" onSubmit={e => (e.preventDefault(), open())}>

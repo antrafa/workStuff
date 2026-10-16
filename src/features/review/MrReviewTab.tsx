@@ -1,5 +1,6 @@
 import { ExternalLink, GitPullRequest, RotateCw, Sparkles } from 'lucide-react'
 import { useEffect, useState } from 'react'
+import { useSearchParams } from 'react-router'
 import { AiStream, Async, Empty, SkeletonRows, type AiStreamEvent } from '@/ui'
 import { api } from '@/lib/api'
 import { streamPost } from '@/lib/stream'
@@ -138,6 +139,8 @@ export function MrReviewTab() {
   const [loadingMr, setLoadingMr] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [run, setRun] = useState(0)
+  // Set by My queue's Inspect: the MR opens without pasting its address
+  const mrParam = useSearchParams()[0].get('mr')
 
   const openMr = async (payload: { url?: string; sourceId?: string; fullPath?: string; iid?: number }) => {
     setLoadingMr(true)
@@ -153,6 +156,12 @@ export function MrReviewTab() {
       setLoadingMr(false)
     }
   }
+
+  useEffect(() => {
+    if (!mrParam) return
+    setUrlInput(mrParam)
+    void openMr({ url: mrParam })
+  }, [mrParam])
 
   return (
     <div className="stack">

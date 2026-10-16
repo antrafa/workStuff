@@ -7,6 +7,7 @@ Pede à IA uma revisão do que a sua branch traz antes de você abrir o merge re
 - Você terminou uma tarefa numa branch e quer achar bugs antes que o revisor do time ache.
 - Você quer um parágrafo pronto para a descrição do merge request.
 - Você mexeu em código que não conhece bem e quer uma segunda opinião sobre o que pode quebrar.
+- Você quer saber quais MRs esperam a sua revisão e o que trava os MRs que você abriu.
 
 Alguns termos desta página:
 
@@ -25,7 +26,8 @@ Veja também [Conceitos e termos](/documentacao/conceitos).
 
 ## Conhecendo a tela
 
-- **Abas (`Branch local` e `MR / PR aberto`)**: alterna entre revisar uma branch de um repositório clonado na máquina e inspecionar um Merge Request / Pull Request aberto dos projetos acompanhados (ou colando a URL do GitLab/GitHub). A revisão com IA de um MR/PR exige o bwrap, porque o título, a descrição e o diff foram escritos por outra pessoa.
+- **Abas (`Branch local`, `MR / PR aberto` e `Minha fila`)**: alterna entre revisar uma branch de um repositório clonado na máquina, inspecionar um Merge Request / Pull Request aberto dos projetos acompanhados (ou colando a URL do GitLab/GitHub) e ver a sua fila de MRs.
+- **Minha fila**: duas listas, montadas em todas as conexões da tela [Repositórios](/repositorios). **Esperando a sua revisão** traz os MRs em que você é revisor ou responsável (menos os seus). **Abertos por você** traz os seus. A coluna **Estado** diz o que trava o merge: **conflito**, **precisa de rebase**, **esteira falhou**, **esteira rodando**, **falta aprovação**, **pediram mudança**, **discussão aberta**, **rascunho** ou **pronto para merge**. A revisão com IA de um MR/PR exige o bwrap, porque o título, a descrição e o diff foram escritos por outra pessoa.
 - **Campo do caminho**: onde vai a pasta do repositório, por exemplo `/home/voce/workspace/loja-api`. O botão **Escolher** abre o seletor de pastas do sistema. A tela lembra a última pasta aberta.
 - **Voltar**: aparece quando você chega pelo botão **Revisar** de Meu Workspace (em Repositórios) e volta para aquela lista com a mesma busca e o mesmo filtro.
 - **Linha da branch**: depois de abrir, a tela mostra "Branch `sua-branch` contra" e uma lista com as branches do repositório para escolher a base.
@@ -50,6 +52,13 @@ Veja também [Conceitos e termos](/documentacao/conceitos).
 1. Enquanto a IA trabalha, clique em **Parar**.
 2. O que já chegou fica na tela.
 
+### Ver o que espera por você
+
+1. Abra a aba **Minha fila**.
+2. Em **Esperando a sua revisão**, clique em **Inspecionar** num MR. A aba **MR / PR aberto** abre com o diff dele.
+3. Clique em **Revisar com IA** se quiser a opinião da IA antes de revisar.
+4. Em **Abertos por você**, leia a coluna **Estado** para saber o que falta para cada MR seu entrar. O ícone ao lado de **Inspecionar** abre o MR no GitLab ou no GitHub.
+
 ## Bom saber
 
 - A IA só lê. Ela não altera arquivos, não faz commit e não executa comandos.
@@ -58,6 +67,7 @@ Veja também [Conceitos e termos](/documentacao/conceitos).
 - A revisão vem sempre em português.
 - Um diff muito grande é cortado antes de ir para a IA; nesse caso a linha de progresso avisa "diff cortado" e a IA lê direto da pasta os arquivos que faltaram.
 - A revisão tem um limite de 20 minutos.
+- **Minha fila** precisa de uma conexão com token: é o token que diz ao GitLab ou ao GitHub quem é você. Conexões sem token ficam de fora. No GitHub, a busca não informa o que trava o merge, e o estado aparece como **ver no servidor**.
 
 ## Problemas comuns
 
