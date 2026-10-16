@@ -231,7 +231,7 @@ export function MrReviewTab() {
                                     pt: `Clonado em ${m.localClone}: Raio de Impacto e leitura do código disponíveis`,
                                   })}
                                 >
-                                  clone
+                                  {tx({ en: 'clone', pt: 'clonado' })}
                                 </span>
                               )}
                             </td>
@@ -240,7 +240,7 @@ export function MrReviewTab() {
                               <b>{m.title}</b>
                               {m.draft && (
                                 <span className="badge" style={{ marginLeft: 6, fontSize: 10 }}>
-                                  draft
+                                  {tx({ en: 'draft', pt: 'rascunho' })}
                                 </span>
                               )}
                             </td>
