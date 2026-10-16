@@ -144,10 +144,23 @@ export function createTunnelsStore(dir: string = dataFile('tunnels'), opts: Stor
     return t
   }
 
-  function resolveEnv(t: Pick<Tunnel, 'kubeconfigId' | 'context' | 'namespace'>): Environment | null {
+  // Same names the Cluster page classifies by (file and current-context) plus the tunnel's own context.
+  // The namespace never counts: "app-dev" inside a PRO cluster is still PRO. PRO is tested first, so
+  // every extra name can only make the result stricter.
+  function resolveEnv(t: Pick<Tunnel, 'kubeconfigId' | 'context'>): Environment | null {
     const overrides = readJson<Record<string, Environment>>(envFile, {})
     if (overrides[t.kubeconfigId]) return overrides[t.kubeconfigId]
-    return detectEnvironment(t.kubeconfigId.replace(/\.(ya?ml|kubeconfig)$/, ''), t.context, t.namespace)
+    return detectEnvironment(t.kubeconfigId.replace(/\.(ya?ml|kubeconfig)$/, ''), t.context, currentContextOf(t.kubeconfigId))
+  }
+
+  // ponytail: reads the top-level key with a regex instead of `kubectl config view`, which is async and
+  // this runs on every status poll; kubectl always writes the key at column zero.
+  function currentContextOf(kubeconfigId: string): string {
+    try {
+      return readFileSync(join(kubeDir, kubeconfigId), 'utf-8').match(/^current-context:\s*["']?([^"'\s]+)/m)?.[1] ?? ''
+    } catch {
+      return ''
+    }
   }
 
   function pidOf(id: string): number | null {
@@ -172,6 +185,8 @@ export function createTunnelsStore(dir: string = dataFile('tunnels'), opts: Stor
   function update(id: string, input: TunnelInput): Tunnel {
     const all = list()
     if (!all.some(t => t.id === id)) find(id)
+    // A running process keeps forwarding to the old target while the list would show the new one.
+    if (pidOf(id)) throw new Error(say({ en: 'the tunnel is active; stop it before editing', pt: 'o túnel está ativo; pare antes de editar' }))
     const tunnel: Tunnel = { ...input, id }
     save(all.map(t => (t.id === id ? tunnel : t)))
     return tunnel
@@ -396,6 +411,15 @@ if (import.meta.main && process.argv.includes('--selfcheck')) {
     }))
     assert.equal(store.resolveEnv(proTunnel), 'PRO')
 
+    // The namespace never classifies; the kubeconfig's current-context does
+    writeFileSync(join(kubeDir, 'cliente.yaml'), 'apiVersion: v1\nkind: Config\ncurrent-context: cliente-prod\n')
+    writeFileSync(join(kubeDir, 'outro.yaml'), 'apiVersion: v1\nkind: Config\ncurrent-context: outro\n')
+    assert.equal(store.resolveEnv({ kubeconfigId: 'cliente.yaml', context: '' }), 'PRO')
+    assert.equal(store.resolveEnv({ kubeconfigId: 'outro.yaml', context: '' }), null)
+    const nsDev = store.create({ ...proTunnel, name: 'NS dev', kubeconfigId: 'outro.yaml', context: '', namespace: 'app-dev', profile: null })
+    assert.equal(store.statusList(new Map()).find(t => t.id === nsDev.id)?.sensitive, true)
+    store.remove(nsDev.id)
+
     // PRO exige confirmação explícita
     await assert.rejects(store.start(proTunnel.id), /confirmation|confirmação/)
 
@@ -404,6 +428,7 @@ if (import.meta.main && process.argv.includes('--selfcheck')) {
     assert.ok(pid > 1)
     assert.equal(store.activeSummary().count, 1)
     assert.equal(store.activeSummary().sensitiveCount, 0)
+    assert.throws(() => store.update(desTunnel.id, { ...desTunnel, kubeconfigId: 'pro-cluster.yaml' }), /active|ativo/)
 
     for (let i = 0; i < 30 && !store.readLog(desTunnel.id).text.includes('Forwarding'); i++) await sleep(100)
     assert.match(store.readLog(desTunnel.id).text, /Forwarding from 127\.0\.0\.1:15432/)

@@ -67,6 +67,7 @@ export function TunnelsTab() {
   const [editing, setEditing] = useState<Tunnel | 'new' | null>(null)
   const [removing, setRemoving] = useState<TunnelStatus | null>(null)
   const [confirmStart, setConfirmStart] = useState<{ tunnel: TunnelStatus; action: 'start' | 'restart' } | null>(null)
+  const [confirmProfile, setConfirmProfile] = useState<{ profile: string; sensitive: TunnelStatus[] } | null>(null)
   const [logsOf, setLogsOf] = useState<string | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
   const toast = useToast()
@@ -93,10 +94,15 @@ export function TunnelsTab() {
     }
   }
 
-  const runProfile = async (profile: string, action: 'start' | 'stop') => {
+  const runProfile = async (profile: string, action: 'start' | 'stop', group: TunnelStatus[], confirmSensitive = false) => {
+    const sensitive = group.filter(t => t.sensitive && !t.pid)
+    if (action === 'start' && sensitive.length > 0 && !confirmSensitive) {
+      setConfirmProfile({ profile, sensitive })
+      return
+    }
     setBusy(`profile:${profile}`)
     try {
-      const res = await tunnelProfileAction(profile, action, false)
+      const res = await tunnelProfileAction(profile, action, confirmSensitive)
       if (res.errors.length > 0) {
         toast(res.errors.join(' · '))
       } else {
@@ -184,14 +190,14 @@ export function TunnelsTab() {
                           <button
                             className="btn btn-sm"
                             disabled={busy === `profile:${p}` || running === group.length}
-                            onClick={() => runProfile(p, 'start')}
+                            onClick={() => runProfile(p, 'start', group)}
                           >
                             <Play size={11} /> {tx({ en: 'Start profile', pt: 'Subir perfil' })}
                           </button>
                           <button
                             className="btn btn-sm"
                             disabled={busy === `profile:${p}` || running === 0}
-                            onClick={() => runProfile(p, 'stop')}
+                            onClick={() => runProfile(p, 'stop', group)}
                           >
                             <Square size={11} /> {tx({ en: 'Stop', pt: 'Parar' })}
                           </button>
@@ -269,7 +275,7 @@ export function TunnelsTab() {
                                     <button className="btn btn-sm" disabled={busy === t.id} onClick={() => act(t, 'stop')}>
                                       <Square size={12} /> {tx({ en: 'Stop', pt: 'Parar' })}
                                     </button>
-                                    <button className="btn btn-sm" disabled={busy === t.id} onClick={() => act(t, 'restart', true)}>
+                                    <button className="btn btn-sm" disabled={busy === t.id} onClick={() => act(t, 'restart')}>
                                       <RotateCw size={12} /> {tx({ en: 'Restart', pt: 'Reiniciar' })}
                                     </button>
                                   </>
@@ -323,6 +329,31 @@ export function TunnelsTab() {
                 tunnel={editing === 'new' ? null : editing}
                 onSaved={state.reload}
                 onClose={() => setEditing(null)}
+              />
+            )}
+
+            {confirmProfile && (
+              <ConfirmModal
+                title={tx({
+                  en: `Start profile ${confirmProfile.profile}, with ${confirmProfile.sensitive.length} tunnel(s) to a sensitive environment?`,
+                  pt: `Subir o perfil ${confirmProfile.profile}, com ${confirmProfile.sensitive.length} túnel(is) para ambiente sensível?`,
+                })}
+                action={tx({ en: 'open port-forward tunnels', pt: 'abrir túneis port-forward' })}
+                env={confirmProfile.sensitive.some(t => t.environment !== 'HML') ? 'PRO' : 'HML'}
+                effects={confirmProfile.sensitive.map(t => tx({
+                  en: `${t.name}: localhost:${t.localPort} → ${t.targetKind}/${t.targetName}:${t.remotePort} in ${t.environment ?? 'unclassified (PRO)'}`,
+                  pt: `${t.name}: localhost:${t.localPort} → ${t.targetKind}/${t.targetName}:${t.remotePort} em ${t.environment ?? 'não classificado (PRO)'}`,
+                }))}
+                losses={[
+                  tx({
+                    en: 'Any local application or migration connecting to these local ports will read/write against the remote cluster services',
+                    pt: 'Qualquer aplicação ou migration local que conectar nessas portas locais lerá/escreverá nos serviços remotos do cluster',
+                  }),
+                ]}
+                confirmLabel={tx({ en: 'Start profile', pt: 'Subir perfil' })}
+                icon={Cable}
+                onConfirm={() => runProfile(confirmProfile.profile, 'start', confirmProfile.sensitive, true)}
+                onClose={() => setConfirmProfile(null)}
               />
             )}
 
