@@ -15,6 +15,7 @@ import { readJson, writeJson } from '../jsonFile.ts'
 import { KUBE_DIR } from '../k8s/kubeconfigs.ts'
 import { detectEnvironment, type Environment } from '../k8s/policy.ts'
 import { dataFile, tildify } from '../paths.ts'
+import { alive, readPidFile, writePidFile } from './pidfile.ts'
 import { PLATFORM } from '../platform.ts'
 import { run } from '../run.ts'
 
@@ -112,27 +113,8 @@ export function isSensitiveEnvironment(env: Environment | null): boolean {
 const slug = (name: string) =>
   name.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'tunel'
 
-const alive = (pid: number) => {
-  try {
-    process.kill(pid, 0)
-    return true
-  } catch (e) {
-    return (e as NodeJS.ErrnoException).code === 'EPERM'
-  }
-}
 
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms))
-
-// Start time in clock ticks (field 22 of /proc/<pid>/stat), null where there is no /proc (macOS, Windows).
-// Stored beside the PID: after a reboot the same number can belong to an unrelated process.
-function startTimeOf(pid: number): string | null {
-  try {
-    const stat = readFileSync(`/proc/${pid}/stat`, 'utf-8')
-    return stat.slice(stat.lastIndexOf(')') + 2).split(' ')[19] ?? null
-  } catch {
-    return null
-  }
-}
 
 // Ids the profile route owns: a tunnel named "Profile" must not shadow it
 const RESERVED_IDS = new Set(['profile'])
@@ -179,21 +161,7 @@ export function createTunnelsStore(dir: string = dataFile('tunnels'), opts: Stor
     }
   }
 
-  function pidOf(id: string): number | null {
-    let pid: number
-    let started: string | undefined
-    try {
-      const [pidText, startText] = readFileSync(pidFile(id), 'utf-8').trim().split(/\s+/)
-      pid = Number(pidText)
-      started = startText
-    } catch {
-      return null
-    }
-    if (!(pid > 1) || !alive(pid)) return null
-    // A different start time means the PID was reused by another process: that one is not ours to stop
-    const now = startTimeOf(pid)
-    return started && now && started !== now ? null : pid
-  }
+  const pidOf = (id: string): number | null => readPidFile(pidFile(id))
 
   const starting = new Set<string>()
 
@@ -271,7 +239,7 @@ export function createTunnelsStore(dir: string = dataFile('tunnels'), opts: Stor
         child.once('spawn', resolve)
         child.once('error', reject)
       })
-      writeFileSync(pidFile(id), `${child.pid} ${startTimeOf(child.pid!) ?? ''}`)
+      writePidFile(pidFile(id), child.pid!)
       child.unref()
       console.log(`[tunnels] start ${id} (pid ${child.pid}, env ${env ?? 'unclassified'}): ${t.localPort}->${t.targetKind}/${t.targetName}:${t.remotePort}`)
       return child.pid!

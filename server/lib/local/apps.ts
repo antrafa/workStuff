@@ -5,11 +5,12 @@
 
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
-import { closeSync, existsSync, mkdirSync, mkdtempSync, openSync, readFileSync, readSync, rmSync, statSync, unlinkSync, writeFileSync } from 'node:fs'
+import { closeSync, existsSync, mkdirSync, mkdtempSync, openSync, readFileSync, readSync, rmSync, statSync, unlinkSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { readJson, writeJson } from '../jsonFile.ts'
 import { dataFile, expandHome } from '../paths.ts'
+import { alive, readPidFile, writePidFile } from './pidfile.ts'
 import { PLATFORM } from '../platform.ts'
 import { run } from '../run.ts'
 import { say } from '../i18n.ts'
@@ -51,15 +52,6 @@ export function checkInput(body: unknown): AppInput {
 
 const slug = (name: string) => name.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'app'
 
-const alive = (pid: number) => {
-  try {
-    process.kill(pid, 0)
-    return true
-  } catch (e) {
-    return (e as NodeJS.ErrnoException).code === 'EPERM'
-  }
-}
-
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms))
 const LOG_TAIL_BYTES = 256 * 1024
 
@@ -78,15 +70,8 @@ export function createAppsStore(dir: string = dataFile('apps')) {
     return app
   }
 
-  // PID gravado no start que ainda está vivo; o arquivo de um processo morto é só lixo.
-  function pidOf(id: string): number | null {
-    try {
-      const pid = Number(readFileSync(pidFile(id), 'utf-8').trim())
-      return pid > 1 && alive(pid) ? pid : null
-    } catch {
-      return null
-    }
-  }
+  // PID gravado no start que ainda roda o processo iniciado; o de um processo morto ou reaproveitado é lixo.
+  const pidOf = (id: string): number | null => readPidFile(pidFile(id))
 
   function create(input: AppInput) {
     const apps = list()
@@ -135,7 +120,7 @@ export function createAppsStore(dir: string = dataFile('apps')) {
         child.once('spawn', resolve)
         child.once('error', reject)
       })
-      writeFileSync(pidFile(id), String(child.pid))
+      writePidFile(pidFile(id), child.pid!)
       child.unref()
       console.log(`[apps] start ${id} (pid ${child.pid}): ${[app.cmd, ...app.args].join(' ')}`)
       return child.pid!
