@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { CopyButton, Segmented } from '@/ui'
 import { locale, tx } from '@/lib/i18n'
 import { Output, attempt } from './Converters'
-import { calculateJvmMemory, decodePemCertificate, interpolateSql } from './devops'
+import { DEFAULT_CODE_CACHE_MIB, calculateJvmMemory, decodePemCertificate, interpolateSql } from './devops'
 
 const SAMPLE_SQL_LOG = `Hibernate: select p.id, p.placa, p.velocidade, p.data_passagem from tb_passagem p inner join tb_radar r on r.id = p.radar_id where p.uf = ? and p.velocidade >= ? and p.processado = ? and p.lote_erro is ? order by p.data_passagem desc limit ?
 TRACE org.hibernate.type.descriptor.sql.BasicBinder - binding parameter [1] as [VARCHAR] - [MG]
@@ -82,7 +82,7 @@ export function JvmMemoryTool() {
       directMiB,
       threads,
       xssKiB,
-      codeCacheMiB: 128,
+      codeCacheMiB: DEFAULT_CODE_CACHE_MIB,
     }),
   )
 
@@ -221,8 +221,17 @@ export function JvmMemoryTool() {
             <i style={{ width: `${Math.min(result.value.usagePct, 100)}%` }} />
           </div>
           <small className="muted mono">
-            Heap {result.value.heapMiB} MiB + Non-Heap {result.value.nonHeapMiB} MiB (Threads {result.value.threadsMiB} MiB)
+            Heap {result.value.heapMiB} MiB + Non-Heap {result.value.nonHeapMiB} MiB (Threads {result.value.threadsMiB} MiB, Code cache {DEFAULT_CODE_CACHE_MIB} MiB)
           </small>
+          {!result.value.heapFits && (
+            <small className="tool-error">
+              {tx({
+                en: `Metaspace, Direct, threads and code cache alone take ${result.value.nonHeapMiB} MiB: no heap fits in ${limitMiB} MiB. Raise the pod limit or cut threads and Metaspace.`,
+                pt: `Só Metaspace, Direct, threads e code cache já somam ${result.value.nonHeapMiB} MiB: nenhum heap cabe em ${limitMiB} MiB. Aumente o limite do pod ou reduza threads e Metaspace.`,
+              })}
+            </small>
+          )}
+          {result.value.heapFits && (<>
           <span className="eyebrow">
             {tx({
               en: `Suggested JAVA_TOOL_OPTIONS (safe Xmx ≤ ${result.value.safeXmxMiB} MiB)`,
@@ -230,6 +239,7 @@ export function JvmMemoryTool() {
             })}
           </span>
           <Output value={result.value.recommendedFlags} error={null} />
+          </>)}
         </>
       )}
     </div>

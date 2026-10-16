@@ -252,8 +252,13 @@ export type JvmMemoryResult = {
   status: 'ok' | 'warn' | 'crit'
   safeXmxMiB: number
   safeRamPct: number
+  /** False when non-heap alone leaves under 64 MiB of heap: no flag set fits, the limit must grow. */
+  heapFits: boolean
   recommendedFlags: string
 }
+
+// JVM default ReservedCodeCacheSize with tiered compilation (the default since Java 8)
+export const DEFAULT_CODE_CACHE_MIB = 240
 
 export function calculateJvmMemory(input: JvmMemoryInput): JvmMemoryResult {
   const { limitMiB, heapMode, maxRamPct, xmxMiB, metaspaceMiB, directMiB, threads, xssKiB, codeCacheMiB } = input
@@ -261,6 +266,12 @@ export function calculateJvmMemory(input: JvmMemoryInput): JvmMemoryResult {
     throw new Error(tx({
       en: 'Enter a container memory limit of at least 128 MiB.',
       pt: 'Informe um limite de memória do container de pelo menos 128 MiB.',
+    }))
+  }
+  if (![maxRamPct, xmxMiB, metaspaceMiB, directMiB, threads, xssKiB, codeCacheMiB].every(n => Number.isFinite(n) && n >= 0)) {
+    throw new Error(tx({
+      en: 'Every field needs a number of zero or more.',
+      pt: 'Todo campo precisa de um número maior ou igual a zero.',
     }))
   }
   const heapMiB = heapMode === 'xmx'
@@ -280,9 +291,13 @@ export function calculateJvmMemory(input: JvmMemoryInput): JvmMemoryResult {
         : 'ok'
 
   // Reserve 10% of container limit for OS/libc native arenas + non-heap footprint
-  const safeXmxMiB = Math.max(64, Math.floor(limitMiB * 0.9 - nonHeapMiB))
-  const safeRamPct = Math.max(10, Math.min(85, Math.floor((safeXmxMiB / limitMiB) * 100)))
-  const recommendedFlags = `-XX:MaxRAMPercentage=${safeRamPct}.0 -XX:MaxMetaspaceSize=${Math.round(metaspaceMiB)}m -XX:MaxDirectMemorySize=${Math.round(directMiB)}m -Xss${Math.round(xssKiB)}k -XX:+ExitOnOutOfMemoryError`
+  const roomMiB = Math.floor(limitMiB * 0.9 - nonHeapMiB)
+  const heapFits = roomMiB >= 64
+  const safeXmxMiB = Math.max(0, roomMiB)
+  const safeRamPct = Math.max(1, Math.min(85, Math.floor((safeXmxMiB / limitMiB) * 100)))
+  // -Xmx wins over MaxRAMPercentage, so the suggestion follows the mode the user is in
+  const heapFlag = heapMode === 'xmx' ? `-Xmx${safeXmxMiB}m` : `-XX:MaxRAMPercentage=${safeRamPct}.0`
+  const recommendedFlags = `${heapFlag} -XX:MaxMetaspaceSize=${Math.round(metaspaceMiB)}m -XX:MaxDirectMemorySize=${Math.round(directMiB)}m -XX:ReservedCodeCacheSize=${Math.round(codeCacheMiB)}m -Xss${Math.round(xssKiB)}k -XX:+ExitOnOutOfMemoryError`
 
   return {
     heapMiB,
@@ -294,6 +309,7 @@ export function calculateJvmMemory(input: JvmMemoryInput): JvmMemoryResult {
     status,
     safeXmxMiB,
     safeRamPct,
+    heapFits,
     recommendedFlags,
   }
 }

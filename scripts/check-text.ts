@@ -123,7 +123,12 @@ assert.equal(jvmOom.status, 'crit', '80% heap + 648 MiB non-heap ultrapassa 1024
 assert.ok(jvmOom.totalMiB > 1024)
 const jvmOk = calculateJvmMemory({ limitMiB: 2048, heapMode: 'xmx', maxRamPct: 50, xmxMiB: 1024, metaspaceMiB: 256, directMiB: 64, threads: 150, xssKiB: 1024, codeCacheMiB: 128 })
 assert.equal(jvmOk.status, 'ok')
-assert.ok(jvmOk.recommendedFlags.includes('-XX:MaxRAMPercentage='))
+assert.ok(jvmOk.recommendedFlags.startsWith('-Xmx'), 'no modo -Xmx a sugestão vem em -Xmx, que vence MaxRAMPercentage')
+const jvmPct = calculateJvmMemory({ limitMiB: 2048, heapMode: 'pct', maxRamPct: 50, xmxMiB: 0, metaspaceMiB: 256, directMiB: 64, threads: 150, xssKiB: 1024, codeCacheMiB: 240 })
+assert.ok(jvmPct.recommendedFlags.includes('-XX:MaxRAMPercentage=') && jvmPct.recommendedFlags.includes('-XX:ReservedCodeCacheSize=240m'))
+const jvmNoRoom = calculateJvmMemory({ limitMiB: 512, heapMode: 'pct', maxRamPct: 75, xmxMiB: 0, metaspaceMiB: 256, directMiB: 64, threads: 200, xssKiB: 1024, codeCacheMiB: 240 })
+assert.equal(jvmNoRoom.heapFits, false, '512 MiB não comporta 760 MiB de non-heap')
+assert.throws(() => calculateJvmMemory({ ...jvmNoRoom, limitMiB: 1024, heapMode: 'pct', maxRamPct: 75, xmxMiB: 0, metaspaceMiB: NaN, directMiB: 64, threads: 200, xssKiB: 1024, codeCacheMiB: 240 }), /number|número/)
 
 // X.509 PEM Certificate (DER self-signed certificate with SANs)
 const samplePem = [
