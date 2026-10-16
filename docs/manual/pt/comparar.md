@@ -72,12 +72,24 @@ Os nomes dos campos vêm do servidor e aparecem assim:
 
 Container é cada programa dentro de um pod; o nome dele aparece no começo do campo, como em `app.tag`. Quando um campo existe só de um lado, o outro mostra **ausente**.
 
+### Ver o que vai junto com a versão nova
+
+Quando a tag muda entre os lados, o detalhe do workload mostra o botão **O que muda de `<tag B>` para `<tag A>`**. Ele lista os commits que a versão do lado A tem e a do lado B ainda não: é o que chega ao ambiente B se ele receber a imagem do A.
+
+1. Abra um workload com a tag diferente e clique em **O que muda de ... para ...**.
+2. Confira o clone escolhido. O painel tenta adivinhar pelo nome do workload; se errar, escolha outro na lista.
+3. Leia o resultado: quantos commits e MRs vão junto, quantos arquivos mudam e a lista de commits, do mais novo para o mais velho.
+4. Se a versão não for achada no clone, a tela diz o que tentou. Atualize o clone com **Fetch** em [Meu Workspace](/repositorios) ou digite à mão a tag ou o commit e clique em **Ver commits**.
+
+A tag da imagem vira uma versão do git assim: a própria tag (`1.4.2`), com `v` na frente (`v1.4.2`), um código de commit (`3f9c2ab`) ou o código no fim da tag (`1.4.2-3f9c2ab`). O botão **Trocar as versões** inverte o sentido.
+
 ## Bom saber
 
 - A tela só lê. Nada é alterado em nenhum dos clusters.
 - Um Secret (objeto que guarda senhas e chaves) nunca é lido. Uma variável que vem de um Secret aparece só como referência, por exemplo `secret db/senha` (nome do Secret e chave).
 - Uma variável com nome de senha, token ou chave, ou com uma senha dentro de uma URL de conexão, aparece mascarada como `•••• oculto (a1b2c3d4)`. Valores iguais recebem a mesma marca, então dá para saber se a senha difere entre os lados sem ver a senha.
 - Cada lado tem o próprio kubeconfig: esta tela não depende do cluster escolhido na tela [Cluster](/cluster).
+- **O que muda** só lê o clone que já está na sua máquina: não faz fetch nem troca de branch. Uma tag que ainda não chegou ao clone não é achada até você fazer o fetch.
 - Só Deployments, StatefulSets e CronJobs entram. Services, Ingresses e ConfigMaps não são comparados.
 
 ## Problemas comuns

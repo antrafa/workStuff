@@ -72,12 +72,24 @@ Field names come from the server in Portuguese and look like this:
 
 A container is each program inside a pod; its name comes at the start of the field, as in `app.tag`. When a field exists on only one side, the other shows **missing**.
 
+### See what goes along with the new version
+
+When the tag differs between the sides, the workload's detail shows the **What changes from `<tag B>` to `<tag A>`** button. It lists the commits side A's version has and side B's does not yet: what reaches environment B if it gets A's image.
+
+1. Open a workload with a different tag and click **What changes from ... to ...**.
+2. Check the chosen clone. The panel guesses it from the workload's name; if it is wrong, pick another one in the list.
+3. Read the result: how many commits and MRs go along, how many files change and the list of commits, newest first.
+4. If a version is not found in the clone, the screen says what it tried. Update the clone with **Fetch** in [My Workspace](/repositorios) or type the tag or commit by hand and click **See commits**.
+
+The image tag becomes a git version this way: the tag itself (`1.4.2`), with a `v` in front (`v1.4.2`), a commit code (`3f9c2ab`) or the code at the end of the tag (`1.4.2-3f9c2ab`). The **Swap the versions** button reverses the direction.
+
 ## Good to know
 
 - The screen only reads. Nothing changes in either cluster.
 - A Secret (an object that stores passwords and keys) is never read. A variable that comes from a Secret shows only as a reference, for example `secret db/senha` (the Secret's name and key).
 - A variable named like a password, token or key, or with a password inside a connection URL, shows masked as `•••• oculto (a1b2c3d4)`. Equal values get the same mark, so you can tell whether the password differs between the sides without seeing it.
 - Each side has its own kubeconfig: this screen does not depend on the cluster chosen on the [Cluster](/cluster) screen.
+- **What changes** only reads the clone already on your machine: it does not fetch nor switch branch. A tag that has not reached the clone yet is not found until you fetch.
 - Only Deployments, StatefulSets and CronJobs are included. Services, Ingresses and ConfigMaps are not compared.
 
 ## Common problems

@@ -2,6 +2,9 @@ import { Router } from 'express'
 import { ClusterError, checkName, explain } from '../lib/k8s/cluster.ts'
 import { getKubeconfig } from '../lib/k8s/kubeconfigs.ts'
 import { compare, readWorkloads } from '../lib/compare/workloads.ts'
+import { assertTag, releaseBetween } from '../lib/compare/release.ts'
+import { assertWorkspaceRepo } from '../lib/repos/workspace.ts'
+import { RepoError } from '../lib/repos/sources.ts'
 import { say } from '../lib/i18n.ts'
 
 export const compareRouter = Router()
@@ -42,6 +45,17 @@ compareRouter.post('/', async (req, res) => {
     })
   } catch (e) {
     if (!(e instanceof ClusterError)) throw e
+    res.status(e.status).json({ error: e.message })
+  }
+})
+
+// Commits between the version running on one side and the other, read from a clone of the workspace
+compareRouter.post('/release', async (req, res) => {
+  try {
+    const repo = assertWorkspaceRepo(String(req.body?.repoPath ?? ''))
+    res.json(await releaseBetween(repo, assertTag(say({ en: 'current', pt: 'atual' }), req.body?.from), assertTag(say({ en: 'new', pt: 'nova' }), req.body?.to)))
+  } catch (e) {
+    if (!(e instanceof RepoError)) throw e
     res.status(e.status).json({ error: e.message })
   }
 })

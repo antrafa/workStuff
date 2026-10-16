@@ -1,11 +1,12 @@
 import './compare.css'
-import { ArrowLeftRight, ChevronDown, ChevronRight, GitCompare } from 'lucide-react'
+import { ArrowLeftRight, ChevronDown, ChevronRight, GitCompare, GitCommitHorizontal } from 'lucide-react'
 import { Fragment, useEffect, useState } from 'react'
 import { Empty, Page, Search, Segmented, SkeletonRows } from '@/ui'
 import { api } from '@/lib/api'
 import { useAsync } from '@/lib/useAsync'
 import { fetchKubeconfigs, type Kubeconfig } from '@/features/cluster/api'
 import { tx } from '@/lib/i18n'
+import { ReleaseModal } from './ReleaseModal'
 
 type Side = { kubeconfigId: string; context: string; namespace: string }
 type State = 'igual' | 'diferente' | 'só em A' | 'só em B'
@@ -124,6 +125,7 @@ function Diffs({ result }: { result: Result }) {
   const [filter, setFilter] = useState<Filter>(changed.length ? 'mudou' : 'todos')
   const [query, setQuery] = useState('')
   const [open, setOpen] = useState<string | null>(null)
+  const [release, setRelease] = useState<{ workload: string; container: string; a: string; b: string } | null>(null)
   const rows = (filter === 'mudou' ? changed : result.workloads).filter(w => w.name.toLowerCase().includes(query.toLowerCase()))
   const count = (s: State) => result.workloads.filter(w => w.state === s).length
 
@@ -170,6 +172,14 @@ function Diffs({ result }: { result: Result }) {
                       {expanded && (
                         <tr className="cmp-detail">
                           <td colSpan={3}>
+                            {w.diffs.filter(d => d.field.endsWith('.tag') && d.a && d.b).map(d => {
+                              const container = d.field.slice(0, -'.tag'.length)
+                              return (
+                                <button key={d.field} className="btn btn-sm" style={{ marginBottom: 8 }} onClick={() => setRelease({ workload: w.name, container, a: d.a!, b: d.b! })}>
+                                  <GitCommitHorizontal size={13} /> {tx({ en: `What changes from ${d.b} to ${d.a}`, pt: `O que muda de ${d.b} para ${d.a}` })}{w.diffs.filter(x => x.field.endsWith('.tag')).length > 1 ? ` (${container})` : ''}
+                                </button>
+                              )
+                            })}
                             <table className="table cmp-fields">
                               <thead><tr><th>{tx({ en: 'Field', pt: 'Campo' })}</th><th title={result.a.label}>A</th><th title={result.b.label}>B</th></tr></thead>
                               <tbody>
@@ -192,6 +202,7 @@ function Diffs({ result }: { result: Result }) {
             </table>
           </div>
         )}
+        {release && <ReleaseModal workload={release.workload} container={release.container} tagA={release.a} tagB={release.b} onClose={() => setRelease(null)} />}
         <div className="card-pad muted" style={{ fontSize: 12 }}>A: {result.a.label} ({result.a.count}) · B: {result.b.label} ({result.b.count})</div>
       </section>
     </>
