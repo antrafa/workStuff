@@ -327,3 +327,21 @@
     border-bottom: 1px solid var(--line);
   }
 }
+
+/* ── Buscar nos clones ── */
+.repo-search-head {
+  width: 100%;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.repo-search-lines {
+  margin: 4px 0 0;
+  max-height: 240px;
+  overflow: auto;
+  font-size: 12px;
+  white-space: pre;
+}

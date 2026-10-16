@@ -11,7 +11,8 @@ export async function run(bin: string, args: string[], timeoutMs = 30_000) {
 
 // Only the first maxBytes of stdout, then the process is stopped: for output that is shown cut anyway
 // (a diff), so a huge one neither fills memory nor fails with "maxBuffer length exceeded".
-export function runHead(bin: string, args: string[], maxBytes: number, timeoutMs = 30_000): Promise<{ stdout: string; truncated: boolean }> {
+// `okExit` lists the exit codes that are an answer, not a failure (git grep exits 1 when nothing matches).
+export function runHead(bin: string, args: string[], maxBytes: number, timeoutMs = 30_000, okExit = [0]): Promise<{ stdout: string; truncated: boolean }> {
   return new Promise((resolve, reject) => {
     const child = spawn(bin, args, { stdio: ['ignore', 'pipe', 'pipe'], timeout: timeoutMs })
     const chunks: Buffer[] = []
@@ -30,7 +31,7 @@ export function runHead(bin: string, args: string[], maxBytes: number, timeoutMs
     child.stderr.on('data', (chunk: Buffer) => (stderr += chunk.toString('utf-8')))
     child.on('error', reject)
     child.on('close', (code, signal) => {
-      if (!truncated && code !== 0) {
+      if (!truncated && !okExit.includes(code ?? -1)) {
         reject(new Error(`${bin} ${args.join(' ')} failed (${signal ?? `exit ${code}`}): ${stderr.trim()}`))
         return
       }

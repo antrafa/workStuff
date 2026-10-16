@@ -8,6 +8,7 @@ Connects the panel to your company's GitLab or GitHub so you can browse groups a
 - You want to find a project by name and see whether it is already on your computer.
 - You want to open a project you already cloned in the editor, without hunting for its folder.
 - You are going to use the [Pipelines](/pipelines) screen, which depends on a connection created here.
+- You want to know which projects use a variable, a property or a command, for example `DB_URL` or `jboss-cli`.
 
 ## Before you start
 
@@ -43,6 +44,7 @@ With a saved connection, the screen has:
 | **destination:** | The folder on your computer where the current group will end up. |
 | **List** | Subgroups first, then projects. After the arrow, each row shows its destination folder. |
 | **My Workspace tab** | Scans all git repositories cloned in your local workspace and displays branch, modified files, stashes, commits ahead/behind upstream, merged local branches and build artifact size (`target/`, `node_modules/`, `dist/`, `build/`), with 1-click buttons for **Editor**, **Review** (in [Pre-MR review](/revisao)), **Fetch**, pruning merged branches and cleaning build artifacts. Merged means the commits are already in the remote default branch (`origin/HEAD`, or `main`/`master`); cleaning only deletes a folder git ignores and that holds no tracked file. |
+| **Search the clones tab** | Searches a text in every clone of the workspace at once and shows, per project, each file and line where it appears. It follows each project's `.gitignore`, so `target/` and `node_modules/` are left out. |
 
 Each project's marks:
 
@@ -125,6 +127,16 @@ On GitHub:
 1. On the row of a **cloned** project, click **Open in editor**.
 2. The folder opens in VS Code (the `code` command). If it is not installed, the folder opens in the system's default program for folders.
 
+### Find a text in every project
+
+1. Open the **Search the clones** tab.
+2. Type the text, for example `DB_URL`. To narrow it down, write in **Files** one or more patterns separated by space or comma, like `*.yml` or `src/`.
+3. Tick **match case** or **regular expression** if needed.
+4. Click **Search**. The result comes per project, from the one with most matches to the one with fewest, with each file and line number.
+5. Click a project's name to open or close its list, and **Open in the editor** to open the folder.
+
+> **Tip:** the screen's address keeps the search. Copy the link to run the same search later or send it to a colleague.
+
 ### Edit or remove a connection
 
 1. Click the connection's pencil icon to go through the wizard again with the current data. If the token was pasted, check **Keep the current token** so you do not have to paste it again.
@@ -137,6 +149,7 @@ On GitHub:
 - With HTTPS, the token is used only during the clone and is not stored in the repository.
 - In a subgroup, up to 3 projects are cloned at the same time, so the disk and the network are not saturated.
 - You can only clone what is inside the base group, because that is where the destination folder comes from.
+- The clone search looks in tracked files and in new files not committed yet, skips binary files and shows at most 200 lines per project. Past that, the project gets the **cut** mark: narrow the text or the files.
 - These connections also serve the [Pipelines](/pipelines) screen. When you export your [Team profile](/perfil), the connections go without the token.
 
 ## Common problems

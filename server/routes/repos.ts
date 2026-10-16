@@ -8,8 +8,10 @@ import {
   RepoError, deleteSource, getSource, listSources, publicSource, resolveToken, saveSource, tokenHints, validateInput, type Source,
 } from '../lib/repos/sources.ts'
 import {
-  assertWorkspaceRepo, cleanRepoArtifacts, fetchWorkspaceRepo, pruneMergedBranches, scanWorkspace,
+  assertWorkspaceRepo, cleanRepoArtifacts, fetchWorkspaceRepo, listWorkspaceRepos, pruneMergedBranches, scanWorkspace,
 } from '../lib/repos/workspace.ts'
+import { searchClones } from '../lib/repos/search.ts'
+import { tildify } from '../lib/paths.ts'
 import { say } from '../lib/i18n.ts'
 
 export const reposRouter = Router()
@@ -30,6 +32,18 @@ reposRouter.post('/pick-folder', handle(async () => ({ path: await pickFolder(sa
 reposRouter.get('/sources', handle(async () => Promise.all(listSources().map(publicSource))))
 
 reposRouter.get('/workspace', handle(() => scanWorkspace()))
+reposRouter.get('/workspace/list', handle(() =>
+  listWorkspaceRepos().map(c => ({ path: c.repoPath, label: tildify(c.repoPath) })).sort((a, b) => a.label.localeCompare(b.label))
+))
+reposRouter.post('/workspace/search', handle(async req => {
+  const b = (req.body ?? {}) as Record<string, unknown>
+  const result = await searchClones({ text: String(b.text ?? ''), regex: b.regex === true, matchCase: b.matchCase === true, paths: String(b.paths ?? '') })
+  // The same bad regex fails in every clone: one message instead of an empty result
+  if (result.searched > 0 && result.failed.length === result.searched) {
+    throw new RepoError(say({ en: `search failed: ${result.failed[0].error}`, pt: `a busca falhou: ${result.failed[0].error}` }))
+  }
+  return result
+}))
 reposRouter.post('/workspace/open', handle(req => {
   const dir = assertWorkspaceRepo(String(req.body?.repoPath ?? ''))
   openInEditor(dir)

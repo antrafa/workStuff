@@ -8,6 +8,7 @@ Liga o painel ao GitLab ou ao GitHub da sua empresa para você navegar pelos gru
 - Você quer achar um projeto pelo nome e ver se ele já está no seu computador.
 - Você quer abrir no editor um projeto que já clonou, sem procurar a pasta.
 - Você vai usar a tela [Pipelines](/pipelines), que depende de uma conexão criada aqui.
+- Você quer saber em quais projetos uma variável, uma propriedade ou um comando aparece, por exemplo `DB_URL` ou `jboss-cli`.
 
 ## Antes de começar
 
@@ -43,6 +44,7 @@ Com uma conexão salva, a tela tem:
 | **destino:** | A pasta do seu computador onde o grupo atual vai parar. |
 | **Lista** | Primeiro os subgrupos, depois os projetos. Cada linha mostra, depois da seta, a pasta de destino. |
 | **Aba Meu Workspace** | Varre os repositórios git clonados no seu workspace local e mostra branch, arquivos modificados, stashes, commits à frente/atrás da origem, branches já mergeadas e peso de artefatos (`target/`, `node_modules/`, `dist/`, `build/`), com botões de 1 clique para **Editor**, **Revisar** (em [Revisão antes do MR](/revisao)), **Fetch**, poda de branches mergeadas e limpeza de artefatos. Mergeada quer dizer que os commits já estão na branch principal do remoto (`origin/HEAD`, ou `main`/`master`); a limpeza só apaga pasta que o git ignora e que não tem arquivo versionado. |
+| **Aba Buscar nos clones** | Procura um texto em todos os clones do workspace de uma vez e mostra, por projeto, cada arquivo e linha onde ele aparece. Respeita o `.gitignore` de cada projeto, então `target/` e `node_modules/` ficam de fora. |
 
 As marcas de cada projeto:
 
@@ -125,6 +127,16 @@ No GitHub:
 1. Na linha de um projeto **clonado**, clique em **Abrir no editor**.
 2. A pasta abre no VS Code (o comando `code`). Se ele não estiver instalado, a pasta abre no programa padrão do sistema para pastas.
 
+### Procurar um texto em todos os projetos
+
+1. Abra a aba **Buscar nos clones**.
+2. Digite o texto, por exemplo `DB_URL`. Se quiser restringir, escreva em **Arquivos** um ou mais padrões separados por espaço ou vírgula, como `*.yml` ou `src/`.
+3. Marque **diferenciar maiúsculas** ou **expressão regular** se precisar.
+4. Clique em **Procurar**. O resultado vem por projeto, do que tem mais ocorrências para o que tem menos, com cada arquivo e o número da linha.
+5. Clique no nome de um projeto para abrir ou fechar a lista dele, e em **Abrir no editor** para abrir a pasta.
+
+> **Dica:** o endereço da tela guarda a busca. Copie o link para repetir a mesma busca depois ou mandar para um colega.
+
 ### Editar ou remover uma conexão
 
 1. Clique no ícone de lápis da conexão para refazer o assistente com os dados atuais. Se o token foi colado, marque **Manter o token atual** para não precisar colar de novo.
@@ -137,6 +149,7 @@ No GitHub:
 - Com HTTPS, o token é usado só durante o clone e não fica gravado no repositório.
 - Num subgrupo, até 3 projetos são clonados ao mesmo tempo, para não saturar o disco e a rede.
 - Só dá para clonar o que está dentro do grupo base, porque é dele que sai a pasta de destino.
+- A busca nos clones procura nos arquivos versionados e nos arquivos novos ainda sem commit, pula arquivo binário e mostra no máximo 200 linhas por projeto. Quando passa disso, o projeto ganha a marca **cortado**: restrinja o texto ou os arquivos.
 - Estas conexões também servem à tela [Pipelines](/pipelines). Ao exportar o seu [Perfil de equipe](/perfil), as conexões vão sem o token.
 
 ## Problemas comuns

@@ -288,18 +288,25 @@ async function mapLimit<T, R>(items: T[], limit: number, fn: (item: T) => Promis
   return out
 }
 
-export async function scanWorkspace(explicitRoots?: string[]) {
-  const roots = knownWorkspaces(explicitRoots)
-  const seen = new Set<string>()
-  const queue: { repoPath: string; workspace: string }[] = []
+export type ClonePlace = { repoPath: string; workspace: string }
 
-  for (const workspace of roots) {
+// Only where each clone is, without running git in it: for screens that pick or search clones.
+export function listWorkspaceRepos(explicitRoots?: string[]): ClonePlace[] {
+  const seen = new Set<string>()
+  const out: ClonePlace[] = []
+  for (const workspace of knownWorkspaces(explicitRoots)) {
     for (const repoPath of findGitRepos(workspace)) {
       if (seen.has(repoPath)) continue
       seen.add(repoPath)
-      queue.push({ repoPath, workspace })
+      out.push({ repoPath, workspace })
     }
   }
+  return out
+}
+
+export async function scanWorkspace(explicitRoots?: string[]) {
+  const roots = knownWorkspaces(explicitRoots)
+  const queue = listWorkspaceRepos(explicitRoots)
 
   const repos = await mapLimit(queue, 6, ({ repoPath, workspace }) => inspectRepo(repoPath, workspace))
   // Ordena priorizando repositórios com alterações pendentes/stash e depois pelo commit mais recente

@@ -8,10 +8,11 @@ import { Browser } from './Browser'
 import { NoConnection } from './NoConnection'
 import { SetupWizard } from './SetupWizard'
 import { WorkspaceRadar } from './WorkspaceRadar'
+import { CodeSearch } from './CodeSearch'
 import { deleteSource, fetchSources, type Source } from './api'
 import { tx } from '@/lib/i18n'
 
-type Tab = 'browse' | 'workspace'
+type Tab = 'browse' | 'workspace' | 'busca'
 
 const LAST = 'repos-last-source'
 const readLast = () => {
@@ -24,7 +25,8 @@ const readLast = () => {
 
 export default function ReposPage() {
   const [searchParams, setSearchParams] = useSearchParams()
-  const tab: Tab = searchParams.get('aba') === 'workspace' ? 'workspace' : 'browse'
+  const aba = searchParams.get('aba')
+  const tab: Tab = aba === 'workspace' || aba === 'busca' ? aba : 'browse'
   const sources = useAsync(fetchSources)
   const [selected, setSelected] = useState<string | null>(readLast)
   const [wizard, setWizard] = useState<{ editing: Source | null } | null>(null)
@@ -65,6 +67,7 @@ export default function ReposPage() {
         {([
           ['browse', tx({ en: 'Browse and clone', pt: 'Navegar e clonar' })],
           ['workspace', tx({ en: 'My Workspace', pt: 'Meu Workspace' })],
+          ['busca', tx({ en: 'Search the clones', pt: 'Buscar nos clones' })],
         ] as [Tab, string][]).map(([id, label]) => (
           <button
             key={id}
@@ -77,7 +80,9 @@ export default function ReposPage() {
         ))}
       </div>
 
-      {tab === 'workspace' ? (
+      {tab === 'busca' ? (
+        <CodeSearch />
+      ) : tab === 'workspace' ? (
         <WorkspaceRadar />
       ) : (
         <Async
