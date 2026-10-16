@@ -7,7 +7,7 @@ import { execFileSync } from 'node:child_process'
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { run } from '../run.ts'
+import { run, runHead } from '../run.ts'
 import { say } from '../i18n.ts'
 
 // Diff acima disso não cabe com folga no contexto da IA junto com a leitura dos arquivos.
@@ -45,13 +45,14 @@ export async function branchDiff(repo: string, base: string, includeWorking: boo
   })
   const mergeBase = (await git(repo, ['merge-base', base, 'HEAD'])).trim()
   const range = includeWorking ? [mergeBase] : [`${mergeBase}`, 'HEAD']
+  // A UTF-8 character takes up to 4 bytes: this many bytes always hold MAX_DIFF characters
   const [stat, full, names] = await Promise.all([
     git(repo, ['diff', '--stat', ...range]),
-    git(repo, ['diff', '--no-color', '-U5', ...range]),
+    runHead('git', ['-C', repo, 'diff', '--no-color', '-U5', ...range], MAX_DIFF * 4),
     git(repo, ['diff', '--name-only', ...range]),
   ])
   const changedFiles = names.split('\n').map(s => s.trim()).filter(Boolean)
-  return { base, mergeBase: mergeBase.slice(0, 10), stat: stat.trim(), diff: full.slice(0, MAX_DIFF), truncated: full.length > MAX_DIFF, files: changedFiles.length, changedFiles }
+  return { base, mergeBase: mergeBase.slice(0, 10), stat: stat.trim(), diff: full.stdout.slice(0, MAX_DIFF), truncated: full.truncated || full.stdout.length > MAX_DIFF, files: changedFiles.length, changedFiles }
 }
 
 if (import.meta.main && process.argv.includes('--selfcheck')) {
@@ -84,6 +85,14 @@ if (import.meta.main && process.argv.includes('--selfcheck')) {
     assert.equal(withWorking.files, 2, 'inclui o que está no índice')
     assert.deepEqual(withWorking.changedFiles, ['a.txt', 'b.txt'])
     await assert.rejects(branchDiff(repo, 'nao-existe', false), /does not exist|não existe/)
+
+    // A diff above run()'s 20 MB buffer used to fail with "stdout maxBuffer length exceeded"
+    writeFileSync(join(repo, 'dump.sql'), 'insert into t values (1);\n'.repeat(850_000))
+    sh('add', 'dump.sql')
+    const huge = await branchDiff(repo, 'main', true)
+    assert.equal(huge.truncated, true)
+    assert.equal(huge.diff.length, MAX_DIFF)
+    assert.ok(huge.changedFiles.includes('dump.sql'))
     await assert.rejects(repoInfo(tmpdir()), /not a git repository|não é um repositório/)
   } finally {
     rmSync(repo, { recursive: true, force: true })

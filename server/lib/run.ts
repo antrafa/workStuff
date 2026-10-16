@@ -1,4 +1,4 @@
-import { execFile } from 'node:child_process'
+import { execFile, spawn } from 'node:child_process'
 import { promisify } from 'node:util'
 
 const execFileAsync = promisify(execFile)
@@ -7,6 +7,36 @@ const execFileAsync = promisify(execFile)
 export async function run(bin: string, args: string[], timeoutMs = 30_000) {
   const { stdout } = await execFileAsync(bin, args, { timeout: timeoutMs, maxBuffer: 20 * 1024 * 1024 })
   return stdout
+}
+
+// Only the first maxBytes of stdout, then the process is stopped: for output that is shown cut anyway
+// (a diff), so a huge one neither fills memory nor fails with "maxBuffer length exceeded".
+export function runHead(bin: string, args: string[], maxBytes: number, timeoutMs = 30_000): Promise<{ stdout: string; truncated: boolean }> {
+  return new Promise((resolve, reject) => {
+    const child = spawn(bin, args, { stdio: ['ignore', 'pipe', 'pipe'], timeout: timeoutMs })
+    const chunks: Buffer[] = []
+    let size = 0
+    let truncated = false
+    let stderr = ''
+    child.stdout.on('data', (chunk: Buffer) => {
+      if (truncated) return
+      chunks.push(chunk)
+      size += chunk.length
+      if (size > maxBytes) {
+        truncated = true
+        child.kill()
+      }
+    })
+    child.stderr.on('data', (chunk: Buffer) => (stderr += chunk.toString('utf-8')))
+    child.on('error', reject)
+    child.on('close', (code, signal) => {
+      if (!truncated && code !== 0) {
+        reject(new Error(`${bin} ${args.join(' ')} failed (${signal ?? `exit ${code}`}): ${stderr.trim()}`))
+        return
+      }
+      resolve({ stdout: Buffer.concat(chunks).subarray(0, maxBytes).toString('utf-8'), truncated })
+    })
+  })
 }
 
 // Para --help: alguns CLIs (os em Go, como o agy) imprimem a ajuda no stderr.
