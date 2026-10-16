@@ -422,13 +422,21 @@ export async function gateNoQualityDegradation(
       }),
     }
   } catch (err) {
+    // The whole diff is read on purpose: a cut one would let a violation near its end through. Past
+    // run()'s 20 MB buffer the gate fails closed, and says why instead of a raw Node error.
+    const tooLarge = (err as NodeJS.ErrnoException).code === 'ERR_CHILD_PROCESS_STDIO_MAXBUFFER'
     return {
       passed: false,
       violations: [],
-      reason: say({
-        en: `Failed to inspect quality floor: ${(err as Error).message}`,
-        pt: `Falha ao inspecionar piso de qualidade: ${(err as Error).message}`,
-      }),
+      reason: tooLarge
+        ? say({
+            en: 'Quality floor not inspected: the diff is over 20 MB, too large to read whole; split the task into smaller changes',
+            pt: 'Piso de qualidade não inspecionado: o diff passa de 20 MB, grande demais para ler inteiro; divida a tarefa em mudanças menores',
+          })
+        : say({
+            en: `Failed to inspect quality floor: ${(err as Error).message}`,
+            pt: `Falha ao inspecionar piso de qualidade: ${(err as Error).message}`,
+          }),
     }
   }
 }
