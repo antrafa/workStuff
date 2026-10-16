@@ -5,6 +5,7 @@
 import assert from 'node:assert/strict'
 import type { ProviderId } from '../aiProviders.ts'
 import { say } from '../i18n.ts'
+import { jailArgs, type ReadJail } from './jail.ts'
 
 export type RunOptions = {
   prompt: string
@@ -13,8 +14,8 @@ export type RunOptions = {
   effort?: string
   cwd?: string
   addDirs?: string[]
-  // Só para o agy: onde fica o estado dele e a pasta temporária liberada para escrita dentro do bwrap.
-  agySandbox?: { stateDir: string; tmpDir: string }
+  // bwrap read jail (see jail.ts): optional for Claude and Codex, mandatory for agy
+  jail?: ReadJail
 }
 
 // Modo leitura: o agente lê e busca arquivos, e nada além disso. Nenhum provedor recebe auto-aprovação.
@@ -38,7 +39,7 @@ export function buildArgs(provider: ProviderId, o: RunOptions): CliSpec {
     if (o.addDirs?.length) args.push('--add-dir', ...o.addDirs)
     if (o.systemPrompt) args.push('--append-system-prompt', o.systemPrompt)
     args.push('-p')
-    return { bin: 'claude', args, stdin: o.prompt }
+    return o.jail ? { bin: 'bwrap', args: jailArgs(o.jail, o.cwd, 'claude', args), stdin: o.prompt } : { bin: 'claude', args, stdin: o.prompt }
   }
 
   if (provider === 'codex') {
@@ -49,34 +50,28 @@ export function buildArgs(provider: ProviderId, o: RunOptions): CliSpec {
     if (o.cwd) args.push('-C', o.cwd)
     for (const dir of o.addDirs ?? []) args.push('--add-dir', dir)
     args.push('-')
-    return { bin: 'codex', args, stdin: fullPrompt }
+    return o.jail ? { bin: 'bwrap', args: jailArgs(o.jail, o.cwd, 'codex', args), stdin: fullPrompt } : { bin: 'codex', args, stdin: fullPrompt }
   }
 
   // O agy não tem modo leitura que segure: testado em 30/09/2026, ele escreveu arquivo mesmo com
-  // --mode plan e --sandbox. A trava é do sistema: bwrap monta o disco inteiro como só leitura,
-  // menos a pasta de estado dele e uma temporária. A rede continua (ele precisa da API).
-  if (!o.agySandbox) throw new Error(say({ en: 'Antigravity only runs read-only inside bwrap (bubblewrap), which is not available on this machine; choose Claude or Codex in Settings', pt: 'o Antigravity só roda em modo leitura dentro do bwrap (bubblewrap), que não está disponível nesta máquina; escolha Claude ou Codex em Configurações' }))
+  // --mode plan e --sandbox. A trava é do sistema: o jail de leitura, gravável só na pasta de estado
+  // dele e numa temporária. A rede continua (ele precisa da API).
+  if (!o.jail) throw new Error(say({ en: 'Antigravity only runs read-only inside bwrap (bubblewrap), which is not available on this machine; choose Claude or Codex in Settings', pt: 'o Antigravity só roda em modo leitura dentro do bwrap (bubblewrap), que não está disponível nesta máquina; escolha Claude ou Codex em Configurações' }))
   // agy documents no plain-text stdin, so its prompt stays an argument and is bounded by it.
   if (Buffer.byteLength(fullPrompt) > MAX_ARG_BYTES) throw new Error(say({ en: 'this prompt is too large for Antigravity (over 128 KiB); choose Claude or Codex in Settings for large reviews', pt: 'este prompt é grande demais para o Antigravity (mais de 128 KiB); escolha Claude ou Codex em Configurações para revisões grandes' }))
-  const { stateDir, tmpDir } = o.agySandbox
-  const args = [
-    '--ro-bind', '/', '/', '--dev', '/dev', '--proc', '/proc',
-    '--bind', stateDir, stateDir, '--bind', tmpDir, tmpDir, '--setenv', 'TMPDIR', tmpDir,
-    '--die-with-parent', ...(o.cwd ? ['--chdir', o.cwd] : []),
-    'agy', '--output-format', 'stream-json',
-  ]
+  const args = ['--output-format', 'stream-json']
   if (o.model) args.push('--model', o.model)
   if (o.effort) args.push('--effort', o.effort)
   for (const dir of o.addDirs ?? []) args.push('--add-dir', dir)
   args.push('-p', fullPrompt)
-  return { bin: 'bwrap', args }
+  return { bin: 'bwrap', args: jailArgs(o.jail, o.cwd, 'agy', args) }
 }
 
 if (import.meta.main && process.argv.includes('--selfcheck')) {
   const AUTO_APPROVE = ['--dangerously-skip-permissions', '--dangerously-bypass-approvals-and-sandbox', '--permission-mode']
-  const sandbox = { stateDir: '/home/u/.gemini', tmpDir: '/tmp/agy-x' }
+  const jail: ReadJail = { home: '/home/u', tmpDir: '/tmp/agy-x', visible: ['/proj', '/home/u/.local/bin'], binDirs: ['/home/u/.local/bin'], writable: ['/home/u/.gemini'], env: {} }
   for (const provider of ['claude', 'codex', 'agy'] as ProviderId[]) {
-    const { args } = buildArgs(provider, { prompt: 'oi', model: 'm', effort: 'high', agySandbox: sandbox })
+    const { args } = buildArgs(provider, { prompt: 'oi', model: 'm', effort: 'high', jail })
     for (const flag of AUTO_APPROVE) assert.ok(!args.includes(flag), `${provider} não pode usar ${flag}`)
   }
 
@@ -96,11 +91,12 @@ if (import.meta.main && process.argv.includes('--selfcheck')) {
   assert.ok(codex.includes('model_reasoning_effort="xhigh"'))
   assert.equal(codex.at(-1), '-')
   assert.ok(codexSpec.stdin!.startsWith('REGRAS') && codexSpec.stdin!.endsWith('pergunta'), 'system prompt vai junto do prompt, pela entrada padrão')
-  assert.throws(() => buildArgs('agy', { prompt: 'x'.repeat(MAX_ARG_BYTES + 1), agySandbox: sandbox }), /128 KiB/, 'agy recusa prompt maior que um argumento')
+  assert.throws(() => buildArgs('agy', { prompt: 'x'.repeat(MAX_ARG_BYTES + 1), jail }), /128 KiB/, 'agy recusa prompt maior que um argumento')
 
-  const agy = buildArgs('agy', { prompt: 'pergunta', systemPrompt: 'REGRAS', agySandbox: sandbox, cwd: '/proj' })
+  const agy = buildArgs('agy', { prompt: 'pergunta', systemPrompt: 'REGRAS', jail, cwd: '/proj' })
   assert.equal(agy.bin, 'bwrap', 'agy sempre dentro do bwrap')
   assert.deepEqual(agy.args.slice(0, 3), ['--ro-bind', '/', '/'], 'disco inteiro só leitura')
+  assert.ok(agy.args.join(' ').includes('--tmpfs /home/u'), 'agy também não vê a home')
   const writable = agy.args.flatMap((a, i) => (a === '--bind' ? [agy.args[i + 1]] : []))
   assert.deepEqual(writable, ['/home/u/.gemini', '/tmp/agy-x'], 'só estado do agy e a temporária são graváveis')
   assert.ok(!writable.includes('/proj'), 'a pasta do projeto nunca é gravável')
@@ -108,5 +104,10 @@ if (import.meta.main && process.argv.includes('--selfcheck')) {
   assert.throws(() => buildArgs('agy', { prompt: 'x' }), /bwrap/, 'sem bwrap, recusa em vez de rodar sem trava')
 
   assert.ok(!buildArgs('claude', { prompt: 'x' }).args.includes('--model'), 'sem modelo, o CLI usa o padrão dele')
+  const jailed = buildArgs('claude', { prompt: 'p', jail, cwd: '/proj' })
+  assert.equal(jailed.bin, 'bwrap', 'com jail, claude roda dentro do bwrap')
+  assert.equal(jailed.args[jailed.args.indexOf('--chdir') + 1], '/proj')
+  assert.equal(jailed.stdin, 'p', 'o prompt atravessa o bwrap pela entrada padrão')
+  assert.equal(buildArgs('codex', { prompt: 'p', jail, cwd: '/proj' }).bin, 'bwrap')
   console.log('ai args selfcheck: ok')
 }

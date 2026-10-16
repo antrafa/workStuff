@@ -1,12 +1,9 @@
 import { spawn } from 'node:child_process'
-import { mkdtempSync, rmSync } from 'node:fs'
-import { homedir, tmpdir } from 'node:os'
-import { join } from 'node:path'
-import { which } from '../run.ts'
 import { readSettings } from '../settingsStore.ts'
 import type { ProviderId } from '../aiProviders.ts'
 import { buildArgs, type CliSpec, type RunOptions } from './args.ts'
 import { createParser, type AiEvent } from './events.ts'
+import { prepareReadJail } from './jail.ts'
 import { say } from '../i18n.ts'
 
 export type RunRequest = Omit<RunOptions, 'model' | 'effort'> & {
@@ -15,19 +12,22 @@ export type RunRequest = Omit<RunOptions, 'model' | 'effort'> & {
   timeoutMs?: number
   // Sem nenhuma saída por esse tempo, o processo é encerrado e a resposta parcial é preservada.
   stallMs?: number
+  // The prompt carries text written by someone else (a remote MR): without the read jail it does not run
+  thirdPartyText?: boolean
 }
 
 export type RunResult = { text: string; provider: ProviderId; model: string; durationMs: number; stopped: boolean; sessionId: string | null; usage: { inputTokens?: number; outputTokens?: number; costUsd?: number } | null }
 
-// Roda o CLI escolhido em Configurações (provedor, modelo e esforço), sempre em modo leitura.
+// Roda o CLI escolhido em Configurações (provedor, modelo e esforço), sempre em modo leitura e, onde
+// há bwrap, preso no jail de leitura (jail.ts): o agente só vê as pastas desta execução.
 export async function runAi(req: RunRequest): Promise<RunResult> {
   const { provider, model, effort } = readSettings()
-  const tmpDir = provider === 'agy' && (await which('bwrap')) ? mkdtempSync(join(tmpdir(), 'workstuff-agy-')) : null
-  const agySandbox = tmpDir ? { stateDir: join(homedir(), '.gemini'), tmpDir } : undefined
+  const prepared = await prepareReadJail(provider, [req.cwd, ...(req.addDirs ?? [])].filter((d): d is string => Boolean(d)))
+  if (!prepared && req.thirdPartyText) throw new Error(say({ en: 'reviewing text written by someone else needs bwrap (bubblewrap), which confines what the AI can read; install it to use this review', pt: 'revisar texto escrito por outra pessoa exige o bwrap (bubblewrap), que limita o que a IA pode ler; instale-o para usar esta revisão' }))
   try {
-    return await spawnCli(provider, model, buildArgs(provider, { ...req, model, effort, agySandbox }), req)
+    return await spawnCli(provider, model, buildArgs(provider, { ...req, model, effort, jail: prepared?.jail }), req)
   } finally {
-    if (tmpDir) rmSync(tmpDir, { recursive: true, force: true })
+    prepared?.cleanup()
   }
 }
 

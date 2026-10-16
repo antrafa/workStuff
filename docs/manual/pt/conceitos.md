@@ -150,7 +150,7 @@ O jeito como o painel sempre chama a IA sobre o seu código e os seus clusters: 
 
 ### Sandbox (jail do bwrap)
 
-Um espaço isolado em que um programa roda enxergando o resto do computador como somente leitura. O painel usa o `bwrap` (bubblewrap, só no Linux) para rodar o Antigravity e, na [Fábrica](/fabrica), os agentes que escrevem código e os testes que eles escreveram.
+Um espaço isolado em que um programa roda enxergando o resto do computador como somente leitura. O painel usa o `bwrap` (bubblewrap, só no Linux) para rodar o Antigravity e, na [Fábrica](/fabrica), os agentes que escrevem código e os testes que eles escreveram. Toda IA em modo leitura também roda num jail do bwrap em que a sua pasta pessoal e o `/tmp` aparecem vazios: ela só enxerga a pasta daquela execução, por exemplo o repositório que está revisando.
 
 ## Fábrica de Software
 

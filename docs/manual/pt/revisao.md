@@ -25,7 +25,7 @@ Veja também [Conceitos e termos](/documentacao/conceitos).
 
 ## Conhecendo a tela
 
-- **Abas (`Branch local` e `MR / PR aberto`)**: alterna entre revisar uma branch de um repositório clonado na máquina e inspecionar um Merge Request / Pull Request aberto dos projetos acompanhados (ou colando a URL do GitLab/GitHub).
+- **Abas (`Branch local` e `MR / PR aberto`)**: alterna entre revisar uma branch de um repositório clonado na máquina e inspecionar um Merge Request / Pull Request aberto dos projetos acompanhados (ou colando a URL do GitLab/GitHub). A revisão com IA de um MR/PR exige o bwrap, porque o título, a descrição e o diff foram escritos por outra pessoa.
 - **Campo do caminho**: onde vai a pasta do repositório, por exemplo `/home/voce/workspace/loja-api`. O botão **Escolher** abre o seletor de pastas do sistema. A tela lembra a última pasta aberta.
 - **Voltar**: aparece quando você chega pelo botão **Revisar** de Meu Workspace (em Repositórios) e volta para aquela lista com a mesma busca e o mesmo filtro.
 - **Linha da branch**: depois de abrir, a tela mostra "Branch `sua-branch` contra" e uma lista com as branches do repositório para escolher a base.

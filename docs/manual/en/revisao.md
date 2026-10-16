@@ -25,7 +25,7 @@ See also [Concepts and terms](/documentacao/conceitos).
 
 ## Getting to know the screen
 
-- **Tabs (`Local branch` and `Open MR / PR`)**: switch between reviewing a branch in a repository cloned on your machine and inspecting an open Merge Request / Pull Request from followed projects (or by pasting its GitLab/GitHub URL).
+- **Tabs (`Local branch` and `Open MR / PR`)**: switch between reviewing a branch in a repository cloned on your machine and inspecting an open Merge Request / Pull Request from followed projects (or by pasting its GitLab/GitHub URL). The AI review of an MR/PR needs bwrap, because its title, description and diff were written by someone else.
 - **Path field**: where the repository folder goes, for example `/home/you/workspace/shop-api`. The **Choose** button opens the system folder picker. The screen remembers the last folder you opened.
 - **Back**: shows when you arrive from the **Review** button in My Workspace (in Repositories) and returns to that list with the same search and filter.
 - **Branch line**: once opened, the screen shows "Branch `your-branch` against" and a list of the repository's branches to pick the base from.

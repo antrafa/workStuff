@@ -127,7 +127,7 @@ reviewRouter.post('/mr-run', async (req, res) => {
         'Não aponte o que não verificou. Se não houver problema real, diga isso em uma frase e dê o veredito de revisão.',
       ].join(' '),
     ].filter(Boolean).join('\n\n')
-    const result = await runAi({ prompt, cwd: target.clonePath ?? scratch!, signal: sse.signal, onEvent: sse.send, timeoutMs: 20 * 60_000 })
+    const result = await runAi({ prompt, cwd: target.clonePath ?? scratch!, signal: sse.signal, onEvent: sse.send, timeoutMs: 20 * 60_000, thirdPartyText: true })
     sse.send({ type: 'done', provider: result.provider, model: result.model, durationMs: result.durationMs, stopped: result.stopped })
   } catch (e) {
     sse.send({ type: 'error', message: (e as Error).message })

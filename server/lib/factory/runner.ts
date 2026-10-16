@@ -1,7 +1,7 @@
 // Runner da Fábrica de Software com isolamento multi-provedor (Claude, Codex, Antigravity).
 
 import assert from 'node:assert/strict'
-import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { AGENT_HOME } from '../paths.ts'
@@ -10,6 +10,7 @@ import { readSettings } from '../settingsStore.ts'
 import type { ProviderId } from '../aiProviders.ts'
 import type { AiEvent } from '../ai/events.ts'
 import { MAX_ARG_BYTES, type CliSpec } from '../ai/args.ts'
+import { copyClaudeLogin, jailArgs, prepareReadJail, seedConfigHome, type ReadJail } from '../ai/jail.ts'
 import { spawnCli, type RunResult } from '../ai/runner.ts'
 import { SPECIALIZED_AGENTS } from './agents.ts'
 import type { SpecializedAgentId } from './types.ts'
@@ -84,9 +85,11 @@ export function buildFactoryArgs(
     effort?: string
     resumeSessionId?: string | null
     sandbox?: Sandbox
+    // Read mode: the read jail (server/lib/ai/jail.ts), where the agent sees only its worktree
+    readJail?: ReadJail
   },
 ): CliSpec {
-  const { mode, cwd, sandbox } = options
+  const { mode, cwd, sandbox, readJail } = options
   const fullPrompt = `${options.systemPrompt}\n\n${options.prompt}`
 
   if (provider === 'claude') {
@@ -98,7 +101,7 @@ export function buildFactoryArgs(
     args.push('--tools', ...tools, '--allowedTools', ...tools, '--strict-mcp-config')
     // The prompt goes on stdin: as one argument it fails with E2BIG past 128 KiB (see server/lib/ai/args.ts)
     args.push('--append-system-prompt', options.systemPrompt, '-p')
-    if (mode === 'read') return { bin: 'claude', args, stdin: options.prompt }
+    if (mode === 'read') return readJail ? { bin: 'bwrap', args: jailArgs(readJail, cwd, 'claude', args), stdin: options.prompt } : { bin: 'claude', args, stdin: options.prompt }
     if (!sandbox) throw new Error(say({ en: 'a write-mode agent only runs inside bwrap (bubblewrap), which is not available on this machine', pt: 'o agente com escrita só roda dentro do bwrap (bubblewrap), que não está disponível nesta máquina' }))
     return { ...jail(sandbox, cwd, 'claude', ['--dangerously-skip-permissions', ...args]), stdin: options.prompt }
   }
@@ -111,13 +114,13 @@ export function buildFactoryArgs(
     if (options.model) args.push('-m', options.model)
     if (options.effort) args.push('-c', `model_reasoning_effort="${options.effort}"`)
     args.push('-C', cwd, '-')
-    if (mode === 'read') return { bin: 'codex', args, stdin: fullPrompt }
+    if (mode === 'read') return readJail ? { bin: 'bwrap', args: jailArgs(readJail, cwd, 'codex', args), stdin: fullPrompt } : { bin: 'codex', args, stdin: fullPrompt }
     if (!sandbox) throw new Error(say({ en: 'Codex in write mode only runs inside bwrap (bubblewrap), which is not available on this machine', pt: 'o Codex com escrita só roda dentro do bwrap (bubblewrap), que não está disponível nesta máquina' }))
     return { ...jail(sandbox, cwd, 'codex', args), stdin: fullPrompt }
   }
 
   // agy writes to disk even in --mode plan (see server/lib/ai/args.ts): it only ever runs jailed.
-  if (!sandbox) throw new Error(say({ en: 'Antigravity only runs inside bwrap (bubblewrap), which is not available on this machine; pick Claude or Codex in Settings', pt: 'o Antigravity só roda dentro do bwrap (bubblewrap), que não está disponível nesta máquina; escolha Claude ou Codex em Configurações' }))
+  if (!sandbox && !(mode === 'read' && readJail)) throw new Error(say({ en: 'Antigravity only runs inside bwrap (bubblewrap), which is not available on this machine; pick Claude or Codex in Settings', pt: 'o Antigravity só roda dentro do bwrap (bubblewrap), que não está disponível nesta máquina; escolha Claude ou Codex em Configurações' }))
   const args = ['--output-format', 'stream-json']
   if (mode === 'read') args.push('--mode', 'plan')
   else args.push('--mode', 'accept-edits', '--dangerously-skip-permissions')
@@ -125,7 +128,8 @@ export function buildFactoryArgs(
   if (options.effort) args.push('--effort', options.effort)
   if (Buffer.byteLength(fullPrompt) > MAX_ARG_BYTES) throw new Error(say({ en: 'this prompt is too large for Antigravity (over 128 KiB); choose Claude or Codex in Settings', pt: 'este prompt é grande demais para o Antigravity (mais de 128 KiB); escolha Claude ou Codex em Configurações' }))
   args.push('-p', fullPrompt)
-  return jail({ ...sandbox, writable: mode === 'write' ? sandbox.writable : sandbox.writable.filter(d => d !== cwd) }, cwd, 'agy', args)
+  if (mode === 'read' && readJail) return { bin: 'bwrap', args: jailArgs(readJail, cwd, 'agy', args) }
+  return jail(mode === 'write' ? sandbox! : { ...sandbox!, writable: sandbox!.writable.filter(d => d !== cwd) }, cwd, 'agy', args)
 }
 
 // The jailed CLI gets its own config home next to the worktree, never the real ~/.claude or ~/.codex:
@@ -135,29 +139,11 @@ export function buildFactoryArgs(
 function prepareAgentHome(provider: ProviderId, cwd: string): { dirs: string[]; env: Record<string, string> } {
   if (provider === 'agy') return { dirs: [cwd, join(AGENT_HOME, '.gemini')], env: {} }
   const home = join(agentHomeOf(cwd), provider)
-  mkdirSync(home, { recursive: true, mode: 0o700 })
-  if (provider === 'codex') {
-    for (const file of ['auth.json', 'config.toml']) {
-      const src = join(AGENT_HOME, '.codex', file)
-      if (existsSync(src)) copyFileSync(src, join(home, file))
-    }
-    return { dirs: [cwd, home], env: { CODEX_HOME: home } }
-  }
-  copyClaudeLogin(join(AGENT_HOME, '.claude', '.credentials.json'), join(home, '.credentials.json'))
-  return { dirs: [cwd, home], env: { CLAUDE_CONFIG_DIR: home } }
+  return { dirs: [cwd, home], env: seedConfigHome(provider, home) }
 }
 
 // Access token only: a refresh inside the jail could rotate the refresh token and log the user's
 // own CLI out. The token lasts ~8 h and the user's CLI keeps renewing it.
-function copyClaudeLogin(src: string, dest: string): void {
-  if (!existsSync(src)) return
-  try {
-    const { refreshToken: _dropped, ...oauth } = JSON.parse(readFileSync(src, 'utf-8')).claudeAiOauth ?? {}
-    writeFileSync(dest, JSON.stringify({ claudeAiOauth: oauth }), { mode: 0o600 })
-  } catch (e) {
-    throw new Error(say({ en: `could not copy the Claude login into the sandbox: ${(e as Error).message}`, pt: `não foi possível copiar o login do Claude para o sandbox: ${(e as Error).message}` }))
-  }
-}
 
 export async function runFactoryAgent(options: FactoryRunOptions): Promise<RunResult> {
   const settings = readSettings()
@@ -168,31 +154,40 @@ export async function runFactoryAgent(options: FactoryRunOptions): Promise<RunRe
   if (!agent) throw new Error(say({ en: 'factory run without an agent', pt: 'execução da fábrica sem agente' }))
   const mode = options.readOnly ? 'read' : agent.mode
 
-  const needsJail = provider === 'agy' || mode === 'write'
-  const home = needsJail ? prepareAgentHome(provider, options.cwd) : { dirs: [], env: {} }
-
-  return withSandbox(home.dirs, async sandbox => {
-    const cliSpec = buildFactoryArgs(provider, {
-      prompt: options.prompt,
-      systemPrompt: agent.systemPrompt,
-      mode,
-      cwd: options.cwd,
-      model,
-      effort,
-      resumeSessionId: provider === 'claude' ? options.resumeSessionId : null,
-      sandbox: needsJail && sandbox ? { ...sandbox, env: home.env } : undefined,
-    })
-
-    return spawnCli(provider, model, cliSpec, {
-      prompt: options.prompt,
-      cwd: options.cwd,
-      signal: options.signal,
-      onEvent: options.onEvent,
-      timeoutMs: options.timeoutMs ?? 15 * 60_000,
-      stallMs: 4 * 60_000,
-    })
+  const spawnOptions = {
+    prompt: options.prompt,
+    cwd: options.cwd,
+    signal: options.signal,
+    onEvent: options.onEvent,
+    timeoutMs: options.timeoutMs ?? 15 * 60_000,
+    stallMs: 4 * 60_000,
+  }
+  const argsFor = (extra: { sandbox?: Sandbox; readJail?: ReadJail }) => buildFactoryArgs(provider, {
+    prompt: options.prompt,
+    systemPrompt: agent.systemPrompt,
+    mode,
+    cwd: options.cwd,
+    model,
+    effort,
+    resumeSessionId: provider === 'claude' ? options.resumeSessionId : null,
+    ...extra,
   })
+
+  // Read mode sees only its worktree. The config home stays next to the worktree so --resume finds
+  // the session; without bwrap it runs as before (agy then refuses in buildFactoryArgs).
+  if (mode === 'read') {
+    const prepared = await prepareReadJail(provider, [options.cwd], join(agentHomeOf(options.cwd), provider))
+    try {
+      return await spawnCli(provider, model, argsFor({ readJail: prepared?.jail }), spawnOptions)
+    } finally {
+      prepared?.cleanup()
+    }
+  }
+
+  const home = prepareAgentHome(provider, options.cwd)
+  return withSandbox(home.dirs, async sandbox => spawnCli(provider, model, argsFor({ sandbox: sandbox ? { ...sandbox, env: home.env } : undefined }), spawnOptions))
 }
+
 
 if (import.meta.main && process.argv.includes('--selfcheck')) {
   const base = { prompt: 'oi', systemPrompt: 'sys', cwd: '/wt' }
@@ -202,6 +197,12 @@ if (import.meta.main && process.argv.includes('--selfcheck')) {
   assert.equal(claudeRead.bin, 'claude')
   assert.ok(!claudeRead.args.includes('--dangerously-skip-permissions'))
   assert.equal(claudeRead.stdin, 'oi', 'o prompt vai pela entrada padrão')
+  const readJail = { home: '/home/u', tmpDir: '/tmp/r', visible: ['/wt'], binDirs: ['/usr/bin'], writable: ['/wt.agent-home/claude'], env: {} }
+  const claudeJailed = buildFactoryArgs('claude', { ...base, mode: 'read', readJail })
+  assert.equal(claudeJailed.bin, 'bwrap', 'leitura com bwrap roda no jail de leitura')
+  assert.ok(claudeJailed.args.join(' ').includes('--tmpfs /home/u'), 'o agente de leitura não vê a home')
+  assert.ok(!claudeJailed.args.join(' ').includes('--bind /wt /wt'), 'a worktree fica só leitura')
+  assert.equal(buildFactoryArgs('agy', { ...base, mode: 'read', readJail }).bin, 'bwrap', 'agy em leitura usa o jail de leitura')
   assert.ok(!claudeRead.args.includes('oi'), 'o prompt não vira argumento')
 
   const claudeWrite = buildFactoryArgs('claude', { ...base, mode: 'write', sandbox })

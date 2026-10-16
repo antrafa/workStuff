@@ -150,7 +150,7 @@ How the panel always calls the AI on your code and clusters: it can read and sea
 
 ### Sandbox (bwrap jail)
 
-An isolated space where a program runs seeing the rest of the computer as read-only. The panel uses `bwrap` (bubblewrap, Linux only) to run Antigravity and, in the [Factory](/fabrica), the agents that write code and the tests they wrote.
+An isolated space where a program runs seeing the rest of the computer as read-only. The panel uses `bwrap` (bubblewrap, Linux only) to run Antigravity and, in the [Factory](/fabrica), the agents that write code and the tests they wrote. Every read-mode AI also runs in a bwrap jail where your home folder and `/tmp` look empty: it only sees the folder of that run, for example the repository it is reviewing.
 
 ## Software Factory
 

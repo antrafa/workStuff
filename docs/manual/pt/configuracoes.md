@@ -89,7 +89,7 @@ Para voltar a um fundo liso, clique em **Remover imagem**. Sem imagem, o fundo �
 
 ## Bom saber
 
-- Todo provedor de IA roda em modo leitura sobre o seu código e os seus clusters. O Antigravity só roda no Linux, dentro do bubblewrap (`bwrap`), porque ele grava no disco mesmo quando pedem que não grave.
+- Todo provedor de IA roda em modo leitura sobre o seu código e os seus clusters. O Antigravity só roda no Linux, dentro do bubblewrap (`bwrap`), porque ele grava no disco mesmo quando pedem que não grave. Com o bwrap instalado, qualquer provedor só enxerga a pasta da execução, nunca o resto da sua pasta pessoal.
 - A escolha feita aqui é usada pelas telas que chamam a IA, como o Cluster Doctor, a [Análise](/analise) e a revisão de itens do [Catálogo](/catalogo). A [Fábrica](/fabrica) pode escolher um modelo por agente em cada tarefa.
 - Uma tela escondida continua abrindo pelo endereço e continua aparecendo na busca do **Ctrl+K**.
 - Tema, cor de destaque, fundo e telas escondidas ficam salvos neste navegador: outro navegador ou computador começa com o padrão. Provedor, modelo, esforço e idioma ficam salvos no seu computador e valem para qualquer navegador.

@@ -91,7 +91,8 @@ workStuff runs commands on your machine and against real clusters, so its defaul
   - `claude` gets only the `Read`, `Grep` and `Glob` tools, with `--strict-mcp-config`.
   - `codex` runs with `-s read-only`.
   - `agy` (Antigravity) always runs inside [bubblewrap](https://github.com/containers/bubblewrap), with the filesystem mounted read-only. It is refused if `bwrap` is missing, because in testing it wrote to disk even in plan/sandbox mode.
-  - Read-only is not read-confined: an agent can read files outside the folder it runs in. That matters for the remote MR review, whose title, description and diff are written by someone else. Images in AI answers are therefore shown as text and never loaded, so an injected instruction cannot send file contents out through an image URL.
+  - **Read-confined where `bwrap` exists.** Read-only alone would still let an agent read any file you can, so every AI run (the panel's screens and the factory's read-mode agents) goes through a read jail (`server/lib/ai/jail.ts`): inside it your home, `/tmp` and `/run/user` are empty, and only the folder of that run, the CLI's own binary and a private config home with a copy of its login (the access token, never the refresh token) are mounted back. The environment is cleared down to locale, proxy and the provider's own variables, so a `GITLAB_TOKEN` or `KUBECONFIG` of the server is not visible either.
+  - Without `bwrap` (macOS, Windows) the agents run read-only but not confined, except the remote MR review, whose title, description and diff are written by someone else: it refuses to run. Images in AI answers are always shown as text and never loaded, so an injected instruction cannot send data out through an image URL.
 - **Environment policy for clusters.** Each kubeconfig is classified as `DES`, `ITG`, `HML` or `PRO` by its name, or by hand.
   - `PRO` is read-only.
   - An unclassified kubeconfig is treated as `PRO`.
@@ -121,7 +122,7 @@ workStuff runs commands on your machine and against real clusters, so its defaul
 | [`kubectl`](https://kubernetes.io/docs/tasks/tools/) | Cluster, Cluster Doctor, Requests & Limits, Performance |
 | At least one AI CLI: [`claude`](https://docs.claude.com/en/docs/claude-code) (Claude Code), [`codex`](https://github.com/openai/codex), or `agy` (Antigravity) | Diagnose, Analysis, Catalog review, Performance reports |
 | `claude` specifically | Cluster Doctor |
-| `bwrap` (package `bubblewrap`) | Using `agy` |
+| `bwrap` (package `bubblewrap`) | Using `agy`; confining what every AI agent can read; the remote MR/PR review |
 | `zenity` or `kdialog` (Linux), `osascript` (macOS) | Native folder picker |
 | `gh` | Using the GitHub CLI token as a repository credential |
 | `npx` | Installing skills from skills.sh |
