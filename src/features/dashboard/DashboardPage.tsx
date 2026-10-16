@@ -32,6 +32,7 @@ import { fetchWorkspace, type WorkspaceRepo } from '@/features/repos/api'
 import type { FactoryTask } from '../../../server/lib/factory/types.ts'
 import { FactoryStatusChip } from '@/features/factory/timeline/FactoryStatusChip'
 import { isTaskRunning } from '../factory/factoryRun'
+import { DailyCard } from './DailyCard'
 import { locale, tx } from '@/lib/i18n'
 
 export default function DashboardPage() {
@@ -400,6 +401,8 @@ export default function DashboardPage() {
             </div>
           </div>
         )}
+
+        <DailyCard watches={pipelineWatches} />
 
         {/* 2. Featured section: Software Factory */}
         <div className="card">

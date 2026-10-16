@@ -11,6 +11,7 @@ import {
   assertWorkspaceRepo, cleanRepoArtifacts, fetchWorkspaceRepo, listWorkspaceRepos, pruneMergedBranches, scanWorkspace,
 } from '../lib/repos/workspace.ts'
 import { searchClones } from '../lib/repos/search.ts'
+import { dailySummary, lastWorkday } from '../lib/repos/daily.ts'
 import { tildify } from '../lib/paths.ts'
 import { say } from '../lib/i18n.ts'
 
@@ -44,6 +45,7 @@ reposRouter.post('/workspace/search', handle(async req => {
   }
   return result
 }))
+reposRouter.get('/workspace/daily', handle(() => dailySummary(lastWorkday(new Date()))))
 reposRouter.post('/workspace/open', handle(req => {
   const dir = assertWorkspaceRepo(String(req.body?.repoPath ?? ''))
   openInEditor(dir)

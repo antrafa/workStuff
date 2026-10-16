@@ -1,16 +1,17 @@
 # Início
 
-A primeira tela do painel: mostra de relance se algo precisa de você, passando pela Fábrica de Software, pelo cluster Kubernetes conectado, pela sua máquina e pelos serviços rodando nela, com atalhos para as telas que você mais usa.
+A primeira tela do painel: mostra de relance se algo precisa de você, monta o resumo para a daily e resume a Fábrica de Software, o cluster Kubernetes conectado, a sua máquina e os serviços rodando nela, com atalhos para as telas que você mais usa.
 
 ## Quando usar
 
+- Você vai entrar na daily e quer o resumo do que fez desde o último dia útil.
 - Você acabou de abrir o painel e quer saber se alguma tarefa espera a sua aprovação ou se um cluster tem pods com problema.
 - Você quer conferir se a máquina continua pronta para trabalhar depois de instalar ou atualizar alguma coisa.
 - Você quer começar uma tarefa nova na Fábrica ou pular para uma tela que usa todo dia.
 
 ## Conhecendo a tela
 
-A tela tem quatro partes, de cima para baixo.
+A tela tem seis partes, de cima para baixo.
 
 **Cartões de status.** Quatro cartões, cada um é um link para a tela que ele resume:
 
@@ -22,6 +23,8 @@ A tela tem quatro partes, de cima para baixo.
 | **Serviços Locais** | Quantas **portas em escuta** existem na sua máquina, se o Docker está **Ativo** ou **Inativo** e quantos containers existem. | [Serviços locais](/servicos) |
 
 **Onde eu parei.** Aparece sempre que você tem repositórios locais com arquivos modificados, stashes ou commits nas últimas 24h, tarefas da Fábrica esperando sua decisão ou pipelines acompanhadas com falha/em execução, permitindo retomar a revisão em [Revisão antes do MR](/revisao) ou abrir o [Repositórios](/repositorios) com um clique.
+
+**Para a daily.** O botão **Montar resumo** junta os seus commits desde o último dia útil em todos os clones do workspace, os MRs que você abriu e as pipelines acompanhadas que falharam, num texto que você edita e copia com **Copiar**.
 
 **Fábrica de Software e Agentes Autônomos.** As quatro tarefas mais recentes da Fábrica, cada uma com título, branch, data de criação e estado. Uma tarefa que espera você mostra **Aguardando aprovação**. Clique numa tarefa, ou em **Abrir Fábrica Completa**, para ir à [Fábrica](/fabrica).
 
@@ -37,6 +40,13 @@ A tela tem quatro partes, de cima para baixo.
 4. Olhe o cartão **Máquina & Doctor**. Se ele mostrar **pendências**, clique nele, ou em **Resolver pendências agora** no cartão **Ambiente de Desenvolvimento Local**, para ver o que falta e como resolver.
 5. Para ler tudo de novo sem esperar, clique em **Atualizar** no canto superior direito.
 
+### Montar o resumo para a daily
+
+1. No cartão **Para a daily**, clique em **Montar resumo**.
+2. Confira o texto: os commits vêm agrupados por projeto, seguidos dos MRs abertos e das esteiras quebradas.
+3. Complete **Hoje** e **Impedimentos** direto na caixa de texto.
+4. Clique em **Copiar** e cole no chat do time.
+
 ### Começar uma tarefa nova na Fábrica
 
 1. Clique em **Nova Tarefa na Fábrica**, no canto superior direito.
@@ -47,6 +57,7 @@ Se nenhuma tarefa foi criada ainda, o cartão **Fábrica de Software e Agentes A
 ## Bom saber
 
 - A tela lê tudo de novo sozinha a cada 10 segundos, sem chamar atenção. **Atualizar** só força uma leitura agora.
+- O resumo da daily só é montado quando você clica, porque ele roda o git em todos os clones e consulta o GitLab ou o GitHub. Um clone sem `user.email` configurado no git fica de fora, e o cartão avisa quantos foram assim.
 - A tela só lê: nada aqui altera a sua máquina, o seu cluster ou as suas tarefas. Toda ação acontece na tela que o cartão abre.
 - O cartão do cluster mostra o cluster conectado no [Cluster](/cluster). Para olhar outro, troque por lá.
 

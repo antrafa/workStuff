@@ -1,16 +1,17 @@
 # Home
 
-The first screen of the panel: it tells you at a glance whether anything needs you, across the Software Factory, the connected Kubernetes cluster, your machine and the services running on it, with shortcuts to the screens you use most.
+The first screen of the panel: it tells you at a glance whether anything needs you, builds your stand-up summary and sums up the Software Factory, the connected Kubernetes cluster, your machine and the services running on it, with shortcuts to the screens you use most.
 
 ## When to use
 
+- You are about to join the stand-up and want a summary of what you did since the last working day.
 - You just opened the panel and want to know whether a task is waiting for your approval or a cluster has pods with problems.
 - You want to check that your machine is still ready to work after installing or updating something.
 - You want to start a new task in the Factory or jump to a screen you use every day.
 
 ## Getting to know the screen
 
-The screen has four parts, from top to bottom.
+The screen has six parts, from top to bottom.
 
 **Status cards.** Four cards, each one a link to the screen it sums up:
 
@@ -22,6 +23,8 @@ The screen has four parts, from top to bottom.
 | **Local services** | How many **listening ports** there are on your machine, whether Docker is **Active** or **Inactive** and how many containers exist. | [Local services](/servicos) |
 
 **Where I left off.** Shows up whenever you have local repositories with modified files, stashes or commits in the last 24h, Factory tasks waiting for your decision or followed pipelines that are failing or running, letting you jump straight to [Pre-MR review](/revisao) or [Repositories](/repositorios).
+
+**For the stand-up.** The **Build summary** button joins your commits since the last working day in every clone of the workspace, the MRs you opened and the followed pipelines that failed, in a text you edit and copy with **Copy**.
 
 **Software Factory and autonomous agents.** The four most recent Factory tasks, each with its title, branch, creation date and state. A task waiting for you shows **Waiting for approval**. Click a task, or **Open the full Factory**, to go to the [Factory](/fabrica).
 
@@ -37,6 +40,13 @@ The screen has four parts, from top to bottom.
 4. Look at the **Machine & Doctor** card. If it shows items **pending**, click it, or click **Fix pending items now** in the **Local development environment** card, to see what is missing and how to fix it.
 5. To read everything again without waiting, click **Refresh** at the top right.
 
+### Build the stand-up summary
+
+1. In the **For the stand-up** card, click **Build summary**.
+2. Check the text: the commits come grouped by project, followed by the open MRs and the broken pipelines.
+3. Fill in **Today** and **Blockers** right in the text box.
+4. Click **Copy** and paste it in the team chat.
+
 ### Start a new task in the Factory
 
 1. Click **New factory task** at the top right.
@@ -47,6 +57,7 @@ If no task was ever created, the **Software Factory and autonomous agents** card
 ## Good to know
 
 - The screen reads everything again on its own every 10 seconds, quietly. **Refresh** only forces a read now.
+- The stand-up summary is built only when you click, because it runs git in every clone and asks GitLab or GitHub. A clone without a git `user.email` is left out, and the card says how many were.
 - The screen only reads: nothing here changes your machine, your cluster or your tasks. Every action is done on the screen the card opens.
 - The cluster card shows the cluster connected in [Cluster](/cluster). To look at another one, switch it there.
 
