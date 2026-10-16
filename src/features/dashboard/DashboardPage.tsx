@@ -74,12 +74,6 @@ export default function DashboardPage() {
             setLoadingServices(false)
           })
           .catch(() => setLoadingServices(false)),
-        fetchWorkspace()
-          .then(data => setWorkspaceRepos(data.repos ?? []))
-          .catch(() => {}),
-        fetchWatches()
-          .then(data => setPipelineWatches(Array.isArray(data) ? data : []))
-          .catch(() => {}),
         refreshSession(),
       ])
     } finally {
@@ -87,14 +81,29 @@ export default function DashboardPage() {
     }
   }
 
+  // Heavy on purpose, so never on the 10 s poll: the scan runs git in every clone and the watches call
+  // the GitLab/GitHub API once per followed pipeline. They load on open and on Refresh.
+  const loadContext = () =>
+    Promise.allSettled([
+      fetchWorkspace()
+        .then(data => setWorkspaceRepos(data.repos ?? []))
+        .catch(e => console.warn('[dashboard] workspace scan failed:', (e as Error).message)),
+      fetchWatches()
+        .then(data => setPipelineWatches(Array.isArray(data) ? data : []))
+        .catch(e => console.warn('[dashboard] pipeline watches failed:', (e as Error).message)),
+    ])
+
+  const refreshAll = () => Promise.all([loadAll(false), loadContext()])
+
   useEffect(() => {
     loadAll(true)
+    loadContext()
   }, [])
 
-  // Quiet auto-refresh every 10 seconds
+  // Quiet auto-refresh every 10 seconds, only while the tab is in view
   useEffect(() => {
     const timer = setInterval(() => {
-      loadAll(true)
+      if (document.visibilityState === 'visible') loadAll(true)
     }, 10000)
     return () => clearInterval(timer)
   }, [])
@@ -138,7 +147,7 @@ export default function DashboardPage() {
           <button
             type="button"
             className="btn btn-sm"
-            onClick={() => loadAll(false)}
+            onClick={refreshAll}
             disabled={refreshing}
             title={tx({ en: 'Refresh all indicators now', pt: 'Atualizar todos os indicadores agora' })}
           >
@@ -314,7 +323,7 @@ export default function DashboardPage() {
                 <div style={{ padding: 12, background: 'var(--surface-2)', border: '1px solid var(--line)', borderRadius: 'var(--r)', display: 'flex', flexDirection: 'column', gap: 8 }}>
                   <div className="row" style={{ justifyContent: 'space-between' }}>
                     <span className="eyebrow" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                      <GitBranch size={13} /> {tx({ en: 'Local work in progress', pt: ' Código local em andamento' })}
+                      <GitBranch size={13} /> {tx({ en: 'Local work in progress', pt: 'Código local em andamento' })}
                     </span>
                     <span className="badge">{recentRepos.length}</span>
                   </div>
