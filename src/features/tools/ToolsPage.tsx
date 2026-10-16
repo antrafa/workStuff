@@ -1,9 +1,10 @@
 import './tools.css'
-import { Binary, Braces, CalendarClock, Clock, Diff, Fingerprint, Hash, KeyRound, Link, Regex } from 'lucide-react'
+import { Binary, Braces, CalendarClock, Clock, Cpu, Database, Diff, Fingerprint, Hash, KeyRound, Link, Regex, ShieldCheck } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { Page } from '@/ui'
 import { Base64Tool, CronTool, JwtTool, TimestampTool, UrlTool, UuidTool } from './Converters'
+import { JvmMemoryTool, PemCertTool, SqlBindTool } from './DevOpsTools'
 import { DiffTool, HashTool, JsonTool, RegexTool } from './TextTools'
 import { tx } from '@/lib/i18n'
 
@@ -11,6 +12,9 @@ type Tool = { icon: LucideIcon; title: string; description: string; body: ReactN
 
 const TOOLS: Tool[] = [
   { icon: KeyRound, title: 'JWT', description: tx({ en: 'Decodes header and payload and shows whether the token expired.', pt: 'Decodifica header e payload e mostra se o token expirou.' }), body: <JwtTool /> },
+  { icon: Database, title: 'SQL Bind', description: tx({ en: 'Binds ? parameters from Hibernate, JDBC or MyBatis logs and formats the SQL query.', pt: 'Preenche parâmetros ? de logs do Hibernate, JDBC ou MyBatis e formata a query SQL.' }), body: <SqlBindTool /> },
+  { icon: Cpu, title: tx({ en: 'JVM & K8s Memory', pt: 'Memória JVM & K8s' }), description: tx({ en: 'Checks whether Heap + Metaspace + Direct + Threads fit in the pod limit without OOMKilled (137).', pt: 'Calcula se Heap + Metaspace + Direct + Threads cabem no limite do pod sem OOMKilled (137).' }), body: <JvmMemoryTool /> },
+  { icon: ShieldCheck, title: 'X.509 PEM', description: tx({ en: 'Decodes a PEM certificate (Subject, Issuer, SANs and expiry) in the browser.', pt: 'Decodifica um certificado PEM (Subject, Issuer, SANs e validade) no navegador.' }), body: <PemCertTool /> },
   { icon: Binary, title: 'Base64', description: tx({ en: 'Encodes and decodes UTF-8 text, base64url included.', pt: 'Codifica e decodifica texto UTF-8, inclusive base64url.' }), body: <Base64Tool /> },
   { icon: Link, title: 'URL', description: tx({ en: 'Percent-encoding of parameters and paths.', pt: 'Percent-encoding de parâmetros e caminhos.' }), body: <UrlTool /> },
   { icon: Clock, title: 'Timestamp', description: tx({ en: 'Epoch in seconds or milliseconds to a readable date.', pt: 'Epoch em segundos ou milissegundos para data legível.' }), body: <TimestampTool /> },

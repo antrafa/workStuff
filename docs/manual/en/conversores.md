@@ -17,6 +17,9 @@ The screen has one card per tool. The result shows up in the card itself as you 
 | Card | What it does |
 |---|---|
 | **JWT** | Opens a JWT token (the "badge" many systems use to prove who you are) and shows its two readable parts, **Header** and **Payload**, and whether the token is **valid** or **expired**. |
+| **SQL Bind** | Takes a parameterized SQL query (`?`) together with Hibernate, JDBC or MyBatis parameter binding log lines and produces the formatted query with the values filled in. |
+| **JVM & K8s Memory** | Calculates whether Java Heap (`MaxRAMPercentage` or `-Xmx`) plus Non-Heap (`Metaspace`, `Direct`, thread stacks and code cache) fit inside the Kubernetes pod memory limit without triggering `OOMKilled` (exit code 137). |
+| **X.509 PEM** | Decodes a `-----BEGIN CERTIFICATE-----` PEM certificate in the browser and shows Subject, Issuer, serial number, validity dates and SANs (Subject Alternative Names). |
 | **Base64** | Encodes text as Base64 (a way of writing any data with letters and numbers only) and decodes it back. It also accepts the base64url variant. |
 | **URL** | Replaces special characters with the `%` codes used in web addresses (for example, a space becomes `%20`), and undoes that. |
 | **Timestamp** | Turns a timestamp (a date counted in seconds or milliseconds since 1970) into a readable date, in your time zone and in UTC. |
