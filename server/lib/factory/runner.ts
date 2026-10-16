@@ -9,6 +9,7 @@ import { which } from '../run.ts'
 import { readSettings } from '../settingsStore.ts'
 import type { ProviderId } from '../aiProviders.ts'
 import type { AiEvent } from '../ai/events.ts'
+import { MAX_ARG_BYTES, type CliSpec } from '../ai/args.ts'
 import { spawnCli, type RunResult } from '../ai/runner.ts'
 import { SPECIALIZED_AGENTS } from './agents.ts'
 import type { SpecializedAgentId } from './types.ts'
@@ -84,7 +85,7 @@ export function buildFactoryArgs(
     resumeSessionId?: string | null
     sandbox?: Sandbox
   },
-): { bin: string; args: string[] } {
+): CliSpec {
   const { mode, cwd, sandbox } = options
   const fullPrompt = `${options.systemPrompt}\n\n${options.prompt}`
 
@@ -95,10 +96,11 @@ export function buildFactoryArgs(
     if (options.effort) args.push('--effort', options.effort)
     if (options.resumeSessionId) args.push('--resume', options.resumeSessionId)
     args.push('--tools', ...tools, '--allowedTools', ...tools, '--strict-mcp-config')
-    args.push('--append-system-prompt', options.systemPrompt, '-p', options.prompt)
-    if (mode === 'read') return { bin: 'claude', args }
+    // The prompt goes on stdin: as one argument it fails with E2BIG past 128 KiB (see server/lib/ai/args.ts)
+    args.push('--append-system-prompt', options.systemPrompt, '-p')
+    if (mode === 'read') return { bin: 'claude', args, stdin: options.prompt }
     if (!sandbox) throw new Error(say({ en: 'a write-mode agent only runs inside bwrap (bubblewrap), which is not available on this machine', pt: 'o agente com escrita só roda dentro do bwrap (bubblewrap), que não está disponível nesta máquina' }))
-    return jail(sandbox, cwd, 'claude', ['--dangerously-skip-permissions', ...args])
+    return { ...jail(sandbox, cwd, 'claude', ['--dangerously-skip-permissions', ...args]), stdin: options.prompt }
   }
 
   if (provider === 'codex') {
@@ -108,10 +110,10 @@ export function buildFactoryArgs(
     args.push(...(mode === 'read' ? ['-s', 'read-only'] : ['--dangerously-bypass-approvals-and-sandbox']))
     if (options.model) args.push('-m', options.model)
     if (options.effort) args.push('-c', `model_reasoning_effort="${options.effort}"`)
-    args.push('-C', cwd, fullPrompt)
-    if (mode === 'read') return { bin: 'codex', args }
+    args.push('-C', cwd, '-')
+    if (mode === 'read') return { bin: 'codex', args, stdin: fullPrompt }
     if (!sandbox) throw new Error(say({ en: 'Codex in write mode only runs inside bwrap (bubblewrap), which is not available on this machine', pt: 'o Codex com escrita só roda dentro do bwrap (bubblewrap), que não está disponível nesta máquina' }))
-    return jail(sandbox, cwd, 'codex', args)
+    return { ...jail(sandbox, cwd, 'codex', args), stdin: fullPrompt }
   }
 
   // agy writes to disk even in --mode plan (see server/lib/ai/args.ts): it only ever runs jailed.
@@ -121,6 +123,7 @@ export function buildFactoryArgs(
   else args.push('--mode', 'accept-edits', '--dangerously-skip-permissions')
   if (options.model) args.push('--model', options.model)
   if (options.effort) args.push('--effort', options.effort)
+  if (Buffer.byteLength(fullPrompt) > MAX_ARG_BYTES) throw new Error(say({ en: 'this prompt is too large for Antigravity (over 128 KiB); choose Claude or Codex in Settings', pt: 'este prompt é grande demais para o Antigravity (mais de 128 KiB); escolha Claude ou Codex em Configurações' }))
   args.push('-p', fullPrompt)
   return jail({ ...sandbox, writable: mode === 'write' ? sandbox.writable : sandbox.writable.filter(d => d !== cwd) }, cwd, 'agy', args)
 }
@@ -198,6 +201,8 @@ if (import.meta.main && process.argv.includes('--selfcheck')) {
   const claudeRead = buildFactoryArgs('claude', { ...base, mode: 'read' })
   assert.equal(claudeRead.bin, 'claude')
   assert.ok(!claudeRead.args.includes('--dangerously-skip-permissions'))
+  assert.equal(claudeRead.stdin, 'oi', 'o prompt vai pela entrada padrão')
+  assert.ok(!claudeRead.args.includes('oi'), 'o prompt não vira argumento')
 
   const claudeWrite = buildFactoryArgs('claude', { ...base, mode: 'write', sandbox })
   assert.equal(claudeWrite.bin, 'bwrap', 'claude com escrita sempre dentro do bwrap')
@@ -216,6 +221,8 @@ if (import.meta.main && process.argv.includes('--selfcheck')) {
   assert.ok(buildFactoryArgs('codex', { ...base, mode: 'read' }).args.includes('read-only'))
   const codexWrite = buildFactoryArgs('codex', { ...base, mode: 'write', sandbox })
   assert.equal(codexWrite.bin, 'bwrap', 'codex com escrita dentro do bwrap')
+  assert.equal(codexWrite.args.at(-1), '-')
+  assert.equal(codexWrite.stdin, 'sys\n\noi', 'o prompt atravessa o bwrap pela entrada padrão')
   assert.throws(() => buildFactoryArgs('codex', { ...base, mode: 'write' }), /bwrap/, 'codex com escrita sem bwrap, recusa')
 
   const login = mkdtempSync(join(tmpdir(), 'workstuff-runner-test-'))

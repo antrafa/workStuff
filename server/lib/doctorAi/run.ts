@@ -74,8 +74,9 @@ export function doctorArgs(scope: Scope, prompt: string, settingsFile: string, r
   if (effort) args.push('--effort', effort)
   args.push('--tools', 'Bash', '--allowedTools', ...READ_PATTERNS, '--strict-mcp-config', '--settings', settingsFile, '--append-system-prompt', systemPrompt(scope))
   if (resume) args.push('--resume', resume)
-  args.push('-p', prompt)
-  return { bin: 'claude', args }
+  // The prompt goes on stdin: as one argument it fails with E2BIG past 128 KiB (see server/lib/ai/args.ts)
+  args.push('-p')
+  return { bin: 'claude', args, stdin: prompt }
 }
 
 export async function runDoctor(scope: Scope, prompt: string, resume: string | null, onEvent: (e: AiEvent) => void, signal: AbortSignal): Promise<RunResult> {
@@ -117,7 +118,8 @@ if (import.meta.main && process.argv.includes('--selfcheck')) {
   const allowed = args.slice(args.indexOf('--allowedTools') + 1, args.indexOf('--strict-mcp-config'))
   assert.ok(allowed.every(a => /^Bash\(kubectl (get|describe|logs|top|events|explain|api-resources|version|rollout status|rollout history|auth can-i):\*\)$/.test(a)), 'pré-aprovação só de leitura')
   for (const flag of ['--dangerously-skip-permissions', '--permission-mode']) assert.ok(!args.includes(flag))
-  assert.deepEqual(args.slice(-2), ['-p', 'pergunta'])
+  assert.equal(args.at(-1), '-p')
+  assert.ok(!args.includes('pergunta'), 'o prompt não vira argumento')
   assert.ok(doctorArgs(scope, 'x', '/s', 'abc').args.includes('--resume'))
   assert.match(systemPrompt({ ...scope, environment: null }), /DESCONHECIDO \(trate como PRO\)/)
   assert.match(systemPrompt({ ...scope, environment: 'PRO' }), /PRO é somente leitura/)

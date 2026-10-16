@@ -23,7 +23,7 @@ const READ_TOOLS = ['Read', 'Grep', 'Glob']
 
 // Linux refuses a single argument of 128 KiB or more (MAX_ARG_STRLEN) with E2BIG, and a review prompt
 // carries a whole diff: Claude and Codex read it from stdin instead.
-const MAX_ARG_BYTES = 128 * 1024 - 1
+export const MAX_ARG_BYTES = 128 * 1024 - 1
 
 export type CliSpec = { bin: string; args: string[]; stdin?: string }
 

@@ -24,7 +24,8 @@ writeFileSync(join(bin, 'claude'), `#!/usr/bin/env node
 const fs = require('fs')
 const a = process.argv
 const sys = a[a.indexOf('--append-system-prompt') + 1]
-const prompt = a[a.indexOf('-p') + 1]
+// The panel sends the prompt on stdin (an argument fails with E2BIG past 128 KiB)
+const prompt = fs.readFileSync(0, 'utf-8')
 const env = o => '\`\`\`json\\n' + JSON.stringify(o) + '\\n\`\`\`'
 let out
 if (sys.includes('o Analyst')) {
