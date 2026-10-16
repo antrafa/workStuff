@@ -42,7 +42,7 @@ With a saved connection, the screen has:
 | **Include archived** | Shows archived projects (deactivated on the server) and includes them in a subgroup clone. |
 | **destination:** | The folder on your computer where the current group will end up. |
 | **List** | Subgroups first, then projects. After the arrow, each row shows its destination folder. |
-| **My Workspace tab** | Scans all git repositories cloned in your local workspace and displays branch, modified files, stashes, commits ahead/behind upstream, merged local branches and build artifact size (`target/`, `node_modules/`, `dist/`, `build/`), with 1-click buttons for **Editor**, **Review** (in [Pre-MR review](/revisao)), **Fetch**, pruning merged branches and cleaning build artifacts. |
+| **My Workspace tab** | Scans all git repositories cloned in your local workspace and displays branch, modified files, stashes, commits ahead/behind upstream, merged local branches and build artifact size (`target/`, `node_modules/`, `dist/`, `build/`), with 1-click buttons for **Editor**, **Review** (in [Pre-MR review](/revisao)), **Fetch**, pruning merged branches and cleaning build artifacts. Merged means the commits are already in the remote default branch (`origin/HEAD`, or `main`/`master`); cleaning only deletes a folder git ignores and that holds no tracked file. |
 
 Each project's marks:
 

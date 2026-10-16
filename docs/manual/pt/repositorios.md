@@ -42,7 +42,7 @@ Com uma conexão salva, a tela tem:
 | **Incluir arquivados** | Mostra os projetos arquivados (desativados no servidor) e os inclui no clone de subgrupo. |
 | **destino:** | A pasta do seu computador onde o grupo atual vai parar. |
 | **Lista** | Primeiro os subgrupos, depois os projetos. Cada linha mostra, depois da seta, a pasta de destino. |
-| **Aba Meu Workspace** | Varre os repositórios git clonados no seu workspace local e mostra branch, arquivos modificados, stashes, commits à frente/atrás da origem, branches já mergeadas e peso de artefatos (`target/`, `node_modules/`, `dist/`, `build/`), com botões de 1 clique para **Editor**, **Revisar** (em [Revisão antes do MR](/revisao)), **Fetch**, poda de branches mergeadas e limpeza de artefatos. |
+| **Aba Meu Workspace** | Varre os repositórios git clonados no seu workspace local e mostra branch, arquivos modificados, stashes, commits à frente/atrás da origem, branches já mergeadas e peso de artefatos (`target/`, `node_modules/`, `dist/`, `build/`), com botões de 1 clique para **Editor**, **Revisar** (em [Revisão antes do MR](/revisao)), **Fetch**, poda de branches mergeadas e limpeza de artefatos. Mergeada quer dizer que os commits já estão na branch principal do remoto (`origin/HEAD`, ou `main`/`master`); a limpeza só apaga pasta que o git ignora e que não tem arquivo versionado. |
 
 As marcas de cada projeto:
 

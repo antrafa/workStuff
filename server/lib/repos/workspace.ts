@@ -5,7 +5,7 @@
 
 import assert from 'node:assert/strict'
 import { execFile } from 'node:child_process'
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs'
+import { existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { basename, isAbsolute, join, relative, resolve } from 'node:path'
 import { promisify } from 'node:util'
@@ -139,21 +139,40 @@ function measureDirBytes(dir: string, maxEntries = 6_000): number {
   return bytes
 }
 
-function measureArtifacts(repoPath: string): { artifactDirs: ArtifactDir[]; artifactBytes: number } {
-  const artifactDirs: ArtifactDir[] = []
-  let artifactBytes = 0
+// Only a real folder that git ignores and holds no tracked file is build output: a versioned build/
+// with scripts, or a dist/ nobody added to .gitignore yet, is the user's work and stays.
+async function disposableArtifactDirs(repoPath: string): Promise<ArtifactDir[]> {
+  const out: ArtifactDir[] = []
   for (const name of ARTIFACT_DIRS) {
-    const sub = join(repoPath, name)
     try {
-      if (existsSync(sub) && statSync(sub).isDirectory()) {
-        artifactDirs.push(name)
-        artifactBytes += measureDirBytes(sub)
-      }
+      if (!lstatSync(join(repoPath, name)).isDirectory()) continue
     } catch {
-      // ignora erro de permissão
+      continue
     }
+    const [ignored, tracked] = await Promise.all([
+      gitQuiet(repoPath, ['check-ignore', '--', name]),
+      gitQuiet(repoPath, ['ls-files', '--', name]),
+    ])
+    if (ignored && !tracked) out.push(name)
   }
+  return out
+}
+
+async function measureArtifacts(repoPath: string): Promise<{ artifactDirs: ArtifactDir[]; artifactBytes: number }> {
+  const artifactDirs = await disposableArtifactDirs(repoPath)
+  const artifactBytes = artifactDirs.reduce((sum, name) => sum + measureDirBytes(join(repoPath, name)), 0)
   return { artifactDirs, artifactBytes }
+}
+
+// Branch a merged branch must be in: the remote's default, else main/master. Comparing with HEAD would
+// list a parent feature branch as merged just because the current branch was cut from it.
+async function baseRef(repoPath: string): Promise<string | null> {
+  const remoteHead = await gitQuiet(repoPath, ['symbolic-ref', '--quiet', '--short', 'refs/remotes/origin/HEAD'])
+  if (remoteHead) return remoteHead
+  for (const ref of ['origin/main', 'origin/master', 'main', 'master']) {
+    if (await gitQuiet(repoPath, ['rev-parse', '--verify', '--quiet', ref])) return ref
+  }
+  return null
 }
 
 async function gitQuiet(repoPath: string, args: string[], timeoutMs = 8_000): Promise<string> {
@@ -165,12 +184,13 @@ async function gitQuiet(repoPath: string, args: string[], timeoutMs = 8_000): Pr
 }
 
 async function inspectRepo(repoPath: string, workspace: string): Promise<WorkspaceRepo> {
+  const base = await baseRef(repoPath)
   const [branchRaw, porcelain, stashRaw, logLine, mergedRaw] = await Promise.all([
     gitQuiet(repoPath, ['rev-parse', '--abbrev-ref', 'HEAD']),
     gitQuiet(repoPath, ['status', '--porcelain']),
     gitQuiet(repoPath, ['stash', 'list']),
     gitQuiet(repoPath, ['log', '-1', '--format=%cI%x09%s']),
-    gitQuiet(repoPath, ['branch', '--merged']),
+    base ? gitQuiet(repoPath, ['branch', '--merged', base]) : Promise.resolve(''),
   ])
 
   const branch = branchRaw || 'HEAD'
@@ -204,7 +224,7 @@ async function inspectRepo(repoPath: string, workspace: string): Promise<Workspa
     .map(l => l.replace(/^[*+]?\s+/, '').trim())
     .filter(b => b && b !== branch && !PROTECTED_BRANCHES.has(b) && !b.startsWith('(') && SAFE_BRANCH.test(b))
 
-  const { artifactDirs, artifactBytes } = measureArtifacts(repoPath)
+  const { artifactDirs, artifactBytes } = await measureArtifacts(repoPath)
   const rel = relative(workspace, repoPath)
 
   return {
@@ -306,17 +326,16 @@ export async function pruneMergedBranches(repoPath: string, roots?: string[]) {
 export async function cleanRepoArtifacts(repoPath: string, dirs?: string[], roots?: string[]) {
   const dir = assertWorkspaceRepo(repoPath, roots)
   const workspace = knownWorkspaces(roots).find(w => isInsideRoot(w, dir)) ?? dir
-  const targets = (dirs?.length ? dirs : ARTIFACT_DIRS).filter((d): d is ArtifactDir => ARTIFACT_DIRS.includes(d as ArtifactDir))
+  const disposable = await disposableArtifactDirs(dir)
+  const targets = dirs?.length ? disposable.filter(d => dirs.includes(d)) : disposable
   let freedBytes = 0
   const cleaned: ArtifactDir[] = []
 
   for (const name of targets) {
     const sub = join(dir, name)
-    if (existsSync(sub) && statSync(sub).isDirectory()) {
-      freedBytes += measureDirBytes(sub)
-      rmSync(sub, { recursive: true, force: true })
-      cleaned.push(name)
-    }
+    freedBytes += measureDirBytes(sub)
+    rmSync(sub, { recursive: true, force: true })
+    cleaned.push(name)
   }
   return { cleaned, freedBytes, repo: await inspectRepo(dir, workspace) }
 }
@@ -330,7 +349,7 @@ if (import.meta.main && process.argv.includes('--selfcheck')) {
     mkdirSync(repoB, { recursive: true })
 
     const git = (cwd: string, args: string[]) =>
-      run('git', ['-C', cwd, '-c', 'user.name=Test', '-c', 'user.email=test@example.com', ...args])
+      run('git', ['-C', cwd, '-c', 'user.name=Test', '-c', 'user.email=test@example.com', '-c', 'commit.gpgsign=false', ...args])
 
     await git(repoA, ['init', '--initial-branch=main'])
     writeFileSync(join(repoA, '.gitignore'), 'target/\n')
@@ -359,6 +378,22 @@ if (import.meta.main && process.argv.includes('--selfcheck')) {
     await git(repoB, ['add', 'index.ts'])
     await git(repoB, ['commit', '-m', 'chore: init web'])
 
+    // Repo B: build/ is versioned and dist/ is not ignored, so neither is build output
+    mkdirSync(join(repoB, 'build'), { recursive: true })
+    writeFileSync(join(repoB, 'build', 'deploy.sh'), 'echo deploy')
+    await git(repoB, ['add', 'build/deploy.sh'])
+    await git(repoB, ['commit', '-m', 'chore: deploy script'])
+    writeFileSync(join(repoB, '.gitignore'), 'build/\n')
+    mkdirSync(join(repoB, 'dist'), { recursive: true })
+    writeFileSync(join(repoB, 'dist', 'novo.js'), 'wip')
+
+    // Repo B: feat/b is cut from the unmerged feat/a; feat/a is in HEAD but not in main
+    await git(repoB, ['checkout', '-b', 'feat/a'])
+    writeFileSync(join(repoB, 'a.ts'), 'a')
+    await git(repoB, ['add', 'a.ts'])
+    await git(repoB, ['commit', '-m', 'feat: a'])
+    await git(repoB, ['checkout', '-b', 'feat/b'])
+
     const scan = await scanWorkspace([tmp])
     assert.equal(scan.repos.length, 2)
     assert.equal(scan.repos[0].name, 'api-pagamentos', 'repo com dirty/stash vem primeiro')
@@ -368,6 +403,11 @@ if (import.meta.main && process.argv.includes('--selfcheck')) {
     assert.deepEqual(scan.repos[0].mergedBranches, ['feat/antiga'])
     assert.deepEqual(scan.repos[0].artifactDirs, ['target'])
     assert.equal(scan.repos[0].artifactBytes, 4096)
+    const web = scan.repos.find(r => r.name === 'portal-web')!
+    assert.deepEqual(web.artifactDirs, [], 'versioned build/ and unignored dist/ are not artifacts')
+    assert.deepEqual(web.mergedBranches, [], 'feat/a is in HEAD, not in main')
+    assert.deepEqual((await cleanRepoArtifacts(repoB, ['build', 'dist'], [tmp])).cleaned, [])
+    assert.ok(existsSync(join(repoB, 'build', 'deploy.sh')) && existsSync(join(repoB, 'dist', 'novo.js')))
 
     // Prune merged branches
     const pruned = await pruneMergedBranches(repoA, [tmp])
