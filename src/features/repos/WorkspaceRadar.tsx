@@ -3,7 +3,7 @@ import {
 } from 'lucide-react'
 import { useState } from 'react'
 import { useLocation, useNavigate, useSearchParams } from 'react-router'
-import { Async, ConfirmModal, Empty, Segmented, SkeletonRows, useToast } from '@/ui'
+import { Async, ConfirmModal, Empty, Search, Segmented, SkeletonRows, useToast } from '@/ui'
 import { useAsync } from '@/lib/useAsync'
 import { locale, tx } from '@/lib/i18n'
 import {
@@ -97,8 +97,8 @@ export function WorkspaceRadar() {
     try {
       const res = await cleanWorkspaceArtifacts(r.path, r.artifactDirs)
       toast(tx({
-        en: `Freed ${formatBytes(res.freedBytes)} in ${r.name} (${res.cleaned.join(', ')})`,
-        pt: `Liberados ${formatBytes(res.freedBytes)} em ${r.name} (${res.cleaned.join(', ')})`,
+        en: `Freed ${res.freedPartial ? '≥ ' : ''}${formatBytes(res.freedBytes)} in ${r.name} (${res.cleaned.join(', ')})`,
+        pt: `Liberados ${res.freedPartial ? '≥ ' : ''}${formatBytes(res.freedBytes)} em ${r.name} (${res.cleaned.join(', ')})`,
       }))
       state.reload()
     } catch (e) {
@@ -116,6 +116,7 @@ export function WorkspaceRadar() {
         const stashTotal = all.reduce((s, r) => s + r.stashCount, 0)
         const syncTotal = all.filter(r => r.ahead > 0 || r.behind > 0).length
         const artifactBytesTotal = all.reduce((s, r) => s + r.artifactBytes, 0)
+        const artifactPartialAny = all.some(r => r.artifactPartial)
 
         const q = query.trim().toLowerCase()
         const filtered = all.filter(r => {
@@ -151,7 +152,7 @@ export function WorkspaceRadar() {
               </div>
               <div className="stat">
                 <span className="eyebrow">{tx({ en: 'Build artifacts on disk', pt: 'Artefatos de build no disco' })}</span>
-                <b>{formatBytes(artifactBytesTotal)}</b>
+                <b>{artifactPartialAny ? '≥ ' : ''}{formatBytes(artifactBytesTotal)}</b>
                 <small className="muted">target/, node_modules/, dist/, build/</small>
               </div>
             </div>
@@ -172,11 +173,10 @@ export function WorkspaceRadar() {
                     { id: 'artifacts', label: `${tx({ en: 'Artifacts', pt: 'Artefatos' })}` },
                   ]}
                 />
-                <input
-                  className="input"
-                  style={{ width: 220 }}
+                <Search
+                  width={220}
                   value={query}
-                  onChange={e => setQuery(e.target.value)}
+                  onChange={setQuery}
                   placeholder={tx({ en: 'Filter by repo or branch…', pt: 'Filtrar por repo ou branch…' })}
                 />
                 <button className="btn btn-sm" onClick={state.reload}>
@@ -216,8 +216,8 @@ export function WorkspaceRadar() {
                           <td>
                             <div className="row" style={{ gap: 6 }}>
                               <span className="badge mono"><GitBranch size={11} /> {r.branch}</span>
-                              {r.ahead > 0 && <span className="badge badge-info mono" title={tx({ en: `${r.ahead} commit(s) ahead of upstream`, pt: `${r.ahead} commit(s) à frente da origem` })}>↑{r.ahead}</span>}
-                              {r.behind > 0 && <span className="badge badge-warn mono" title={tx({ en: `${r.behind} commit(s) behind upstream`, pt: `${r.behind} commit(s) atrás da origem` })}>↓{r.behind}</span>}
+                              {r.ahead > 0 && <span className="badge badge-info mono" title={tx({ en: `${r.ahead} commit(s) ahead of ${r.compareRef}`, pt: `${r.ahead} commit(s) à frente de ${r.compareRef}` })}>↑{r.ahead}</span>}
+                              {r.behind > 0 && <span className="badge badge-warn mono" title={tx({ en: `${r.behind} commit(s) behind ${r.compareRef}`, pt: `${r.behind} commit(s) atrás de ${r.compareRef}` })}>↓{r.behind}</span>}
                             </div>
                           </td>
                           <td>
@@ -254,7 +254,7 @@ export function WorkspaceRadar() {
                           <td className="num mono">
                             {r.artifactBytes > 0 ? (
                               <span title={r.artifactDirs.join(', ')}>
-                                {formatBytes(r.artifactBytes)} <small className="muted">({r.artifactDirs.join(', ')})</small>
+                                {r.artifactPartial ? '≥ ' : ''}{formatBytes(r.artifactBytes)} <small className="muted">({r.artifactDirs.join(', ')})</small>
                               </span>
                             ) : (
                               <span className="muted">—</span>

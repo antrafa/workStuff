@@ -5,7 +5,7 @@
 
 import assert from 'node:assert/strict'
 import { execFile } from 'node:child_process'
-import { existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs'
+import { existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, realpathSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { basename, isAbsolute, join, relative, resolve } from 'node:path'
 import { promisify } from 'node:util'
@@ -30,11 +30,15 @@ export type WorkspaceRepo = {
   stashCount: number
   ahead: number
   behind: number
+  /** What ahead/behind is counted against: the upstream, or origin/main|master when there is none. */
+  compareRef: string | null
   lastCommitAt: string | null
   lastCommitSubject: string | null
   mergedBranches: string[]
   artifactDirs: ArtifactDir[]
   artifactBytes: number
+  /** True when the size is a lower bound (no `du` on this machine and the folder had too many entries). */
+  artifactPartial: boolean
 }
 
 const ARTIFACT_DIRS: ArtifactDir[] = ['target', 'node_modules', 'dist', 'build']
@@ -49,26 +53,28 @@ export function isInsideRoot(root: string, target: string): boolean {
 
 export function knownWorkspaces(explicit?: string[]): string[] {
   if (explicit && explicit.length > 0) {
-    return [...new Set(explicit.map(w => resolve(expandHome(w)))).values()].filter(w => existsSync(w))
+    return [...new Set(explicit.map(w => resolve(expandHome(w))).filter(w => existsSync(w)).map(w => realpathSync(w)))]
   }
   const set = new Set<string>()
   for (const s of listSources()) {
     if (s.workspace) {
       const p = resolve(expandHome(s.workspace))
-      if (existsSync(p)) set.add(p)
+      if (existsSync(p)) set.add(realpathSync(p))
     }
   }
   for (const p of defaultProjectStore.list()) {
     if (p.rootPath && !p.missing) {
       const root = resolve(expandHome(p.rootPath))
-      if (existsSync(root)) set.add(root)
+      if (existsSync(root)) set.add(realpathSync(root))
     }
   }
   return [...set]
 }
 
 export function assertWorkspaceRepo(repoPath: string, roots?: string[]): string {
-  const resolved = resolve(expandHome(repoPath.trim()))
+  // Real path on both sides: a symlink inside a workspace that points elsewhere must not pass
+  const asked = resolve(expandHome(repoPath.trim()))
+  const resolved = existsSync(asked) ? realpathSync(asked) : asked
   const allowed = knownWorkspaces(roots)
   if (!allowed.some(r => isInsideRoot(r, resolved))) {
     throw new RepoError(say({
@@ -108,8 +114,20 @@ function findGitRepos(root: string, maxDepth = 4): string[] {
   return found
 }
 
+// Size on disk through `du`, which is fast and does not block the event loop. Without it (Windows) the
+// folder is walked synchronously up to a cap, and the result is then only a lower bound.
+async function dirSize(dir: string): Promise<{ bytes: number; partial: boolean }> {
+  try {
+    const kib = Number((await run('du', ['-sk', dir], 60_000)).split(/\s/)[0])
+    if (Number.isFinite(kib)) return { bytes: kib * 1024, partial: false }
+  } catch {
+    // no du on this machine: fall back to the capped walk below
+  }
+  return measureDirBytes(dir)
+}
+
 // Mede o tamanho de uma pasta de build com limite de entradas para nunca travar o processo.
-function measureDirBytes(dir: string, maxEntries = 6_000): number {
+function measureDirBytes(dir: string, maxEntries = 6_000): { bytes: number; partial: boolean } {
   let bytes = 0
   let visited = 0
   const stack = [dir]
@@ -136,7 +154,7 @@ function measureDirBytes(dir: string, maxEntries = 6_000): number {
       }
     }
   }
-  return bytes
+  return { bytes, partial: visited >= maxEntries }
 }
 
 // Only a real folder that git ignores and holds no tracked file is build output: a versioned build/
@@ -158,10 +176,14 @@ async function disposableArtifactDirs(repoPath: string): Promise<ArtifactDir[]> 
   return out
 }
 
-async function measureArtifacts(repoPath: string): Promise<{ artifactDirs: ArtifactDir[]; artifactBytes: number }> {
+async function measureArtifacts(repoPath: string): Promise<{ artifactDirs: ArtifactDir[]; artifactBytes: number; artifactPartial: boolean }> {
   const artifactDirs = await disposableArtifactDirs(repoPath)
-  const artifactBytes = artifactDirs.reduce((sum, name) => sum + measureDirBytes(join(repoPath, name)), 0)
-  return { artifactDirs, artifactBytes }
+  const sizes = await Promise.all(artifactDirs.map(name => dirSize(join(repoPath, name))))
+  return {
+    artifactDirs,
+    artifactBytes: sizes.reduce((sum, s) => sum + s.bytes, 0),
+    artifactPartial: sizes.some(s => s.partial),
+  }
 }
 
 // Branch a merged branch must be in: the remote's default, else main/master. Comparing with HEAD would
@@ -199,10 +221,15 @@ async function inspectRepo(repoPath: string, workspace: string): Promise<Workspa
 
   let ahead = 0
   let behind = 0
-  const counts =
-    (await gitQuiet(repoPath, ['rev-list', '--left-right', '--count', 'HEAD...@{upstream}'])) ||
-    (await gitQuiet(repoPath, ['rev-list', '--left-right', '--count', 'HEAD...origin/main'])) ||
-    (await gitQuiet(repoPath, ['rev-list', '--left-right', '--count', 'HEAD...origin/master']))
+  let compareRef: string | null = null
+  let counts = ''
+  for (const ref of ['@{upstream}', 'origin/main', 'origin/master']) {
+    counts = await gitQuiet(repoPath, ['rev-list', '--left-right', '--count', `HEAD...${ref}`])
+    if (counts) {
+      compareRef = ref === '@{upstream}' ? 'upstream' : ref
+      break
+    }
+  }
   if (counts) {
     const [a, b] = counts.split(/\s+/).map(Number)
     if (Number.isFinite(a) && Number.isFinite(b)) {
@@ -224,7 +251,7 @@ async function inspectRepo(repoPath: string, workspace: string): Promise<Workspa
     .map(l => l.replace(/^[*+]?\s+/, '').trim())
     .filter(b => b && b !== branch && !PROTECTED_BRANCHES.has(b) && !b.startsWith('(') && SAFE_BRANCH.test(b))
 
-  const { artifactDirs, artifactBytes } = await measureArtifacts(repoPath)
+  const { artifactDirs, artifactBytes, artifactPartial } = await measureArtifacts(repoPath)
   const rel = relative(workspace, repoPath)
 
   return {
@@ -238,11 +265,13 @@ async function inspectRepo(repoPath: string, workspace: string): Promise<Workspa
     stashCount,
     ahead,
     behind,
+    compareRef,
     lastCommitAt,
     lastCommitSubject,
     mergedBranches,
     artifactDirs,
     artifactBytes,
+    artifactPartial,
   }
 }
 
@@ -329,15 +358,18 @@ export async function cleanRepoArtifacts(repoPath: string, dirs?: string[], root
   const disposable = await disposableArtifactDirs(dir)
   const targets = dirs?.length ? disposable.filter(d => dirs.includes(d)) : disposable
   let freedBytes = 0
+  let freedPartial = false
   const cleaned: ArtifactDir[] = []
 
   for (const name of targets) {
     const sub = join(dir, name)
-    freedBytes += measureDirBytes(sub)
+    const size = await dirSize(sub)
+    freedBytes += size.bytes
+    freedPartial ||= size.partial
     rmSync(sub, { recursive: true, force: true })
     cleaned.push(name)
   }
-  return { cleaned, freedBytes, repo: await inspectRepo(dir, workspace) }
+  return { cleaned, freedBytes, freedPartial, repo: await inspectRepo(dir, workspace) }
 }
 
 if (import.meta.main && process.argv.includes('--selfcheck')) {
@@ -402,7 +434,8 @@ if (import.meta.main && process.argv.includes('--selfcheck')) {
     assert.equal(scan.repos[0].stashCount, 1)
     assert.deepEqual(scan.repos[0].mergedBranches, ['feat/antiga'])
     assert.deepEqual(scan.repos[0].artifactDirs, ['target'])
-    assert.equal(scan.repos[0].artifactBytes, 4096)
+    assert.ok(scan.repos[0].artifactBytes >= 4096, 'tamanho em disco cobre o app.jar')
+    assert.equal(scan.repos[0].artifactPartial, false)
     const web = scan.repos.find(r => r.name === 'portal-web')!
     assert.deepEqual(web.artifactDirs, [], 'versioned build/ and unignored dist/ are not artifacts')
     assert.deepEqual(web.mergedBranches, [], 'feat/a is in HEAD, not in main')
@@ -417,12 +450,20 @@ if (import.meta.main && process.argv.includes('--selfcheck')) {
     // Clean artifacts
     const cleaned = await cleanRepoArtifacts(repoA, ['target'], [tmp])
     assert.deepEqual(cleaned.cleaned, ['target'])
-    assert.equal(cleaned.freedBytes, 4096)
+    assert.ok(cleaned.freedBytes >= 4096)
     assert.equal(cleaned.repo.artifactBytes, 0)
     assert.ok(existsSync(join(repoA, 'dirty.txt')), 'arquivos do repositório continuam intactos')
 
-    // Fora do workspace é recusado
+    // Fora do workspace é recusado, inclusive por atalho que aponta para fora
     assert.throws(() => assertWorkspaceRepo('/etc', [tmp]), /outside|fora/)
+    const outside = mkdtempSync(join(tmpdir(), 'ws-outside-'))
+    try {
+      mkdirSync(join(outside, '.git'))
+      symlinkSync(outside, join(tmp, 'produto', 'atalho'))
+      assert.throws(() => assertWorkspaceRepo(join(tmp, 'produto', 'atalho'), [tmp]), /outside|fora/)
+    } finally {
+      rmSync(outside, { recursive: true, force: true })
+    }
 
     console.log('workspace radar selfcheck: ok')
   } finally {

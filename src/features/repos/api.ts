@@ -95,11 +95,13 @@ export type WorkspaceRepo = {
   stashCount: number
   ahead: number
   behind: number
+  compareRef: string | null
   lastCommitAt: string | null
   lastCommitSubject: string | null
   mergedBranches: string[]
   artifactDirs: ArtifactDir[]
   artifactBytes: number
+  artifactPartial: boolean
 }
 
 export type WorkspaceScan = {
@@ -113,5 +115,5 @@ export const fetchGitWorkspaceRepo = (repoPath: string) => api.post<WorkspaceRep
 export const pruneWorkspaceBranches = (repoPath: string) =>
   api.post<{ deleted: string[]; repo: WorkspaceRepo }>('/repos/workspace/prune-branches', { repoPath })
 export const cleanWorkspaceArtifacts = (repoPath: string, dirs?: ArtifactDir[]) =>
-  api.post<{ cleaned: ArtifactDir[]; freedBytes: number; repo: WorkspaceRepo }>('/repos/workspace/clean-artifacts', { repoPath, dirs })
+  api.post<{ cleaned: ArtifactDir[]; freedBytes: number; freedPartial: boolean; repo: WorkspaceRepo }>('/repos/workspace/clean-artifacts', { repoPath, dirs })
 
