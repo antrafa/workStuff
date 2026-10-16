@@ -29,7 +29,7 @@ Veja também [Conceitos e termos](/documentacao/conceitos).
 - **Campo do caminho**: onde vai a pasta do repositório, por exemplo `/home/voce/workspace/loja-api`. O botão **Escolher** abre o seletor de pastas do sistema. A tela lembra a última pasta aberta.
 - **Voltar**: aparece quando você chega pelo botão **Revisar** de Meu Workspace (em Repositórios) e volta para aquela lista com a mesma busca e o mesmo filtro.
 - **Linha da branch**: depois de abrir, a tela mostra "Branch `sua-branch` contra" e uma lista com as branches do repositório para escolher a base.
-- **incluir não commitado**: inclui na revisão o que você alterou e ainda não fez commit. Entre parênteses aparece quantos arquivos estão nessa situação.
+- **incluir não commitado**: inclui na revisão o que você alterou e ainda não fez commit. Entre parênteses aparece quantos arquivos estão nessa situação. Quando há arquivos assim, a opção já vem marcada.
 - **Diff cognitivo & Raio de Impacto**: assim que a branch base (ou um MR/PR aberto) é selecionada, a tela exibe o diff agrupado por categoria cognitiva (**Lógica central**, **Integração & API**, **Testes**, **Docs & Metadados**) e destaca o **Raio de Impacto** determinístico (módulos fora do diff que importam os arquivos alterados e se contam com testes) antes mesmo de rodar a IA.
 - **Revisar com IA**: inicia a revisão da IA em modo leitura.
 - **Área da resposta**: a revisão aparece aos poucos, enquanto a IA escreve.
@@ -38,7 +38,7 @@ Veja também [Conceitos e termos](/documentacao/conceitos).
 
 1. Digite o caminho da pasta do repositório e clique em **Abrir**, ou clique em **Escolher** para selecionar a pasta.
 2. Confira a branch base na lista. A tela já sugere a branch principal do remoto (`origin/HEAD`); se não achar, sugere `origin/main`, `origin/master`, `main`, `master`, `origin/develop` ou `develop`, nessa ordem.
-3. Marque **incluir não commitado** se quiser que a IA veja também o que você ainda não commitou.
+3. Confira **incluir não commitado**: vem marcado quando há alterações sem commit; desmarque para revisar só o que já foi commitado.
 4. Clique em **Revisar**. A linha de progresso mostra quantos arquivos mudaram contra a base e avisa que a IA está lendo o código.
 5. Espere a resposta. Cada problema vem com a gravidade (bloqueante, importante ou sugestão), o `arquivo:linha`, o que está errado, um cenário em que quebra e a correção, do mais grave para o menos grave.
 6. No fim vem a seção **Para o MR**, um parágrafo do que a mudança faz. Clique em **Copiar** para levar o texto todo.

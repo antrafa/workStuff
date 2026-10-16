@@ -29,7 +29,7 @@ See also [Concepts and terms](/documentacao/conceitos).
 - **Path field**: where the repository folder goes, for example `/home/you/workspace/shop-api`. The **Choose** button opens the system folder picker. The screen remembers the last folder you opened.
 - **Back**: shows when you arrive from the **Review** button in My Workspace (in Repositories) and returns to that list with the same search and filter.
 - **Branch line**: once opened, the screen shows "Branch `your-branch` against" and a list of the repository's branches to pick the base from.
-- **include uncommitted**: adds to the review what you changed but have not committed yet. The number of such files shows in parentheses.
+- **include uncommitted**: adds to the review what you changed but have not committed yet. The number of such files shows in parentheses. When there are such files, it comes ticked.
 - **Cognitive diff & Blast Radius**: as soon as a base branch (or an open MR/PR) is selected, the screen renders the diff organized by cognitive category (**Core logic**, **Wiring & API**, **Tests**, **Docs & Meta**) and highlights the deterministic **Blast Radius** (outside modules that import the changed files and whether they have test coverage) before you even run the AI.
 - **Review with AI**: starts the AI review in read-only mode.
 - **Answer area**: the review appears bit by bit while the AI writes it.
@@ -38,7 +38,7 @@ See also [Concepts and terms](/documentacao/conceitos).
 
 1. Type the repository folder path and click **Open**, or click **Choose** to pick the folder.
 2. Check the base branch in the list. The screen suggests the remote's main branch (`origin/HEAD`); if it cannot find it, it suggests `origin/main`, `origin/master`, `main`, `master`, `origin/develop` or `develop`, in that order.
-3. Tick **include uncommitted** if you want the AI to also see what you have not committed yet.
+3. Check **include uncommitted**: it comes ticked when there are uncommitted changes; untick it to review only what is committed.
 4. Click **Review**. The progress line shows how many files changed against the base and says the AI is reading the code.
 5. Wait for the answer. Each problem comes with its severity (blocking, important or suggestion), the `file:line`, what is wrong, a scenario where it breaks and the fix, from most to least serious.
 6. At the end comes the **Para o MR** section, a paragraph describing what the change does. Click **Copy** to take the whole text.
