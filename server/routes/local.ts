@@ -7,6 +7,7 @@ import {
 import { say } from '../lib/i18n.ts'
 import { openSse } from '../lib/sse.ts'
 import { apps, checkInput } from '../lib/local/apps.ts'
+import { checkTunnelInput, tunnels } from '../lib/local/tunnels.ts'
 
 export const localRouter = Router()
 
@@ -174,3 +175,104 @@ localRouter.get('/apps/:id/logs', (req, res) => {
   }, 1000)
   sse.signal.addEventListener('abort', () => clearInterval(timer))
 })
+
+// ── Túneis Kubernetes (kubectl port-forward) ──
+localRouter.get('/tunnels', async (_req, res) => {
+  try {
+    const ports = await listPorts()
+    const map = new Map<number, number | null>()
+    for (const p of ports) if (!map.has(p.port)) map.set(p.port, p.pid)
+    res.json(tunnels.statusList(map))
+  } catch (e) {
+    res.status(500).json({ error: (e as Error).message })
+  }
+})
+
+localRouter.post('/tunnels', (req, res) => {
+  try {
+    res.json(tunnels.create(checkTunnelInput(req.body)))
+  } catch (e) {
+    res.status(400).json({ error: (e as Error).message })
+  }
+})
+
+localRouter.put('/tunnels/:id', (req, res) => {
+  try {
+    res.json(tunnels.update(String(req.params.id), checkTunnelInput(req.body)))
+  } catch (e) {
+    res.status(400).json({ error: (e as Error).message })
+  }
+})
+
+localRouter.delete('/tunnels/:id', (req, res) => {
+  try {
+    tunnels.remove(String(req.params.id))
+    console.log(`[tunnels] excluído ${req.params.id}`)
+    res.json({ ok: true })
+  } catch (e) {
+    res.status(400).json({ error: (e as Error).message })
+  }
+})
+
+localRouter.post('/tunnels/profile/:action', async (req, res) => {
+  const profile = typeof req.body?.profile === 'string' ? req.body.profile.trim() : ''
+  const confirmSensitive = req.body?.confirmSensitive === true
+  if (!profile) return res.status(400).json({ error: say({ en: 'profile name is required', pt: 'o nome do perfil é obrigatório' }) })
+  const items = tunnels.list().filter(t => t.profile === profile)
+  const started: string[] = []
+  const stopped: string[] = []
+  const errors: string[] = []
+  for (const t of items) {
+    try {
+      if (req.params.action === 'start') {
+        if (!tunnels.pidOf(t.id)) {
+          await tunnels.start(t.id, { confirmSensitive })
+          started.push(t.name)
+        }
+      } else if (req.params.action === 'stop') {
+        if (tunnels.pidOf(t.id)) {
+          await tunnels.stop(t.id, req.body?.force === true)
+          stopped.push(t.name)
+        }
+      } else {
+        return res.status(400).json({ error: say({ en: 'invalid action', pt: 'ação inválida' }) })
+      }
+    } catch (e) {
+      errors.push(`${t.name}: ${(e as Error).message}`)
+    }
+  }
+  res.json({ started, stopped, errors })
+})
+
+localRouter.post('/tunnels/:id/:action', async (req, res) => {
+  const id = String(req.params.id)
+  const confirmSensitive = req.body?.confirmSensitive === true
+  try {
+    if (req.params.action === 'start') return res.json({ pid: await tunnels.start(id, { confirmSensitive }) })
+    if (req.params.action === 'restart') return res.json({ pid: await tunnels.restart(id, { confirmSensitive }) })
+    if (req.params.action === 'stop') return res.json(await tunnels.stop(id, req.body?.force === true))
+    res.status(400).json({ error: say({ en: 'invalid action', pt: 'ação inválida' }) })
+  } catch (e) {
+    res.status(400).json({ error: (e as Error).message })
+  }
+})
+
+localRouter.get('/tunnels/:id/logs', (req, res) => {
+  const id = String(req.params.id)
+  try {
+    tunnels.find(id)
+  } catch (e) {
+    return res.status(404).json({ error: (e as Error).message })
+  }
+  const sse = openSse(res)
+  const tail = tunnels.readLog(id)
+  let offset = tail.offset
+  sse.send({ type: 'chunk', text: tail.text, reset: true })
+  const timer = setInterval(() => {
+    const next = tunnels.readLog(id, offset)
+    offset = next.offset
+    if (next.text || next.reset) sse.send({ type: 'chunk', text: next.text, reset: next.reset })
+  }, 1000)
+  sse.signal.addEventListener('abort', () => clearInterval(timer))
+})
+

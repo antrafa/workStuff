@@ -5,26 +5,32 @@ import { useAsync } from '@/lib/useAsync'
 import { AppsTab } from './AppsTab'
 import { DockerSection } from './DockerSection'
 import { PortsCard } from './PortsCard'
+import { TunnelsTab } from './TunnelsTab'
 import { fetchServices } from './api'
 import { tx } from '@/lib/i18n'
 
-type Tab = 'maquina' | 'aplicacoes'
+type Tab = 'maquina' | 'aplicacoes' | 'tuneis'
 
 export default function LocalPage() {
   // The tab lives in the URL so a reload or a link opens the same one.
   const [searchParams, setSearchParams] = useSearchParams()
-  const tab: Tab = searchParams.get('aba') === 'aplicacoes' ? 'aplicacoes' : 'maquina'
+  const raw = searchParams.get('aba')
+  const tab: Tab = raw === 'aplicacoes' ? 'aplicacoes' : raw === 'tuneis' ? 'tuneis' : 'maquina'
   return (
     <Page
       title={tx({ en: 'Local services', pt: 'Serviços locais' })}
-      hint={tx({ en: "What is running on this machine: listening ports with their owner process, Docker's containers, images, volumes and compose projects, and the applications you register to start from here.", pt: 'O que está rodando nesta máquina: portas em escuta com o processo dono, containers, imagens, volumes e projetos compose do Docker, e as aplicações que você cadastra para subir daqui.' })}
+      hint={tx({ en: "What is running on this machine: listening ports with their owner process, Docker's containers, images, volumes and compose projects, local applications, and Kubernetes port-forward tunnels.", pt: 'O que está rodando nesta máquina: portas em escuta com o processo dono, containers, imagens, volumes e projetos compose do Docker, aplicações locais e túneis Kubernetes port-forward.' })}
     >
       <div className="tabs" role="tablist">
-        {([['maquina', tx({ en: 'Ports and Docker', pt: 'Portas e Docker' })], ['aplicacoes', tx({ en: 'Applications', pt: 'Aplicações' })]] as [Tab, string][]).map(([id, label]) => (
+        {([
+          ['maquina', tx({ en: 'Ports and Docker', pt: 'Portas e Docker' })],
+          ['aplicacoes', tx({ en: 'Applications', pt: 'Aplicações' })],
+          ['tuneis', tx({ en: 'K8s Tunnels', pt: 'Túneis K8s' })],
+        ] as [Tab, string][]).map(([id, label]) => (
           <button key={id} role="tab" aria-selected={tab === id} onClick={() => setSearchParams(id === 'maquina' ? {} : { aba: id })}>{label}</button>
         ))}
       </div>
-      {tab === 'maquina' ? <MachineTab /> : <AppsTab />}
+      {tab === 'maquina' ? <MachineTab /> : tab === 'aplicacoes' ? <AppsTab /> : <TunnelsTab />}
     </Page>
   )
 }

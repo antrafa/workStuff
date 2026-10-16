@@ -16,7 +16,7 @@ Mostra o que está rodando no seu computador agora: quem ocupa cada porta, o que
 
 ## Conhecendo a tela
 
-A tela tem duas abas no topo: **Portas e Docker** e **Aplicações**.
+A tela tem três abas no topo: **Portas e Docker**, **Aplicações** e **Túneis K8s**.
 
 Alguns termos que aparecem nela:
 
@@ -57,6 +57,10 @@ Lista as **Aplicações cadastradas**: projetos seus que o painel sobe com uma p
 | **parado** | Nada rodando. |
 
 Esta aba se atualiza sozinha a cada 3 segundos enquanto está visível.
+
+### Aba Túneis K8s
+
+Gerencia túneis `kubectl port-forward` nomeados e agrupados em **Perfis de túneis** (por exemplo, subir banco e fila de `DES` juntos). Mostra o selo de ambiente (`DES`, `ITG`, `HML` ou `PRO`), detecta queda do túnel (**queda detectada**), exige confirmação explícita antes de abrir túnel para `HML` ou `PRO` (ou cluster sem classificação) e exibe um indicador na barra de rodapé enquanto houver túneis ativos.
 
 ## Passo a passo: liberar uma porta ocupada
 

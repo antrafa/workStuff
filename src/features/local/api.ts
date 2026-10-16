@@ -42,3 +42,44 @@ export const appLogsUrl = (id: string) => `/api/local/apps/${encodeURIComponent(
 
 // Shown in the card and in the confirmation: arguments with spaces go between quotes.
 export const commandLine = (a: Pick<App, 'cmd' | 'args'>) => [a.cmd, ...a.args].map(s => (/\s/.test(s) ? `"${s}"` : s)).join(' ')
+
+export type TunnelTargetKind = 'svc' | 'pod' | 'deploy'
+export type TunnelEnvironment = 'DES' | 'ITG' | 'HML' | 'PRO' | null
+
+export type Tunnel = {
+  id: string
+  name: string
+  profile: string | null
+  kubeconfigId: string
+  context: string
+  namespace: string
+  targetKind: TunnelTargetKind
+  targetName: string
+  localPort: number
+  remotePort: number
+}
+
+export type TunnelInput = Omit<Tunnel, 'id'>
+
+export type TunnelStatus = Tunnel & {
+  pid: number | null
+  portOpen: boolean
+  portPid: number | null
+  environment: TunnelEnvironment
+  sensitive: boolean
+  lastError: string | null
+}
+
+export const fetchTunnels = () => api.get<TunnelStatus[]>('/local/tunnels')
+export const saveTunnel = (input: TunnelInput, id?: string) =>
+  id ? api.put<Tunnel>(`/local/tunnels/${encodeURIComponent(id)}`, input) : api.post<Tunnel>('/local/tunnels', input)
+export const deleteTunnel = (id: string) => api.delete(`/local/tunnels/${encodeURIComponent(id)}`)
+export const tunnelAction = (id: string, action: Action, opts?: { force?: boolean; confirmSensitive?: boolean }) =>
+  api.post<{ stillAlive?: boolean }>(`/local/tunnels/${encodeURIComponent(id)}/${action}`, opts ?? {})
+export const tunnelProfileAction = (profile: string, action: 'start' | 'stop', confirmSensitive = false) =>
+  api.post<{ started: string[]; stopped: string[]; errors: string[] }>(`/local/tunnels/profile/${action}`, { profile, confirmSensitive })
+export const tunnelLogsUrl = (id: string) => `/api/local/tunnels/${encodeURIComponent(id)}/logs`
+
+export const tunnelCommandLine = (t: Pick<Tunnel, 'kubeconfigId' | 'context' | 'namespace' | 'targetKind' | 'targetName' | 'localPort' | 'remotePort'>) =>
+  `kubectl --kubeconfig ~/.kube/${t.kubeconfigId}${t.context ? ` --context ${t.context}` : ''} -n ${t.namespace} port-forward ${t.targetKind}/${t.targetName} ${t.localPort}:${t.remotePort}`
+

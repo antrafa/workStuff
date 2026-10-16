@@ -16,7 +16,7 @@ Shows what is running on your computer right now: who holds each port, what Dock
 
 ## Getting to know the screen
 
-The screen has two tabs at the top: **Ports and Docker** and **Applications**.
+The screen has three tabs at the top: **Ports and Docker**, **Applications** and **K8s Tunnels**.
 
 Some terms you will see on it:
 
@@ -57,6 +57,10 @@ Lists the **Registered applications**: your projects that the panel starts from 
 | **stopped** | Nothing running. |
 
 This tab refreshes on its own every 3 seconds while it is visible.
+
+### K8s Tunnels tab
+
+Manages named `kubectl port-forward` tunnels grouped into **Tunnel profiles** (for example, starting a `DES` database and queue together). Shows the environment stamp (`DES`, `ITG`, `HML` or `PRO`), detects dropped connections (**dropped**), requires explicit confirmation before opening a tunnel to `HML` or `PRO` (or an unclassified cluster) and displays an indicator in the footer status bar while tunnels are active.
 
 ## Step by step: free a taken port
 

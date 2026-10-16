@@ -1,6 +1,7 @@
 import { Router } from 'express'
 import { run, which } from '../lib/run.ts'
 import { runningCount } from '../lib/factory/executions.ts'
+import { tunnels } from '../lib/local/tunnels.ts'
 import { say } from '../lib/i18n.ts'
 
 export const statusRouter = Router()
@@ -24,7 +25,7 @@ const versionOf = async (t: (typeof TOOLS)[number]): Promise<Tool> => {
 }
 
 // ponytail: cache de 5 min em memória; instalar algo novo aparece no máximo 5 min depois.
-let cached: { at: number; body: unknown } | null = null
+let cached: { at: number; body: Record<string, unknown> } | null = null
 
 statusRouter.get('/', async (_req, res) => {
   if (!cached || Date.now() - cached.at > 300_000) {
@@ -34,7 +35,7 @@ statusRouter.get('/', async (_req, res) => {
     ])
     cached = { at: Date.now(), body: { tools, agents, port: Number(process.env.PORT ?? 3101) } }
   }
-  res.json(cached.body)
+  res.json({ ...cached.body, tunnels: tunnels.activeSummary() })
 })
 
 // Stops the whole process group this server runs in: the `npm run dev` job in a terminal, or the
