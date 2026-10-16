@@ -5,7 +5,7 @@ import { join } from 'node:path'
 import { which } from '../run.ts'
 import { readSettings } from '../settingsStore.ts'
 import type { ProviderId } from '../aiProviders.ts'
-import { buildArgs, type RunOptions } from './args.ts'
+import { buildArgs, type CliSpec, type RunOptions } from './args.ts'
 import { createParser, type AiEvent } from './events.ts'
 import { say } from '../i18n.ts'
 
@@ -32,20 +32,23 @@ export async function runAi(req: RunRequest): Promise<RunResult> {
 }
 
 // Exportado para modos com argumentos próprios (Cluster Doctor); o chamador responde pelas travas deles.
-export function spawnCli(provider: ProviderId, model: string, { bin, args }: { bin: string; args: string[] }, req: RunRequest & { env?: Record<string, string> }): Promise<RunResult> {
+export function spawnCli(provider: ProviderId, model: string, { bin, args, stdin }: CliSpec, req: RunRequest & { env?: Record<string, string> }): Promise<RunResult> {
   const parser = createParser(provider)
   const t0 = Date.now()
   const timeoutMs = req.timeoutMs ?? 10 * 60_000
   const stallMs = req.stallMs ?? 3 * 60_000
 
   return new Promise((resolve, reject) => {
-    const child = spawn(bin, args, { cwd: req.cwd, env: req.env ? { ...process.env, ...req.env } : process.env, stdio: ['ignore', 'pipe', 'pipe'], shell: false })
+    const child = spawn(bin, args, { cwd: req.cwd, env: req.env ? { ...process.env, ...req.env } : process.env, stdio: [stdin === undefined ? 'ignore' : 'pipe', 'pipe', 'pipe'], shell: false })
     let buffer = ''
     let stderr = ''
     let lastOutput = Date.now()
     let stopped = false
     let failure: Error | null = null
     let result: AiEvent | null = null
+    // A CLI that exits before reading its prompt raises EPIPE here; the exit itself is reported by 'close'.
+    child.stdin?.on('error', e => (stderr += `\nstdin: ${e.message}`))
+    if (stdin !== undefined) child.stdin?.end(stdin)
 
     const kill = (reason: Error | null) => {
       failure ??= reason
