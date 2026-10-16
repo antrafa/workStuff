@@ -142,4 +142,17 @@ assert.equal(parsedDel[0].deletions, 3)
 assert.deepEqual(parseUnifiedDiff(''), [])
 assert.deepEqual(parseUnifiedDiff('   \n  '), [])
 
-console.log('check-diff-review: ok (heurísticas, parsing, ordenação cognitiva e contadores)')
+// 9. Remote MR/PR URL parsing e conversão para diff unificado (GitLab/GitHub -> parseUnifiedDiff)
+import { buildUnifiedDiffFromGitHub, buildUnifiedDiffFromGitLab, runMrSelfcheck } from '../server/lib/review/mr.ts'
+runMrSelfcheck()
+const glUnified = buildUnifiedDiffFromGitLab([
+  { old_path: 'docs/a.md', new_path: 'docs/a.md', diff: '@@ -1,1 +1,2 @@\n # A\n+B\n' },
+  { old_path: 'src/core/calc.ts', new_path: 'src/core/calc.ts', diff: '@@ -1,1 +1,2 @@\n export const x = 1\n+export const y = 2\n' },
+])
+assert.deepEqual(parseUnifiedDiff(glUnified.diff).map(f => f.path), ['src/core/calc.ts', 'docs/a.md'])
+const ghUnified = buildUnifiedDiffFromGitHub([
+  { filename: 'server/routes/review.ts', status: 'modified', patch: '@@ -1,1 +1,2 @@\n+// route' },
+])
+assert.equal(parseUnifiedDiff(ghUnified.diff)[0].category, 'wiring')
+
+console.log('check-diff-review: ok (heurísticas, parsing, ordenação cognitiva, contadores e MR remoto)')

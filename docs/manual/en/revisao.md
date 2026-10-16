@@ -25,10 +25,12 @@ See also [Concepts and terms](/documentacao/conceitos).
 
 ## Getting to know the screen
 
+- **Tabs (`Local branch` and `Open MR / PR`)**: switch between reviewing a branch in a repository cloned on your machine and inspecting an open Merge Request / Pull Request from followed projects (or by pasting its GitLab/GitHub URL).
 - **Path field**: where the repository folder goes, for example `/home/you/workspace/shop-api`. The **Choose** button opens the system folder picker. The screen remembers the last folder you opened.
 - **Branch line**: once opened, the screen shows "Branch `your-branch` against" and a list of the repository's branches to pick the base from.
 - **include uncommitted**: adds to the review what you changed but have not committed yet. The number of such files shows in parentheses.
-- **Review**: starts the review.
+- **Cognitive diff & Blast Radius**: as soon as a base branch (or an open MR/PR) is selected, the screen renders the diff organized by cognitive category (**Core logic**, **Wiring & API**, **Tests**, **Docs & Meta**) and highlights the deterministic **Blast Radius** (outside modules that import the changed files and whether they have test coverage) before you even run the AI.
+- **Review with AI**: starts the AI review in read-only mode.
 - **Answer area**: the review appears bit by bit while the AI writes it.
 
 ## Step by step: review your branch

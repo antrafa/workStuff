@@ -34,7 +34,7 @@ export async function repoInfo(repo: string) {
   return { current, defaultBase: originHead || fallback || null, branches, dirty }
 }
 
-export type Diff = { base: string; mergeBase: string; stat: string; diff: string; truncated: boolean; files: number }
+export type Diff = { base: string; mergeBase: string; stat: string; diff: string; truncated: boolean; files: number; changedFiles: string[] }
 
 // base...HEAD: só o que a branch trouxe desde que saiu da base. Com includeWorking, o que ainda não
 // foi commitado entra junto (diff do merge-base contra a árvore de trabalho).
@@ -50,8 +50,8 @@ export async function branchDiff(repo: string, base: string, includeWorking: boo
     git(repo, ['diff', '--no-color', '-U5', ...range]),
     git(repo, ['diff', '--name-only', ...range]),
   ])
-  const files = names.split('\n').filter(Boolean).length
-  return { base, mergeBase: mergeBase.slice(0, 10), stat: stat.trim(), diff: full.slice(0, MAX_DIFF), truncated: full.length > MAX_DIFF, files }
+  const changedFiles = names.split('\n').map(s => s.trim()).filter(Boolean)
+  return { base, mergeBase: mergeBase.slice(0, 10), stat: stat.trim(), diff: full.slice(0, MAX_DIFF), truncated: full.length > MAX_DIFF, files: changedFiles.length, changedFiles }
 }
 
 if (import.meta.main && process.argv.includes('--selfcheck')) {
@@ -78,9 +78,11 @@ if (import.meta.main && process.argv.includes('--selfcheck')) {
 
     const committed = await branchDiff(repo, 'main', false)
     assert.equal(committed.files, 1, 'só o commit da branch')
+    assert.deepEqual(committed.changedFiles, ['a.txt'])
     assert.match(committed.diff, /\+dois/)
     const withWorking = await branchDiff(repo, 'main', true)
     assert.equal(withWorking.files, 2, 'inclui o que está no índice')
+    assert.deepEqual(withWorking.changedFiles, ['a.txt', 'b.txt'])
     await assert.rejects(branchDiff(repo, 'nao-existe', false), /does not exist|não existe/)
     await assert.rejects(repoInfo(tmpdir()), /not a git repository|não é um repositório/)
   } finally {

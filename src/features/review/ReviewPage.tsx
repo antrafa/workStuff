@@ -1,12 +1,15 @@
 import { FolderOpen, GitPullRequest, Sparkles } from 'lucide-react'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
+import { useSearchParams } from 'react-router'
 import { AiStream, Empty, Page, type AiStreamEvent } from '@/ui'
 import { api } from '@/lib/api'
 import { streamPost } from '@/lib/stream'
 import { tx } from '@/lib/i18n'
+import { LocalDiffSection, MrReviewTab } from './MrReviewTab'
 
 type Info = { path: string; label: string; current: string; defaultBase: string | null; branches: string[]; dirty: number }
 type DiffEvent = AiStreamEvent & { files?: number; truncated?: boolean; base?: string; mergeBase?: string }
+type Tab = 'local' | 'mr'
 
 const KEY = 'review-path'
 const read = () => {
@@ -18,7 +21,10 @@ const read = () => {
 }
 
 export default function ReviewPage() {
-  const [path, setPath] = useState(read)
+  const [searchParams, setSearchParams] = useSearchParams()
+  const tab: Tab = searchParams.get('aba') === 'mr' ? 'mr' : 'local'
+  const repoParam = searchParams.get('repo')
+  const [path, setPath] = useState(() => repoParam || read())
   const [info, setInfo] = useState<Info | null>(null)
   const [base, setBase] = useState('')
   const [includeWorking, setIncludeWorking] = useState(false)
@@ -35,13 +41,17 @@ export default function ReviewPage() {
       const i = await api.post<Info>('/review/info', { path: p.trim() })
       setInfo(i)
       setBase(i.defaultBase ?? '')
-      setIncludeWorking(false)
+      setIncludeWorking(i.dirty > 0)
       localStorage.setItem(KEY, i.path)
     } catch (e) {
       setInfo(null)
       setError((e as Error).message)
     }
   }
+
+  useEffect(() => {
+    if (repoParam) void open(repoParam)
+  }, [repoParam])
 
   const pick = async () => {
     try {
@@ -56,10 +66,17 @@ export default function ReviewPage() {
     <Page
       title={tx({ en: 'Pre-MR review', pt: 'Revisão antes do MR' })}
       hint={tx({
-        en: 'The AI reviews what your branch brings against the base, reading the surrounding code, and points out the problems by severity with file and line. Read-only.',
-        pt: 'A IA revisa o que a sua branch traz contra a base, lendo o código em volta, e aponta os problemas por severidade com arquivo e linha. Só leitura.',
+        en: 'Inspect the cognitive diff and Blast Radius of your local branch or an open MR/PR, and ask the AI in read-only mode to point out problems by severity with file and line.',
+        pt: 'Inspecione o diff cognitivo e o Raio de Impacto da sua branch local ou de um MR/PR aberto, e peça à IA em modo leitura os problemas por severidade com arquivo e linha.',
       })}
     >
+      <div className="tabs" role="tablist">
+        {([['local', tx({ en: 'Local branch', pt: 'Branch local' })], ['mr', tx({ en: 'Open MR / PR', pt: 'MR / PR aberto' })]] as [Tab, string][]).map(([id, label]) => (
+          <button key={id} role="tab" aria-selected={tab === id} onClick={() => setSearchParams(id === 'local' ? {} : { aba: id })}>{label}</button>
+        ))}
+      </div>
+      {tab === 'mr' ? <MrReviewTab /> : (
+      <>
       <section className="card card-pad stack">
         <form className="row" onSubmit={e => (e.preventDefault(), open())}>
           <input className="input mono spacer" value={path} onChange={e => setPath(e.target.value)} placeholder={tx({ en: '/path/to/repository', pt: '/caminho/do/repositorio' })} />
@@ -95,6 +112,7 @@ export default function ReviewPage() {
           </Empty>
         </div>
       )}
+      {info && base && <LocalDiffSection path={info.path} base={base} includeWorking={includeWorking} />}
       {info && run > 0 && (
         <section className="card card-pad" key={run}>
           <AiStream<DiffEvent>
@@ -108,6 +126,8 @@ export default function ReviewPage() {
               : null)}
           />
         </section>
+      )}
+      </>
       )}
     </Page>
   )
