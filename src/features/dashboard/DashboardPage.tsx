@@ -27,6 +27,8 @@ import { api } from '@/lib/api'
 import { refreshSession, useClusterShared } from '@/features/cluster/api'
 import { fetchChecks, type Check } from '@/features/doctor/api'
 import { fetchServices, type Services } from '@/features/local/api'
+import { fetchWatches, type Watch } from '@/features/pipelines/api'
+import { fetchWorkspace, type WorkspaceRepo } from '@/features/repos/api'
 import type { FactoryTask } from '../../../server/lib/factory/types.ts'
 import { FactoryStatusChip } from '@/features/factory/timeline/FactoryStatusChip'
 import { isTaskRunning } from '../factory/factoryRun'
@@ -44,6 +46,9 @@ export default function DashboardPage() {
 
   const [services, setServices] = useState<Services | null>(null)
   const [loadingServices, setLoadingServices] = useState(true)
+
+  const [workspaceRepos, setWorkspaceRepos] = useState<WorkspaceRepo[]>([])
+  const [pipelineWatches, setPipelineWatches] = useState<Watch[]>([])
 
   const [refreshing, setRefreshing] = useState(false)
 
@@ -69,6 +74,12 @@ export default function DashboardPage() {
             setLoadingServices(false)
           })
           .catch(() => setLoadingServices(false)),
+        fetchWorkspace()
+          .then(data => setWorkspaceRepos(data.repos ?? []))
+          .catch(() => {}),
+        fetchWatches()
+          .then(data => setPipelineWatches(Array.isArray(data) ? data : []))
+          .catch(() => {}),
         refreshSession(),
       ])
     } finally {
@@ -92,8 +103,22 @@ export default function DashboardPage() {
   const executingTasks = tasks.filter(isTaskRunning)
   const waitingApprovalTasks = tasks.filter(t => t.state === 'waiting_approval')
   const reviewTasks = tasks.filter(t => t.state === 'review')
+  const waitingUserTasks = tasks.filter(
+    t => t.state === 'waiting_clarification' || t.state === 'waiting_approval' || t.state === 'review'
+  )
   const doneTasks = tasks.filter(t => t.state === 'done')
   const activeTasks = tasks.filter(t => t.state !== 'done' && t.state !== 'canceled')
+
+  // Workspace resume figures (dirty, stash, or committed in last 24h)
+  const dayAgo = Date.now() - 24 * 60 * 60 * 1000
+  const recentRepos = workspaceRepos
+    .filter(r => r.dirtyCount > 0 || r.stashCount > 0 || (r.lastCommitAt && Date.parse(r.lastCommitAt) >= dayAgo))
+    .slice(0, 3)
+
+  // Pipeline watches needing attention
+  const alertWatches = pipelineWatches.filter(
+    w => w.latest?.status === 'failed' || w.latest?.status === 'running'
+  ).slice(0, 3)
 
   // Doctor figures
   const doctorFalta = doctorChecks.filter(c => c.status === 'falta').length
@@ -264,6 +289,108 @@ export default function DashboardPage() {
             </div>
           </Link>
         </div>
+
+        {/* 1.5. Context resumption: Where I left off */}
+        {(recentRepos.length > 0 || waitingUserTasks.length > 0 || alertWatches.length > 0) && (
+          <div className="card">
+            <div className="card-head" style={{ justifyContent: 'space-between' }}>
+              <div className="row" style={{ gap: 8, alignItems: 'center' }}>
+                <History size={16} style={{ color: 'var(--signal)' }} />
+                <span className="card-title">{tx({ en: 'Where I left off', pt: 'Onde eu parei' })}</span>
+                <small className="muted">
+                  {tx({
+                    en: 'Active local repositories, Factory tasks waiting for you and pipeline alerts',
+                    pt: 'Repositórios locais ativos, tarefas da Fábrica esperando você e alertas de pipeline',
+                  })}
+                </small>
+              </div>
+              <Link to="/repositorios?aba=workspace" className="btn btn-sm">
+                {tx({ en: 'My Workspace', pt: 'Meu Workspace' })} <ArrowRight size={13} />
+              </Link>
+            </div>
+            <div className="card-pad">
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 12 }}>
+                {/* Active / dirty local repositories */}
+                <div style={{ padding: 12, background: 'var(--surface-2)', border: '1px solid var(--line)', borderRadius: 'var(--r)', display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  <div className="row" style={{ justifyContent: 'space-between' }}>
+                    <span className="eyebrow" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <GitBranch size={13} /> {tx({ en: 'Local work in progress', pt: ' Código local em andamento' })}
+                    </span>
+                    <span className="badge">{recentRepos.length}</span>
+                  </div>
+                  {recentRepos.length === 0 ? (
+                    <small className="muted">{tx({ en: 'All local repositories are clean.', pt: 'Todos os repositórios locais estão limpos.' })}</small>
+                  ) : (
+                    recentRepos.map(r => (
+                      <div key={r.path} className="row" style={{ justifyContent: 'space-between', gap: 8, fontSize: 12.5 }}>
+                        <div style={{ minWidth: 0, flex: 1 }}>
+                          <b>{r.name}</b> <span className="mono muted" style={{ fontSize: 11 }}>({r.branch})</span>
+                          <div className="row" style={{ gap: 6, marginTop: 2 }}>
+                            {r.dirtyCount > 0 && <span className="badge badge-warn" style={{ fontSize: 10 }}>{r.dirtyCount} {tx({ en: 'modified', pt: 'modificado(s)' })}</span>}
+                            {r.stashCount > 0 && <span className="badge badge-info" style={{ fontSize: 10 }}>{r.stashCount} stash</span>}
+                          </div>
+                        </div>
+                        <Link to={`/revisao?repo=${encodeURIComponent(r.path)}`} className="btn btn-sm">
+                          {tx({ en: 'Review', pt: 'Revisar' })}
+                        </Link>
+                      </div>
+                    ))
+                  )}
+                </div>
+
+                {/* Factory waiting on human */}
+                <div style={{ padding: 12, background: 'var(--surface-2)', border: '1px solid var(--line)', borderRadius: 'var(--r)', display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  <div className="row" style={{ justifyContent: 'space-between' }}>
+                    <span className="eyebrow" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <Factory size={13} /> {tx({ en: 'Waiting for your decision', pt: 'Esperando sua decisão' })}
+                    </span>
+                    <span className={`badge ${waitingUserTasks.length > 0 ? 'badge-warn' : ''}`}>{waitingUserTasks.length}</span>
+                  </div>
+                  {waitingUserTasks.length === 0 ? (
+                    <small className="muted">{tx({ en: 'No Factory task blocked on you right now.', pt: 'Nenhuma tarefa da Fábrica bloqueada esperando você.' })}</small>
+                  ) : (
+                    waitingUserTasks.slice(0, 3).map(t => (
+                      <div key={t.id} className="row" style={{ justifyContent: 'space-between', gap: 8, fontSize: 12.5 }}>
+                        <div style={{ minWidth: 0, flex: 1 }}>
+                          <b>{t.title}</b>
+                          <div className="mono muted" style={{ fontSize: 11 }}>{t.branchName}</div>
+                        </div>
+                        <Link to="/fabrica" className="btn btn-sm">
+                          {tx({ en: 'Open', pt: 'Abrir' })}
+                        </Link>
+                      </div>
+                    ))
+                  )}
+                </div>
+
+                {/* Pipelines needing attention */}
+                <div style={{ padding: 12, background: 'var(--surface-2)', border: '1px solid var(--line)', borderRadius: 'var(--r)', display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  <div className="row" style={{ justifyContent: 'space-between' }}>
+                    <span className="eyebrow" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <Workflow size={13} /> {tx({ en: 'Followed pipelines', pt: 'Pipelines acompanhadas' })}
+                    </span>
+                    <span className={`badge ${alertWatches.some(w => w.latest?.status === 'failed') ? 'badge-crit' : ''}`}>{alertWatches.length}</span>
+                  </div>
+                  {alertWatches.length === 0 ? (
+                    <small className="muted">{tx({ en: 'No failing or running followed pipeline.', pt: 'Nenhuma pipeline seguida com falha ou rodando.' })}</small>
+                  ) : (
+                    alertWatches.map(w => (
+                      <div key={w.id} className="row" style={{ justifyContent: 'space-between', gap: 8, fontSize: 12.5 }}>
+                        <div style={{ minWidth: 0, flex: 1 }}>
+                          <b>{w.fullPath.split('/').pop()}</b>
+                          <div className="mono muted" style={{ fontSize: 11 }}>{w.latest?.ref} • {w.latest?.status}</div>
+                        </div>
+                        <Link to="/pipelines" className="btn btn-sm">
+                          {tx({ en: 'Inspect', pt: 'Ver' })}
+                        </Link>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* 2. Featured section: Software Factory */}
         <div className="card">

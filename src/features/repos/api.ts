@@ -81,3 +81,37 @@ export const belowWorkspace = (s: Pick<Source, 'workspace'>, p: string | null) =
 
 export const inWorkspace = (s: Pick<Source, 'workspace' | 'workspaceLabel'>, p: string | null) =>
   p && p.startsWith(s.workspace) ? `${s.workspaceLabel}${p.slice(s.workspace.length)}` : tilde(p)
+
+export type ArtifactDir = 'target' | 'node_modules' | 'dist' | 'build'
+
+export type WorkspaceRepo = {
+  name: string
+  path: string
+  relPath: string
+  workspace: string
+  workspaceLabel: string
+  branch: string
+  dirtyCount: number
+  stashCount: number
+  ahead: number
+  behind: number
+  lastCommitAt: string | null
+  lastCommitSubject: string | null
+  mergedBranches: string[]
+  artifactDirs: ArtifactDir[]
+  artifactBytes: number
+}
+
+export type WorkspaceScan = {
+  workspaces: { path: string; label: string }[]
+  repos: WorkspaceRepo[]
+}
+
+export const fetchWorkspace = () => api.get<WorkspaceScan>('/repos/workspace')
+export const openWorkspaceRepo = (repoPath: string) => api.post<{ ok: true }>('/repos/workspace/open', { repoPath })
+export const fetchGitWorkspaceRepo = (repoPath: string) => api.post<WorkspaceRepo>('/repos/workspace/fetch', { repoPath })
+export const pruneWorkspaceBranches = (repoPath: string) =>
+  api.post<{ deleted: string[]; repo: WorkspaceRepo }>('/repos/workspace/prune-branches', { repoPath })
+export const cleanWorkspaceArtifacts = (repoPath: string, dirs?: ArtifactDir[]) =>
+  api.post<{ cleaned: ArtifactDir[]; freedBytes: number; repo: WorkspaceRepo }>('/repos/workspace/clean-artifacts', { repoPath, dirs })
+

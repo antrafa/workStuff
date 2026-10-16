@@ -21,6 +21,8 @@ The screen has four parts, from top to bottom.
 | **Machine & Doctor** | How many required items are **pending** on your machine, or how many **items ok** when none is missing, plus the number of warnings. **Ready** appears when nothing is pending. | [Machine](/maquina) |
 | **Local services** | How many **listening ports** there are on your machine, whether Docker is **Active** or **Inactive** and how many containers exist. | [Local services](/servicos) |
 
+**Where I left off.** Shows up whenever you have local repositories with modified files, stashes or commits in the last 24h, Factory tasks waiting for your decision or followed pipelines that are failing or running, letting you jump straight to [Pre-MR review](/revisao) or [Repositories](/repositorios).
+
 **Software Factory and autonomous agents.** The four most recent Factory tasks, each with its title, branch, creation date and state. A task waiting for you shows **Waiting for approval**. Click a task, or **Open the full Factory**, to go to the [Factory](/fabrica).
 
 **Cluster & observability** and **Local development environment.** Two side-by-side cards. The first shows the connected kubeconfig, its environment stamp, the context and how many contexts the file has, and warns when there are pods with problems; its buttons open [Cluster](/cluster), [Logs](/logs), [Timeline](/incidente) and [Requests & Limits](/recursos). The second says whether the machine diagnosis is **All set** or how many items are pending; its buttons open [Dev runbooks](/dev-runbooks), [Repositories](/repositorios), [Pre-MR review](/revisao) and [Pipelines](/pipelines).

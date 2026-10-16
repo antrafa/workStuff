@@ -7,6 +7,9 @@ import { cloneMany, localState, sshCheck, type CloneResult } from '../lib/repos/
 import {
   RepoError, deleteSource, getSource, listSources, publicSource, resolveToken, saveSource, tokenHints, validateInput, type Source,
 } from '../lib/repos/sources.ts'
+import {
+  assertWorkspaceRepo, cleanRepoArtifacts, fetchWorkspaceRepo, pruneMergedBranches, scanWorkspace,
+} from '../lib/repos/workspace.ts'
 import { say } from '../lib/i18n.ts'
 
 export const reposRouter = Router()
@@ -25,6 +28,17 @@ const connOf = async (s: Source): Promise<Conn> => ({ provider: s.provider, url:
 reposRouter.get('/hints', handle(() => tokenHints()))
 reposRouter.post('/pick-folder', handle(async () => ({ path: await pickFolder(say({ en: 'Workspace base folder', pt: 'Pasta base do workspace' })) })))
 reposRouter.get('/sources', handle(async () => Promise.all(listSources().map(publicSource))))
+
+reposRouter.get('/workspace', handle(() => scanWorkspace()))
+reposRouter.post('/workspace/open', handle(req => {
+  const dir = assertWorkspaceRepo(String(req.body?.repoPath ?? ''))
+  openInEditor(dir)
+}))
+reposRouter.post('/workspace/fetch', handle(req => fetchWorkspaceRepo(String(req.body?.repoPath ?? ''))))
+reposRouter.post('/workspace/prune-branches', handle(req => pruneMergedBranches(String(req.body?.repoPath ?? ''))))
+reposRouter.post('/workspace/clean-artifacts', handle(req =>
+  cleanRepoArtifacts(String(req.body?.repoPath ?? ''), Array.isArray(req.body?.dirs) ? req.body.dirs.map(String) : undefined)
+))
 
 // Passo "testar" do assistente: confere URL e token antes de salvar, sem gravar nada.
 reposRouter.post('/test', handle(async req => {

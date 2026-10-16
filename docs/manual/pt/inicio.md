@@ -21,6 +21,8 @@ A tela tem quatro partes, de cima para baixo.
 | **Máquina & Doctor** | Quantas **pendências** obrigatórias a sua máquina tem, ou quantos **itens ok** quando não falta nada, mais a quantidade de avisos. **Apta** aparece quando não há pendência. | [Máquina](/maquina) |
 | **Serviços Locais** | Quantas **portas em escuta** existem na sua máquina, se o Docker está **Ativo** ou **Inativo** e quantos containers existem. | [Serviços locais](/servicos) |
 
+**Onde eu parei.** Aparece sempre que você tem repositórios locais com arquivos modificados, stashes ou commits nas últimas 24h, tarefas da Fábrica esperando sua decisão ou pipelines acompanhadas com falha/em execução, permitindo retomar a revisão em [Revisão antes do MR](/revisao) ou abrir o [Repositórios](/repositorios) com um clique.
+
 **Fábrica de Software e Agentes Autônomos.** As quatro tarefas mais recentes da Fábrica, cada uma com título, branch, data de criação e estado. Uma tarefa que espera você mostra **Aguardando aprovação**. Clique numa tarefa, ou em **Abrir Fábrica Completa**, para ir à [Fábrica](/fabrica).
 
 **Cluster & Observabilidade** e **Ambiente de Desenvolvimento Local.** Dois cartões lado a lado. O primeiro mostra o kubeconfig conectado, o selo de ambiente, o contexto e quantos contextos o arquivo tem, e avisa quando há pods com problema; os botões dele abrem o [Cluster](/cluster), os [Logs](/logs), a [Linha do tempo](/incidente) e o [Requests & Limits](/recursos). O segundo diz se o diagnóstico da máquina está **Tudo pronto** ou quantas pendências há; os botões dele abrem os [Runbooks de dev](/dev-runbooks), os [Repositórios](/repositorios), a [Revisão antes do MR](/revisao) e as [Pipelines](/pipelines).
