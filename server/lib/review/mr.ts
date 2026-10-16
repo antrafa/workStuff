@@ -372,6 +372,14 @@ export async function fetchRemoteMrDiff(input: {
   }
 }
 
+// Code fence one backtick longer than any run inside the text: a ``` in an MR description or in a
+// diffed Markdown file can then never close the block and turn the rest into instructions.
+export function fenced(text: string, lang = ''): string {
+  const longest = Math.max(0, ...(text.match(/`+/g) ?? []).map(run => run.length))
+  const fence = '`'.repeat(Math.max(3, longest + 1))
+  return `${fence}${lang}\n${text}\n${fence}`
+}
+
 export function formatBlastPromptNote(blastRadius: BlastRadiusReport | null | undefined): string {
   if (!blastRadius || blastRadius.totalDependents === 0) return ''
   const lines = blastRadius.files
@@ -428,5 +436,7 @@ export function runMrSelfcheck() {
 
 if (import.meta.main && process.argv.includes('--selfcheck')) {
   runMrSelfcheck()
+  assert.equal(fenced('a'), '```\na\n```')
+  assert.equal(fenced('x ``` y', 'diff'), '````diff\nx ``` y\n````', 'a cerca é maior que qualquer sequência de crases do texto')
   console.log('review mr selfcheck: ok')
 }
