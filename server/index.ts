@@ -28,6 +28,7 @@ import { ideationRouter } from './routes/ideation.ts'
 import { startScheduler } from './lib/schedules/scheduler.ts'
 import { settingsRouter } from './routes/settings.ts'
 import { statusRouter } from './routes/status.ts'
+import { httpRouter } from './routes/http.ts'
 import { followSettingsLanguage, say } from './lib/i18n.ts'
 
 followSettingsLanguage()
@@ -62,6 +63,7 @@ app.use('/api/factory/projects/:projectId/ideas', ideationRouter)
 app.use('/api/factory/projects', factoryProjectsRouter)
 app.use('/api/factory', factoryRouter)
 app.use('/api/status', statusRouter)
+app.use('/api/http', httpRouter)
 
 app.use('/api', (req, res) => {
   res.status(404).json({ error: say({ en: `no such route: ${req.method} ${req.originalUrl}`, pt: `rota inexistente: ${req.method} ${req.originalUrl}` }) })

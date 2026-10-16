@@ -1,0 +1,61 @@
+.http-layout {
+  display: grid;
+  grid-template-columns: 260px minmax(0, 1fr);
+  gap: 16px;
+  align-items: start;
+}
+@media (max-width: 900px) {
+  .http-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+.http-line .select {
+  width: 110px;
+}
+.http-saved-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 5px 8px;
+  border: 1px solid transparent;
+  border-radius: var(--r);
+  background: none;
+  color: var(--ink-2);
+  font-size: 12.5px;
+  text-align: left;
+  cursor: pointer;
+}
+.http-saved-item:hover {
+  background: var(--surface-2);
+}
+.http-saved-item[aria-pressed='true'] {
+  border-color: var(--line-hi);
+  background: var(--surface-2);
+  color: var(--ink);
+}
+.http-saved-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* The method's color says what the request does to data: reading, writing or deleting */
+.http-method {
+  flex: 0 0 52px;
+  font-size: 10.5px;
+  font-weight: 700;
+  color: var(--muted);
+}
+.http-method-get { color: var(--ok); }
+.http-method-post,
+.http-method-put,
+.http-method-patch { color: var(--warn); }
+.http-method-delete { color: var(--crit); }
+.http-body {
+  margin: 0;
+  max-height: 520px;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-size: 12px;
+}

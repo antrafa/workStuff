@@ -36,6 +36,7 @@ export const router = createBrowserRouter([
           { path: 'runbooks', element: page(() => import('@/features/runbooks/RunbooksPage')) },
           { path: 'performance', element: page(() => import('@/features/performance/PerformancePage')) },
           { path: 'conversores', element: page(() => import('@/features/tools/ToolsPage')) },
+          { path: 'requisicoes', element: page(() => import('@/features/http/HttpPage')) },
           { path: 'servicos', element: page(() => import('@/features/local/LocalPage')) },
           { path: 'agenda', element: page(() => import('@/features/schedules/SchedulesPage')) },
           { path: 'gerador', element: page(() => import('@/features/gerador/GeradorPage')) },

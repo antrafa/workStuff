@@ -1,5 +1,5 @@
 import {
-  Activity, ArrowUpCircle, BellRing, BookMarked, BookOpen, Bot, Cpu, Dices, Factory, FileSearch, GitBranch, GitCompare, GitPullRequest, History, LayoutDashboard, ScrollText, Server, ServerCog, ShieldAlert, Sparkles, Stethoscope, Terminal, Users, Workflow, Wrench,
+  Activity, ArrowUpCircle, BellRing, BookMarked, BookOpen, Bot, Cpu, Dices, Factory, FileSearch, GitBranch, GitCompare, GitPullRequest, History, LayoutDashboard, ScrollText, Send, Server, ServerCog, ShieldAlert, Sparkles, Stethoscope, Terminal, Users, Workflow, Wrench,
   type LucideIcon,
 } from 'lucide-react'
 // Relative, not '@/': scripts/check-nav.ts imports this file in Node
@@ -29,6 +29,7 @@ export const NAV: NavGroup[] = [
       { path: '/servicos', label: tx({ en: 'Local services', pt: 'Serviços locais' }), hint: tx({ en: 'Listening ports, containers, compose projects and your local applications', pt: 'Portas em escuta, containers, projetos compose e suas aplicações locais' }), tag: 'docker', icon: Server },
       { path: '/perfil', label: tx({ en: 'Team profile', pt: 'Perfil de equipe' }), hint: tx({ en: 'Exports and imports the setup for someone else', pt: 'Exporta e importa a configuração para outra pessoa' }), tag: tx({ en: 'team', pt: 'time' }), icon: Users },
       { path: '/conversores', label: tx({ en: 'Converters', pt: 'Conversores' }), hint: tx({ en: 'JWT, base64, URL, timestamp, UUID, cron, JSON, diff, regex, hash', pt: 'JWT, base64, URL, timestamp, UUID, cron, JSON, diff, regex, hash' }), tag: 'offline', icon: Wrench },
+      { path: '/requisicoes', label: tx({ en: 'HTTP requests', pt: 'Requisições HTTP' }), hint: tx({ en: 'Calls an endpoint with saved requests, environments and curl', pt: 'Chama um endpoint com requisições salvas, ambientes e curl' }), tag: 'http', icon: Send },
       { path: '/agenda', label: tx({ en: 'Scheduled checks', pt: 'Verificações agendadas' }), hint: tx({ en: 'Alerts when a pipeline, certificate or pods change state', pt: 'Avisa quando pipeline, certificado ou pods mudam de estado' }), tag: tx({ en: 'alerts', pt: 'alertas' }), icon: BellRing },
       { path: '/gerador', label: tx({ en: 'Data generator', pt: 'Gerador de dados' }), hint: tx({ en: 'Test CPF, CNPJ, person and company', pt: 'CPF, CNPJ, pessoa e empresa de teste' }), tag: tx({ en: 'test', pt: 'massa' }), icon: Dices },
     ],

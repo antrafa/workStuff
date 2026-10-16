@@ -9,7 +9,7 @@ const layout = Object.fromEntries(NAV.map(g => [g.id, g.items.map(i => i.path)])
 assert.deepEqual(Object.keys(layout), ['overview', 'tools', 'development', 'deploy', 'kubernetes', 'ai'])
 assert.deepEqual(layout, {
   overview: ['/', '/documentacao'],
-  tools: ['/maquina', '/servicos', '/perfil', '/conversores', '/agenda', '/gerador'],
+  tools: ['/maquina', '/servicos', '/perfil', '/conversores', '/requisicoes', '/agenda', '/gerador'],
   development: ['/fabrica', '/dev-runbooks'],
   deploy: ['/repositorios', '/pipelines', '/revisao', '/vulnerabilidades'],
   kubernetes: ['/cluster', '/recursos', '/logs', '/incidente', '/comparar', '/upgrade', '/runbooks', '/performance'],
@@ -18,7 +18,7 @@ assert.deepEqual(layout, {
 assert.deepEqual(NAV.map(g => g.label), ['Overview', 'Tools', 'Development', 'Deploy', 'Kubernetes', 'AI'])
 
 const tools = NAV.find(g => g.id === 'tools')!.items
-assert.deepEqual(tools.map(i => i.label), ['Machine', 'Local services', 'Team profile', 'Converters', 'Scheduled checks', 'Data generator'])
+assert.deepEqual(tools.map(i => i.label), ['Machine', 'Local services', 'Team profile', 'Converters', 'HTTP requests', 'Scheduled checks', 'Data generator'])
 
 const paths = NAV.flatMap(g => g.items.map(i => i.path))
 assert.equal(new Set(paths).size, paths.length, 'rota repetida no menu')
