@@ -28,7 +28,9 @@ export type Provider = {
   source: ModelSource
 }
 
-export type Settings = { provider: ProviderId; model: string; effort: string; language: Lang }
+export type SandboxPolicy = 'strict' | 'relaxed'
+
+export type Settings = { provider: ProviderId; model: string; effort: string; language: Lang; sandboxPolicy?: SandboxPolicy }
 
 export const fetchSettings = () => api.get<{ settings: Settings; providers: Provider[] }>('/settings')
 export const saveSettings = (settings: Settings) => api.put<{ settings: Settings }>('/settings', settings)

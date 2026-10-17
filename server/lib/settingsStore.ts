@@ -1,14 +1,17 @@
+import assert from 'node:assert/strict'
 import { dataFile } from './paths.ts'
 import { readJson, writeJson } from './jsonFile.ts'
 import { isProviderId, type ProviderId } from './aiProviders.ts'
 import { DEFAULT_LANG, isLang, type Lang } from './lang.ts'
 
-export type Settings = { provider: ProviderId; model: string; effort: string; language: Lang }
+export type SandboxPolicy = 'strict' | 'relaxed'
+
+export type Settings = { provider: ProviderId; model: string; effort: string; language: Lang; sandboxPolicy: SandboxPolicy }
 
 const FILE = dataFile('settings.json')
 
 // Claude primeiro: é o único provedor em que as guardas de comando existem de fato.
-const DEFAULTS: Settings = { provider: 'claude', model: 'opus', effort: 'medium', language: DEFAULT_LANG }
+const DEFAULTS: Settings = { provider: 'claude', model: 'opus', effort: 'medium', language: DEFAULT_LANG, sandboxPolicy: 'strict' }
 
 export const readSettings = (): Settings => ({ ...DEFAULTS, ...readJson<Partial<Settings>>(FILE, {}) })
 
@@ -27,10 +30,47 @@ export function parseSettings(body: unknown): Settings {
   // Optional: a client that does not send it keeps the current language
   const language = b.language === undefined ? readSettings().language : b.language
   if (!isLang(language)) throw new Error(say('invalid language: use en or pt', 'idioma inválido: use en ou pt'))
-  return { provider: b.provider, model: b.model, effort: b.effort, language }
+  if (b.sandboxPolicy !== undefined && b.sandboxPolicy !== 'strict' && b.sandboxPolicy !== 'relaxed') {
+    throw new Error(say('invalid sandbox policy: use strict or relaxed', 'política de sandbox inválida: use strict ou relaxed'))
+  }
+  const sandboxPolicy: SandboxPolicy = b.sandboxPolicy === undefined ? (readSettings().sandboxPolicy ?? 'strict') : (b.sandboxPolicy as SandboxPolicy)
+  return { provider: b.provider, model: b.model, effort: b.effort, language, sandboxPolicy }
 }
 
 export function saveSettings(settings: Settings) {
   writeJson(FILE, settings)
   return settings
+}
+
+if (import.meta.main && process.argv.includes('--selfcheck')) {
+  // Defaults and readSettings contain a valid sandboxPolicy
+  const initial = readSettings()
+  assert.ok(initial.sandboxPolicy === 'strict' || initial.sandboxPolicy === 'relaxed')
+
+  // Valid sandboxPolicy parsing
+  const parsedStrict = parseSettings({ provider: 'claude', model: 'opus', effort: 'medium', language: 'en', sandboxPolicy: 'strict' })
+  assert.equal(parsedStrict.sandboxPolicy, 'strict')
+
+  const parsedRelaxed = parseSettings({ provider: 'claude', model: 'opus', effort: 'medium', language: 'pt', sandboxPolicy: 'relaxed' })
+  assert.equal(parsedRelaxed.sandboxPolicy, 'relaxed')
+
+  // Fallback when sandboxPolicy is undefined
+  const parsedFallback = parseSettings({ provider: 'claude', model: 'opus', effort: 'medium', language: 'en' })
+  assert.equal(parsedFallback.sandboxPolicy, initial.sandboxPolicy ?? 'strict')
+
+  // Invalid sandboxPolicy validation error in en and pt
+  assert.throws(
+    () => parseSettings({ provider: 'claude', model: 'opus', effort: 'medium', language: 'en', sandboxPolicy: 'invalid' }),
+    /invalid sandbox policy: use strict or relaxed/
+  )
+  assert.throws(
+    () => parseSettings({ provider: 'claude', model: 'opus', effort: 'medium', language: 'pt', sandboxPolicy: 'invalid' }),
+    /política de sandbox inválida: use strict ou relaxed/
+  )
+  assert.throws(
+    () => parseSettings({ provider: 'claude', model: 'opus', effort: 'medium', language: 'en', sandboxPolicy: 123 }),
+    /invalid sandbox policy: use strict or relaxed/
+  )
+
+  console.log('settingsStore selfcheck: ok')
 }
