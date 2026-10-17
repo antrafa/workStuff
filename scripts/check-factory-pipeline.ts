@@ -87,7 +87,7 @@ while (i < args.length) {
   const arg = args[i]
   if (arg === '--ro-bind' || arg === '--bind' || arg === '--ro-bind-try') {
     i += 3
-  } else if (arg === '--dev' || arg === '--proc') {
+  } else if (arg === '--dev' || arg === '--proc' || arg === '--tmpfs') {
     i += 2
   } else if (arg === '--setenv') {
     env[args[i + 1]] = args[i + 2]
@@ -95,7 +95,7 @@ while (i < args.length) {
   } else if (arg === '--chdir') {
     cwd = args[i + 1]
     i += 2
-  } else if (arg === '--unshare-pid' || arg === '--die-with-parent') {
+  } else if (arg === '--unshare-pid' || arg === '--die-with-parent' || arg === '--clearenv') {
     i += 1
   } else {
     break

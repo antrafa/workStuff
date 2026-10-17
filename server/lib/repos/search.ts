@@ -118,7 +118,7 @@ if (import.meta.main && process.argv.includes('--selfcheck')) {
     assert.deepEqual(found.repos.map(r => [r.relPath, r.hits]), [['grupo/api', [{ file: 'app.yml', line: 2, text: '  url: ${DB_URL}' }]]], 'o que o .gitignore ignora não aparece')
     assert.equal((await searchClones({ text: 'db_url', matchCase: true }, [tmp])).repos.length, 0)
     assert.equal((await searchClones({ text: 'DB_URL', paths: '*.ts' }, [tmp])).repos.length, 0)
-    assert.equal((await searchClones({ text: 'url:\\s+\\$', regex: true }, [tmp])).repos.length, 1)
+    assert.equal((await searchClones({ text: 'url:[[:space:]]+\\$', regex: true }, [tmp])).repos.length, 1)
     assert.equal((await searchClones({ text: 'nada' }, [tmp])).repos[0].name, 'web')
     const broken = await searchClones({ text: '(ab', regex: true }, [tmp])
     assert.equal(broken.failed.length, 2, 'regex inválida vira erro por clone, sem derrubar a busca')
