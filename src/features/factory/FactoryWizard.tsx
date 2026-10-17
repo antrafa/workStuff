@@ -9,9 +9,29 @@ import { tx } from '@/lib/i18n'
 type Provider = 'claude' | 'codex' | 'agy'
 type Preflight = {
   bwrap: boolean
+  sandbox?: boolean
+  sandboxDriver?: string | null
   providers: Record<Provider, boolean>
-  settings: { provider: Provider; model: string }
-  repo: null | { ok: true; current: string; defaultBase: string; dirty: number; verifyCommand: string | null } | { ok: false; error: string }
+  settings: { provider: Provider; model?: string; sandboxPolicy?: 'strict' | 'relaxed' }
+  repo:
+    | null
+    | {
+        ok: true
+        current: string
+        defaultBase: string
+        dirty: number
+        verifyCommand: string | null
+        path?: string
+        root?: string
+        reason?: string
+      }
+    | {
+        ok: false
+        error: string
+        path?: string
+        root?: string
+        reason?: string
+      }
 }
 type Issue = { id: string; title: string; number: number; url: string; repo: string; provider: 'gitlab' | 'github'; body?: string }
 
@@ -82,8 +102,7 @@ export function FactoryWizard({ onClose, onStarted }: { onClose: () => void; onS
   }
 
   const repo = pre?.repo
-  // Every provider builds inside bwrap: Codex too, since its own sandbox cannot run nested in it
-  const canWrite = Boolean(pre?.bwrap)
+  const canWrite = Boolean(pre?.sandbox ?? pre?.bwrap ?? (pre?.settings?.sandboxPolicy === 'relaxed'))
   const ready: boolean[] = [
     true,
     Boolean(pre && pre.providers[provider] && canWrite),
@@ -171,9 +190,15 @@ export function FactoryWizard({ onClose, onStarted }: { onClose: () => void; onS
             <div className="stack" style={{ gap: 10 }}>
               {!pre ? <span className="muted">{tx({ en: 'Checking the machine...', pt: 'Verificando a máquina...' })}</span> : (
                 <>
-                  <Req ok={pre.bwrap} title="bwrap (bubblewrap)" detail={pre.bwrap
-                    ? tx({ en: 'Write-mode agents and the project verification run isolated.', pt: 'Agentes com escrita e a verificação do projeto rodam isolados.' })
-                    : tx({ en: 'Without it, Claude and Antigravity do not write and the project verification does not run. Install the bubblewrap package (Machine screen).', pt: 'Sem ele, Claude e Antigravity não escrevem e a verificação do projeto não roda. Instale o pacote bubblewrap (tela Máquina).' })} />
+                  <Req
+                    ok={canWrite}
+                    title={pre.sandboxDriver === 'sandbox-exec' ? 'sandbox-exec (macOS)' : pre.sandboxDriver === 'bwrap' ? 'bwrap (Linux)' : tx({ en: 'Sandbox', pt: 'Sandbox' })}
+                    detail={pre.sandbox
+                      ? tx({ en: `Isolated via ${pre.sandboxDriver}. Agents and verification run protected.`, pt: `Isolado via ${pre.sandboxDriver}. Agentes e verificação rodam protegidos.` })
+                      : pre.settings?.sandboxPolicy === 'relaxed'
+                        ? tx({ en: 'Relaxed mode enabled in Settings: agents run locally without sandbox.', pt: 'Modo relaxado ativo em Configurações: agentes rodam localmente sem sandbox.' })
+                        : tx({ en: 'Without sandbox, write agents do not run. Install bubblewrap on Linux or enable relaxed mode in Settings.', pt: 'Sem sandbox, agentes com escrita não rodam. Instale o bubblewrap no Linux ou ative o modo relaxado em Configurações.' })}
+                  />
                   {(Object.keys(PROVIDER_LABEL) as Provider[]).map(p => (
                     <Req key={p} ok={pre.providers[p]} optional title={PROVIDER_LABEL[p]} detail={pre.providers[p] ? tx({ en: 'Installed.', pt: 'Instalado.' }) : tx({ en: 'Not found on PATH.', pt: 'Não encontrado no PATH.' })} />
                   ))}
@@ -185,7 +210,7 @@ export function FactoryWizard({ onClose, onStarted }: { onClose: () => void; onS
                       ))}
                     </select>
                   </label>
-                  {!canWrite && <div className="callout callout-warn">{tx({ en: 'Without bwrap the pipeline cannot build with any provider. Install bubblewrap (the Machine screen shows the command).', pt: 'Sem bwrap a esteira não consegue construir com nenhum provedor. Instale o bubblewrap (a tela Máquina mostra o comando).' })}</div>}
+                  {!canWrite && <div className="callout callout-warn">{tx({ en: 'Without a sandbox or relaxed mode, the pipeline cannot build. Enable relaxed mode in Settings or install bubblewrap.', pt: 'Sem sandbox ou modo relaxado, a esteira não consegue construir. Ative o modo relaxado em Configurações ou instale o bubblewrap.' })}</div>}
                 </>
               )}
             </div>

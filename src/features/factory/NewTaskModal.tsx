@@ -71,8 +71,8 @@ export function NewTaskModal({ project, open, onClose, onCreated }: Props) {
         setRepoPath(path => (project.repos.some(r => r.path === path) ? path : project.repos[0]?.path ?? path))
         setVerifyCommand(cmd => cmd || project.verifyCommand || '')
       }
-      api.get<{ bwrap: boolean }>('/factory/preflight')
-        .then(p => setNoSandbox(!p.bwrap))
+      api.get<{ bwrap: boolean; sandbox?: boolean; settings?: { sandboxPolicy?: 'strict' | 'relaxed' } }>('/factory/preflight')
+        .then(p => setNoSandbox(!(p.sandbox ?? p.bwrap ?? (p.settings?.sandboxPolicy === 'relaxed'))))
         .catch(() => setNoSandbox(false))
     }
   }, [open])
@@ -175,7 +175,7 @@ export function NewTaskModal({ project, open, onClose, onCreated }: Props) {
 
         {noSandbox && (
           <div className="callout callout-warn">
-            {tx({ en: 'bwrap (bubblewrap) is not installed: planning runs, but the build and the verification do not. The Machine screen shows the install command.', pt: 'O bwrap (bubblewrap) não está instalado: o planejamento roda, mas a construção e a verificação não. A tela Máquina mostra o comando para instalar.' })}
+            {tx({ en: 'No sandbox (bwrap or sandbox-exec) available: planning runs, but write-mode build requires a sandbox or relaxed mode enabled in Settings.', pt: 'Nenhum sandbox (bwrap ou sandbox-exec) disponível: o planejamento roda, mas a construção com escrita exige sandbox ou o modo relaxado ativo em Configurações.' })}
           </div>
         )}
         {error && <div className="callout callout-crit">{error}</div>}

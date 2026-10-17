@@ -257,13 +257,20 @@ async function picker(p: Platform, fix: ReturnType<typeof fixesFor>): Promise<Ch
   return found ? ok('workStuff', say({ en: 'Folder picker', pt: 'Seletor de pasta' }), found) : pending('workStuff', say({ en: 'Folder picker', pt: 'Seletor de pasta' }), 'aviso', say({ en: 'no zenity/kdialog: picking a folder falls back to typing the path', pt: 'sem zenity/kdialog: escolher pasta cai no caminho digitado' }), fix.install(RECIPES.zenity))
 }
 
-// O Antigravity escreve em disco mesmo em --mode plan; o bwrap é a trava de modo leitura dele, e só existe no Linux.
+// O Antigravity escreve em disco mesmo em --mode plan; sandbox (bwrap no Linux, sandbox-exec no macOS) é a trava dele.
 async function bubblewrap(p: Platform, fix: ReturnType<typeof fixesFor>): Promise<CheckResult> {
   const item = say({ en: 'bubblewrap (Antigravity lock)', pt: 'bubblewrap (trava do Antigravity)' })
-  if (p.os !== 'linux') return pending('workStuff', item, 'aviso', say({ en: `bubblewrap only exists on Linux: on ${p.label} Antigravity does not run on the AI screens`, pt: `bubblewrap só existe no Linux: no ${p.label} o Antigravity não roda nas telas de IA` }), fix.noBwrap)
-  return (await has('bwrap'))
-    ? ok('workStuff', item, firstLine(await output('bwrap', ['--version'])))
-    : pending('workStuff', item, 'aviso', say({ en: 'without bwrap Antigravity does not run on the AI screens', pt: 'sem bwrap o Antigravity não roda nas telas de IA' }), fix.install(RECIPES.bwrap))
+  if (p.os === 'darwin') {
+    return (await has('sandbox-exec'))
+      ? ok('workStuff', item, say({ en: 'sandbox-exec (built into macOS)', pt: 'sandbox-exec (nativo do macOS)' }))
+      : pending('workStuff', item, 'aviso', say({ en: 'sandbox-exec not found on macOS', pt: 'sandbox-exec não encontrado no macOS' }), fix.noBwrap)
+  }
+  if (p.os === 'linux') {
+    return (await has('bwrap'))
+      ? ok('workStuff', item, firstLine(await output('bwrap', ['--version'])))
+      : pending('workStuff', item, 'aviso', say({ en: 'without bwrap Antigravity does not run on the AI screens', pt: 'sem bwrap o Antigravity não roda nas telas de IA' }), fix.install(RECIPES.bwrap))
+  }
+  return pending('workStuff', item, 'aviso', say({ en: `bubblewrap only exists on Linux: on ${p.label} Antigravity does not run on the AI screens`, pt: `bubblewrap só existe no Linux: no ${p.label} o Antigravity não roda nas telas de IA` }), fix.noBwrap)
 }
 
 async function workstuff(p: Platform, fix: ReturnType<typeof fixesFor>): Promise<CheckResult[]> {

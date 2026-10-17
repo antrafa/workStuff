@@ -22,6 +22,7 @@ import { AGENT_ORDER, pendingDependencies, type FactoryTask, type FactoryTaskSta
 import { listSources, resolveToken } from '../lib/repos/sources.ts'
 import { call, type Conn } from '../lib/repos/providers.ts'
 import { readSettings } from '../lib/settingsStore.ts'
+import { detectSandboxDriver } from '../lib/sandbox/sandbox.ts'
 import { isProviderId } from '../lib/aiProviders.ts'
 import {
   beginExecution,
@@ -322,7 +323,8 @@ factoryRouter.post('/tasks', async (req, res) => {
 // given, whether it is a git repo, its default base, pending changes and the verify command.
 factoryRouter.get('/preflight', async (req, res) => {
   const repoPath = String(req.query.repoPath ?? '').trim()
-  const [bwrap, claude, codex, agy] = await Promise.all(['bwrap', 'claude', 'codex', 'agy'].map(async b => Boolean(await which(b))))
+  const [claude, codex, agy] = await Promise.all(['claude', 'codex', 'agy'].map(async b => Boolean(await which(b))))
+  const driver = await detectSandboxDriver()
   let repo: Record<string, unknown> | null = null
   if (repoPath) {
     try {
@@ -332,7 +334,7 @@ factoryRouter.get('/preflight', async (req, res) => {
       repo = { ok: false, error: (e as Error).message }
     }
   }
-  res.json({ bwrap, providers: { claude, codex, agy }, settings: readSettings(), repo })
+  res.json({ bwrap: Boolean(driver === 'bwrap'), sandbox: Boolean(driver !== null), sandboxDriver: driver, providers: { claude, codex, agy }, settings: readSettings(), repo })
 })
 
 // Seletor de pasta nativa
