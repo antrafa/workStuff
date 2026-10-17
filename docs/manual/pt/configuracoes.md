@@ -20,7 +20,7 @@ Abra pelo item **Configurações**, no pé do menu. À esquerda ficam três seç
 
 | Seção | O que tem | Onde fica salvo |
 |---|---|---|
-| **Provedor de IA** | O programa de IA, o modelo e o esforço. A etiqueta ao lado mostra o programa escolhido. | No seu computador (`~/.workstuff/settings.json`), depois de **Salvar alterações**. |
+| **Provedor de IA** | O programa de IA, o modelo, o esforço e a política de sandbox. A etiqueta ao lado mostra o programa escolhido. | No seu computador (`~/.workstuff/settings.json`), depois de **Salvar alterações**. |
 | **Aparência** | **Idioma**, **Tema**, **Cor de destaque** e **Fundo**. | O idioma no seu computador, na hora. Tema, cor e fundo neste navegador, na hora. |
 | **Itens do menu** | Um interruptor por tela, para mostrar ou esconder no menu. A etiqueta mostra quantas estão ocultas. | Neste navegador, na hora. |
 
@@ -35,7 +35,10 @@ O botão no canto superior direito diz **Salvar alterações** quando há uma mu
    - O **OpenAI Codex** e o **Google Antigravity** mostram **sem guarda nativa: proteção reduzida**: a guarda do próprio painel é a única barreira.
 4. Em **Modelo**, escolha um da lista. O marcado como **recomendado** é um começo seguro, e **sempre o mais novo** marca um apelido que acompanha sozinho a versão mais nova.
 5. Em **Esforço**, escolha o quanto a IA deve pensar: mais esforço dá respostas mais cuidadosas e mais lentas.
-6. Clique em **Salvar alterações**. A mensagem **Configurações salvas** confirma.
+6. Em **Política de Sandbox**, selecione o nível de isolamento das operações de escrita e verificação na [Fábrica](/fabrica):
+   - **Estrito (Isolado)**: exige isolamento a nível de kernel (`bwrap` no Linux ou `sandbox-exec` no macOS). Se nenhum sandbox for detectado, operações de escrita são bloqueadas por segurança.
+   - **Relaxado (Sem trava)**: permite que agentes de IA e testes rodem diretamente na máquina caso nenhum sandbox do kernel esteja disponível.
+7. Clique em **Salvar alterações**. A mensagem **Configurações salvas** confirma.
 
 > **Dica:** a lista de modelos vem do próprio programa instalado, não do painel. Se faltar um modelo que você conhece, clique em **Atualizar lista** para ler de novo.
 
@@ -89,7 +92,7 @@ Para voltar a um fundo liso, clique em **Remover imagem**. Sem imagem, o fundo �
 
 ## Bom saber
 
-- Todo provedor de IA roda em modo leitura sobre o seu código e os seus clusters. O Antigravity só roda no Linux, dentro do bubblewrap (`bwrap`), porque ele grava no disco mesmo quando pedem que não grave. Com o bwrap instalado, qualquer provedor só enxerga a pasta da execução, nunca o resto da sua pasta pessoal.
+- Todo provedor de IA roda em modo leitura sobre o seu código e os seus clusters. Na [Fábrica](/fabrica), operações de escrita e verificação de testes rodam isoladas pelo sandbox do kernel (`bwrap` no Linux ou `sandbox-exec` no macOS), ou sem trava quando a política de sandbox estiver em modo relaxado. Com o sandbox ativo, qualquer provedor só enxerga a pasta da execução, nunca o resto da sua pasta pessoal.
 - A escolha feita aqui é usada pelas telas que chamam a IA, como o Cluster Doctor, a [Análise](/analise) e a revisão de itens do [Catálogo](/catalogo). A [Fábrica](/fabrica) pode escolher um modelo por agente em cada tarefa.
 - Uma tela escondida continua abrindo pelo endereço e continua aparecendo na busca do **Ctrl+K**.
 - Tema, cor de destaque, fundo e telas escondidas ficam salvos neste navegador: outro navegador ou computador começa com o padrão. Provedor, modelo, esforço e idioma ficam salvos no seu computador e valem para qualquer navegador.

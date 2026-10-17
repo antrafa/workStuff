@@ -28,11 +28,13 @@ export type Provider = {
   source: ModelSource
 }
 
+export type SandboxDriver = 'bwrap' | 'sandbox-exec' | null
+
 export type SandboxPolicy = 'strict' | 'relaxed'
 
 export type Settings = { provider: ProviderId; model: string; effort: string; language: Lang; sandboxPolicy?: SandboxPolicy }
 
-export const fetchSettings = () => api.get<{ settings: Settings; providers: Provider[] }>('/settings')
+export const fetchSettings = () => api.get<{ settings: Settings; providers: Provider[]; sandboxDriver?: SandboxDriver }>('/settings')
 export const saveSettings = (settings: Settings) => api.put<{ settings: Settings }>('/settings', settings)
 // Saves only the language, over what the server has (a pending AI change elsewhere stays a draft),
 // then reloads the page in it.

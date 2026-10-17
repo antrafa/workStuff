@@ -20,7 +20,7 @@ Open it from **Settings**, at the bottom of the menu. On the left there are thre
 
 | Section | What it holds | Where it is saved |
 |---|---|---|
-| **AI provider** | The AI program, the model and the effort. The label next to it shows the chosen program. | On your computer (`~/.workstuff/settings.json`), after **Save changes**. |
+| **AI provider** | The AI program, the model, the effort and the sandbox policy. The label next to it shows the chosen program. | On your computer (`~/.workstuff/settings.json`), after **Save changes**. |
 | **Appearance** | **Language**, **Theme**, **Accent color** and **Background**. | Language on your computer, right away. Theme, color and background in this browser, right away. |
 | **Menu items** | One switch per screen, to show it or hide it in the menu. The label shows how many are hidden. | In this browser, right away. |
 
@@ -35,7 +35,10 @@ The button at the top right says **Save changes** when there is an unsaved chang
    - **OpenAI Codex** and **Google Antigravity** show **no native guard: reduced protection**: the panel's own guard is the only barrier.
 4. In **Model**, pick one from the list. The one marked **recommended** is a safe start, and **always the newest** marks an alias that follows the newest version on its own.
 5. In **Effort**, choose how hard the AI should think: more effort gives more careful and slower answers.
-6. Click **Save changes**. The message **Settings saved** confirms it.
+6. Under **Sandbox policy**, select the isolation level for write operations and verification in the [Factory](/fabrica):
+   - **Strict (Isolated)**: requires kernel-level sandbox isolation (`bwrap` on Linux or `sandbox-exec` on macOS). If no sandbox is detected, write operations are blocked for safety.
+   - **Relaxed (Unconfined)**: allows AI agents and tests to run directly on the machine if no kernel sandbox is available.
+7. Click **Save changes**. The message **Settings saved** confirms it.
 
 > **Tip:** the list of models comes from the installed program itself, not from the panel. If a model you know is missing, click **Refresh list** to read it again.
 
@@ -89,7 +92,7 @@ To go back to a plain background, click **Remove image**. Without an image, the 
 
 ## Good to know
 
-- Every AI provider runs in read-only mode on your code and clusters. Antigravity only runs on Linux, inside bubblewrap (`bwrap`), because it writes to disk even when asked not to. With bwrap installed, every provider only sees the folder of the run, never the rest of your home folder.
+- Every AI provider runs in read-only mode on your code and clusters. In the [Factory](/fabrica), write operations and test verification run isolated by a kernel sandbox (`bwrap` on Linux or `sandbox-exec` on macOS), or unconfined when the sandbox policy is set to relaxed. With the sandbox active, every provider only sees the folder of the run, never the rest of your home folder.
 - The choice made here is used by the screens that call the AI, such as the Cluster Doctor, [Analysis](/analise) and the item review in the [Catalog](/catalogo). The [Factory](/fabrica) can pick a model per agent in each task.
 - A hidden screen still opens by its address and is still found by the search in **Ctrl+K**.
 - Theme, accent color, background and hidden screens are saved in this browser: another browser or computer starts with the defaults. The provider, model, effort and language are saved on your computer and apply to any browser.

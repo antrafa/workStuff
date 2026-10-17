@@ -73,7 +73,7 @@ export default function SettingsPage() {
           <Async state={state} skeleton={<SkeletonRows rows={3} height={80} />}>
             {data => (
               <>
-                {secao === 'ia' && current && <AiSection providers={data.providers} settings={current} onChange={update} />}
+                {secao === 'ia' && current && <AiSection providers={data.providers} settings={current} onChange={update} sandboxDriver={data.sandboxDriver} />}
                 {secao === 'aparencia' && (
                   <div className="stack" style={{ ['--gap' as string]: '16px' }}>
                     <LanguageSection />

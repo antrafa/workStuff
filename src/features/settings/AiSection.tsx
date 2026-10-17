@@ -3,7 +3,7 @@ import { useState } from 'react'
 import { Segmented } from '@/ui'
 import { tx } from '@/lib/i18n'
 import { ModelPicker } from './ModelPicker'
-import type { Model, Provider, ProviderId, Settings } from './api'
+import type { Model, Provider, ProviderId, SandboxDriver, SandboxPolicy, Settings } from './api'
 
 const EFFORT_LABEL: Record<string, string> = tx({
   en: { low: 'Low', medium: 'Medium', high: 'High', xhigh: 'Very high', max: 'Maximum', ultra: 'Ultra' },
@@ -15,9 +15,9 @@ const DEFAULT_EFFORTS = ['low', 'medium', 'high']
 const effortsOf = (model?: Model) => model?.efforts ?? DEFAULT_EFFORTS
 const defaultModel = (p: Provider) => (p.models.find(m => m.recommended) ?? p.models[0])?.id ?? ''
 
-type Props = { providers: Provider[]; settings: Settings; onChange: (p: Partial<Settings>) => void }
+type Props = { providers: Provider[]; settings: Settings; onChange: (p: Partial<Settings>) => void; sandboxDriver?: SandboxDriver }
 
-export function AiSection({ providers: loaded, settings, onChange }: Props) {
+export function AiSection({ providers: loaded, settings, onChange, sandboxDriver }: Props) {
   const [refreshed, setRefreshed] = useState<Partial<Record<ProviderId, Provider>>>({})
   const providers = loaded.map(p => refreshed[p.id] ?? p)
   const selected = providers.find(p => p.id === settings.provider)
@@ -80,6 +80,48 @@ export function AiSection({ providers: loaded, settings, onChange }: Props) {
           options={efforts.map(id => ({ id, label: EFFORT_LABEL[id] ?? id }))}
         />
         <small>{tx({ en: 'More effort: more careful, slower answers.', pt: 'Mais esforço, respostas mais cuidadosas e mais lentas.' })}</small>
+      </div>
+      <div className="field">
+        <div className="row">
+          <span className="spacer" style={{ fontSize: 12, fontWeight: 600, color: 'var(--ink-2)' }}>
+            {tx({ en: 'Sandbox policy', pt: 'Política de Sandbox' })}
+          </span>
+          {sandboxDriver === 'sandbox-exec' ? (
+            <span className="badge badge-ok">sandbox-exec (macOS)</span>
+          ) : sandboxDriver === 'bwrap' ? (
+            <span className="badge badge-ok">bwrap (Linux)</span>
+          ) : (
+            <span className="badge badge-warn">{tx({ en: 'No sandbox detected', pt: 'Nenhum sandbox detectado' })}</span>
+          )}
+        </div>
+        <Segmented<SandboxPolicy>
+          value={settings.sandboxPolicy ?? 'strict'}
+          onChange={sandboxPolicy => onChange({ sandboxPolicy })}
+          options={[
+            { id: 'strict', label: tx({ en: 'Strict (Isolated)', pt: 'Estrito (Isolado)' }) },
+            { id: 'relaxed', label: tx({ en: 'Relaxed (Unconfined)', pt: 'Relaxado (Sem trava)' }) },
+          ]}
+        />
+        <small>
+          {(settings.sandboxPolicy ?? 'strict') === 'strict'
+            ? tx({
+                en: 'Strict: requires kernel-level sandbox (bwrap or sandbox-exec) for write operations and verification.',
+                pt: 'Estrito: exige sandbox a nível de kernel (bwrap ou sandbox-exec) para operações de escrita e verificação.',
+              })
+            : tx({
+                en: 'Relaxed: allows AI agents and tests to run directly on the machine if no sandbox is available.',
+                pt: 'Relaxado: permite que agentes de IA e testes rodem direto na máquina caso nenhum sandbox esteja disponível.',
+              })}
+        </small>
+        {settings.sandboxPolicy === 'relaxed' && (
+          <div className="callout callout-warn">
+            <AlertTriangle size={16} />
+            {tx({
+              en: 'Relaxed sandbox mode allows agents to write and run commands with your user permissions without kernel containerization.',
+              pt: 'O modo relaxado permite que os agentes escrevam e executem comandos com suas permissões de usuário sem conteinerização a nível de kernel.',
+            })}
+          </div>
+        )}
       </div>
     </section>
   )

@@ -1,11 +1,12 @@
 import { Router } from 'express'
 import { getProviders } from '../lib/aiProviders.ts'
+import { detectSandboxDriver } from '../lib/sandbox/sandbox.ts'
 import { parseSettings, readSettings, saveSettings } from '../lib/settingsStore.ts'
 
 export const settingsRouter = Router()
 
 settingsRouter.get('/', async (_req, res) => {
-  res.json({ settings: readSettings(), providers: await getProviders() })
+  res.json({ settings: readSettings(), providers: await getProviders(), sandboxDriver: await detectSandboxDriver() })
 })
 
 settingsRouter.put('/', (req, res) => {
