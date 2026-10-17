@@ -5,12 +5,12 @@ import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'no
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { AGENT_HOME } from '../paths.ts'
-import { which } from '../run.ts'
-import { readSettings } from '../settingsStore.ts'
+import { readSettings, setSettingsOverride } from '../settingsStore.ts'
 import type { ProviderId } from '../aiProviders.ts'
 import type { AiEvent } from '../ai/events.ts'
 import { MAX_ARG_BYTES, type CliSpec } from '../ai/args.ts'
-import { copyClaudeLogin, jailArgs, prepareReadJail, seedConfigHome, type ReadJail } from '../ai/jail.ts'
+import { copyClaudeLogin, prepareReadJail, seedConfigHome, wrapReadJail, type ReadJail } from '../ai/jail.ts'
+import { detectSandboxDriver, wrapCommand, type SandboxDriver } from '../sandbox/sandbox.ts'
 import { spawnCli, type RunResult } from '../ai/runner.ts'
 import { SPECIALIZED_AGENTS } from './agents.ts'
 import type { SpecializedAgentId } from './types.ts'
@@ -38,40 +38,30 @@ export type FactoryRunOptions = {
   timeoutMs?: number
 }
 
-// bwrap jail: the whole disk read-only, except the folders the CLI must write to.
+// Sandbox jail (bwrap on Linux, sandbox-exec on macOS): the whole disk read-only, except the folders the CLI must write to.
 // Claude in write mode runs with --dangerously-skip-permissions and Bash, so without
-// the jail it could write anywhere the user can. Tested 2026-10-04: inside the jail
-// Claude authenticates, writes in cwd and gets EROFS outside it.
-export type Sandbox = { writable: string[]; tmpDir: string; env?: Record<string, string> }
+// the jail it could write anywhere the user can.
+export type Sandbox = { writable: string[]; tmpDir: string; env?: Record<string, string>; driver?: SandboxDriver }
 
-// Runs fn with a fresh jail tmp dir, or with no sandbox when bwrap is missing (the caller decides
+// Runs fn with a fresh jail tmp dir, or with no sandbox when no driver is available (the caller decides
 // whether that is acceptable). The tmp dir is always removed.
 export async function withSandbox<T>(writable: string[], fn: (sandbox: Sandbox | undefined) => Promise<T>): Promise<T> {
-  const tmpDir = (await which('bwrap')) ? mkdtempSync(join(tmpdir(), 'workstuff-factory-')) : null
+  const driver = await detectSandboxDriver()
+  const tmpDir = driver ? mkdtempSync(join(tmpdir(), 'workstuff-factory-')) : null
   try {
-    return await fn(tmpDir ? { writable: writable.filter(existsSync), tmpDir } : undefined)
+    return await fn(tmpDir ? { writable: writable.filter(existsSync), tmpDir, driver } : undefined)
   } finally {
     if (tmpDir) rmSync(tmpDir, { recursive: true, force: true })
   }
 }
 
 export function jail(sandbox: Sandbox, cwd: string, bin: string, args: string[]): { bin: string; args: string[] } {
-  return {
-    bin: 'bwrap',
-    args: [
-      '--ro-bind', '/', '/', '--dev', '/dev', '--proc', '/proc',
-      ...sandbox.writable.flatMap(dir => ['--bind', dir, dir]),
-      // A worktree's .git file points git at its gitdir, and the pipeline runs git there outside
-      // the jail: an agent that rewrote it would choose the config (and the commands) git runs.
-      ...sandbox.writable.flatMap(dir => ['--ro-bind-try', join(dir, '.git'), join(dir, '.git')]),
-      '--bind', sandbox.tmpDir, sandbox.tmpDir, '--setenv', 'TMPDIR', sandbox.tmpDir,
-      ...Object.entries(sandbox.env ?? {}).flatMap(([k, v]) => ['--setenv', k, v]),
-      // Own pid namespace: stopping bwrap also kills what the agent started (npm test, a build),
-      // which would otherwise keep writing to the worktree after the stop
-      '--unshare-pid', '--die-with-parent', '--chdir', cwd,
-      bin, ...args,
-    ],
-  }
+  return wrapCommand(
+    sandbox.driver ?? 'bwrap',
+    { writable: sandbox.writable, tmpDir: sandbox.tmpDir, cwd, env: sandbox.env, protectGit: true },
+    bin,
+    args,
+  )
 }
 
 export function buildFactoryArgs(
@@ -101,26 +91,35 @@ export function buildFactoryArgs(
     args.push('--tools', ...tools, '--allowedTools', ...tools, '--strict-mcp-config')
     // The prompt goes on stdin: as one argument it fails with E2BIG past 128 KiB (see server/lib/ai/args.ts)
     args.push('--append-system-prompt', options.systemPrompt, '-p')
-    if (mode === 'read') return readJail ? { bin: 'bwrap', args: jailArgs(readJail, cwd, 'claude', args), stdin: options.prompt } : { bin: 'claude', args, stdin: options.prompt }
-    if (!sandbox) throw new Error(say({ en: 'a write-mode agent only runs inside bwrap (bubblewrap), which is not available on this machine', pt: 'o agente com escrita só roda dentro do bwrap (bubblewrap), que não está disponível nesta máquina' }))
-    return { ...jail(sandbox, cwd, 'claude', ['--dangerously-skip-permissions', ...args]), stdin: options.prompt }
+    if (mode === 'read') return readJail ? { ...wrapReadJail(readJail, cwd, 'claude', args), stdin: options.prompt } : { bin: 'claude', args, stdin: options.prompt }
+    if (sandbox) return { ...jail(sandbox, cwd, 'claude', ['--dangerously-skip-permissions', ...args]), stdin: options.prompt }
+    const policy = readSettings().sandboxPolicy
+    if (policy === 'relaxed') return { bin: 'claude', args: ['--dangerously-skip-permissions', ...args], stdin: options.prompt }
+    throw new Error(say({
+      en: 'a write-mode agent only runs inside a sandbox (bwrap or sandbox-exec), which is not available on this machine',
+      pt: 'o agente com escrita só roda dentro de uma sandbox (bwrap ou sandbox-exec), que não está disponível nesta máquina',
+    }))
   }
 
   if (provider === 'codex') {
-    // In write mode bwrap is the sandbox: codex's own cannot start nested inside it (tested 2026-10-05),
+    // In write mode the sandbox isolates codex: codex's own cannot start nested inside it (tested 2026-10-05),
     // and on its own it left the worktree's .git file writable.
     const args = ['exec', '--json', '--skip-git-repo-check']
     args.push(...(mode === 'read' ? ['-s', 'read-only'] : ['--dangerously-bypass-approvals-and-sandbox']))
     if (options.model) args.push('-m', options.model)
     if (options.effort) args.push('-c', `model_reasoning_effort="${options.effort}"`)
     args.push('-C', cwd, '-')
-    if (mode === 'read') return readJail ? { bin: 'bwrap', args: jailArgs(readJail, cwd, 'codex', args), stdin: fullPrompt } : { bin: 'codex', args, stdin: fullPrompt }
-    if (!sandbox) throw new Error(say({ en: 'Codex in write mode only runs inside bwrap (bubblewrap), which is not available on this machine', pt: 'o Codex com escrita só roda dentro do bwrap (bubblewrap), que não está disponível nesta máquina' }))
-    return { ...jail(sandbox, cwd, 'codex', args), stdin: fullPrompt }
+    if (mode === 'read') return readJail ? { ...wrapReadJail(readJail, cwd, 'codex', args), stdin: fullPrompt } : { bin: 'codex', args, stdin: fullPrompt }
+    if (sandbox) return { ...jail(sandbox, cwd, 'codex', args), stdin: fullPrompt }
+    const policy = readSettings().sandboxPolicy
+    if (policy === 'relaxed') return { bin: 'codex', args, stdin: fullPrompt }
+    throw new Error(say({
+      en: 'Codex in write mode only runs inside a sandbox (bwrap or sandbox-exec), which is not available on this machine',
+      pt: 'o Codex com escrita só roda dentro de uma sandbox (bwrap ou sandbox-exec), que não está disponível nesta máquina',
+    }))
   }
 
   // agy writes to disk even in --mode plan (see server/lib/ai/args.ts): it only ever runs jailed.
-  if (!sandbox && !(mode === 'read' && readJail)) throw new Error(say({ en: 'Antigravity only runs inside bwrap (bubblewrap), which is not available on this machine; pick Claude or Codex in Settings', pt: 'o Antigravity só roda dentro do bwrap (bubblewrap), que não está disponível nesta máquina; escolha Claude ou Codex em Configurações' }))
   const args = ['--output-format', 'stream-json']
   if (mode === 'read') args.push('--mode', 'plan')
   else args.push('--mode', 'accept-edits', '--dangerously-skip-permissions')
@@ -128,8 +127,17 @@ export function buildFactoryArgs(
   if (options.effort) args.push('--effort', options.effort)
   if (Buffer.byteLength(fullPrompt) > MAX_ARG_BYTES) throw new Error(say({ en: 'this prompt is too large for Antigravity (over 128 KiB); choose Claude or Codex in Settings', pt: 'este prompt é grande demais para o Antigravity (mais de 128 KiB); escolha Claude ou Codex em Configurações' }))
   args.push('-p', fullPrompt)
-  if (mode === 'read' && readJail) return { bin: 'bwrap', args: jailArgs(readJail, cwd, 'agy', args) }
-  return jail(mode === 'write' ? sandbox! : { ...sandbox!, writable: sandbox!.writable.filter(d => d !== cwd) }, cwd, 'agy', args)
+
+  if (mode === 'read' && readJail) return wrapReadJail(readJail, cwd, 'agy', args)
+  if (sandbox) {
+    return jail(mode === 'write' ? sandbox : { ...sandbox, writable: sandbox.writable.filter(d => d !== cwd) }, cwd, 'agy', args)
+  }
+  const policy = readSettings().sandboxPolicy
+  if (policy === 'relaxed') return { bin: 'agy', args }
+  throw new Error(say({
+    en: 'Antigravity only runs inside a sandbox (bwrap or sandbox-exec), which is not available on this machine; pick Claude or Codex in Settings',
+    pt: 'o Antigravity só roda dentro de uma sandbox (bwrap ou sandbox-exec), que não está disponível nesta máquina; escolha Claude ou Codex em Configurações',
+  }))
 }
 
 // The jailed CLI gets its own config home next to the worktree, never the real ~/.claude or ~/.codex:
@@ -178,14 +186,14 @@ export async function runFactoryAgent(options: FactoryRunOptions): Promise<RunRe
   if (mode === 'read') {
     const prepared = await prepareReadJail(provider, [options.cwd], join(agentHomeOf(options.cwd), provider))
     try {
-      return await spawnCli(provider, model, argsFor({ readJail: prepared?.jail }), spawnOptions)
+      return await spawnCli(provider, model, argsFor({ readJail: prepared?.jail }), { ...spawnOptions, env: prepared?.jail.env })
     } finally {
       prepared?.cleanup()
     }
   }
 
   const home = prepareAgentHome(provider, options.cwd)
-  return withSandbox(home.dirs, async sandbox => spawnCli(provider, model, argsFor({ sandbox: sandbox ? { ...sandbox, env: home.env } : undefined }), spawnOptions))
+  return withSandbox(home.dirs, async sandbox => spawnCli(provider, model, argsFor({ sandbox: sandbox ? { ...sandbox, env: home.env } : undefined }), { ...spawnOptions, env: home.env }))
 }
 
 
@@ -243,6 +251,49 @@ if (import.meta.main && process.argv.includes('--selfcheck')) {
   assert.ok(agyWrite.args.includes('accept-edits'))
   assert.ok(agyWrite.args.join(' ').includes('--bind /wt /wt'))
   assert.throws(() => buildFactoryArgs('agy', { ...base, mode: 'read' }), /bwrap/, 'agy sem bwrap, recusa')
+
+  // sandbox-exec driver tests
+  const execSandbox: Sandbox = { ...sandbox, driver: 'sandbox-exec' }
+  const claudeExec = buildFactoryArgs('claude', { ...base, mode: 'write', sandbox: execSandbox })
+  assert.equal(claudeExec.bin, 'sandbox-exec')
+  assert.equal(claudeExec.args[0], '-p')
+  assert.ok(claudeExec.args[1].includes('(deny file-write*)'))
+  assert.equal(claudeExec.args[2], 'claude')
+
+  const codexExec = buildFactoryArgs('codex', { ...base, mode: 'write', sandbox: execSandbox })
+  assert.equal(codexExec.bin, 'sandbox-exec')
+  assert.equal(codexExec.args[2], 'codex')
+
+  const agyExecWrite = buildFactoryArgs('agy', { ...base, mode: 'write', sandbox: execSandbox })
+  assert.equal(agyExecWrite.bin, 'sandbox-exec')
+  assert.equal(agyExecWrite.args[2], 'agy')
+
+  const execReadJail = { ...readJail, driver: 'sandbox-exec' as const }
+  const claudeExecRead = buildFactoryArgs('claude', { ...base, mode: 'read', readJail: execReadJail })
+  assert.equal(claudeExecRead.bin, 'sandbox-exec')
+  assert.equal(buildFactoryArgs('agy', { ...base, mode: 'read', readJail: execReadJail }).bin, 'sandbox-exec')
+
+  // Relaxed mode tests
+  setSettingsOverride({ sandboxPolicy: 'relaxed' })
+  try {
+    const claudeRelaxed = buildFactoryArgs('claude', { ...base, mode: 'write' })
+    assert.equal(claudeRelaxed.bin, 'claude')
+    assert.ok(claudeRelaxed.args.includes('--dangerously-skip-permissions'))
+
+    const codexRelaxed = buildFactoryArgs('codex', { ...base, mode: 'write' })
+    assert.equal(codexRelaxed.bin, 'codex')
+    assert.ok(codexRelaxed.args.includes('--dangerously-bypass-approvals-and-sandbox'))
+
+    const agyRelaxed = buildFactoryArgs('agy', { ...base, mode: 'write' })
+    assert.equal(agyRelaxed.bin, 'agy')
+    assert.ok(agyRelaxed.args.includes('accept-edits'))
+
+    const agyRelaxedRead = buildFactoryArgs('agy', { ...base, mode: 'read' })
+    assert.equal(agyRelaxedRead.bin, 'agy')
+    assert.ok(agyRelaxedRead.args.includes('plan'))
+  } finally {
+    setSettingsOverride(null)
+  }
 
   console.log('factory runner selfcheck: ok')
 }

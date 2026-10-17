@@ -5,7 +5,8 @@
 import assert from 'node:assert/strict'
 import type { ProviderId } from '../aiProviders.ts'
 import { say } from '../i18n.ts'
-import { jailArgs, type ReadJail } from './jail.ts'
+import { readSettings, setSettingsOverride } from '../settingsStore.ts'
+import { wrapReadJail, type ReadJail } from './jail.ts'
 
 export type RunOptions = {
   prompt: string
@@ -14,7 +15,7 @@ export type RunOptions = {
   effort?: string
   cwd?: string
   addDirs?: string[]
-  // bwrap read jail (see jail.ts): optional for Claude and Codex, mandatory for agy
+  // sandbox read jail (see jail.ts): optional for Claude and Codex, mandatory for agy
   jail?: ReadJail
 }
 
@@ -39,7 +40,7 @@ export function buildArgs(provider: ProviderId, o: RunOptions): CliSpec {
     if (o.addDirs?.length) args.push('--add-dir', ...o.addDirs)
     if (o.systemPrompt) args.push('--append-system-prompt', o.systemPrompt)
     args.push('-p')
-    return o.jail ? { bin: 'bwrap', args: jailArgs(o.jail, o.cwd, 'claude', args), stdin: o.prompt } : { bin: 'claude', args, stdin: o.prompt }
+    return o.jail ? { ...wrapReadJail(o.jail, o.cwd, 'claude', args), stdin: o.prompt } : { bin: 'claude', args, stdin: o.prompt }
   }
 
   if (provider === 'codex') {
@@ -50,13 +51,12 @@ export function buildArgs(provider: ProviderId, o: RunOptions): CliSpec {
     if (o.cwd) args.push('-C', o.cwd)
     for (const dir of o.addDirs ?? []) args.push('--add-dir', dir)
     args.push('-')
-    return o.jail ? { bin: 'bwrap', args: jailArgs(o.jail, o.cwd, 'codex', args), stdin: fullPrompt } : { bin: 'codex', args, stdin: fullPrompt }
+    return o.jail ? { ...wrapReadJail(o.jail, o.cwd, 'codex', args), stdin: fullPrompt } : { bin: 'codex', args, stdin: fullPrompt }
   }
 
   // O agy não tem modo leitura que segure: testado em 30/09/2026, ele escreveu arquivo mesmo com
   // --mode plan e --sandbox. A trava é do sistema: o jail de leitura, gravável só na pasta de estado
   // dele e numa temporária. A rede continua (ele precisa da API).
-  if (!o.jail) throw new Error(say({ en: 'Antigravity only runs read-only inside bwrap (bubblewrap), which is not available on this machine; choose Claude or Codex in Settings', pt: 'o Antigravity só roda em modo leitura dentro do bwrap (bubblewrap), que não está disponível nesta máquina; escolha Claude ou Codex em Configurações' }))
   // agy documents no plain-text stdin, so its prompt stays an argument and is bounded by it.
   if (Buffer.byteLength(fullPrompt) > MAX_ARG_BYTES) throw new Error(say({ en: 'this prompt is too large for Antigravity (over 128 KiB); choose Claude or Codex in Settings for large reviews', pt: 'este prompt é grande demais para o Antigravity (mais de 128 KiB); escolha Claude ou Codex em Configurações para revisões grandes' }))
   const args = ['--output-format', 'stream-json']
@@ -64,7 +64,16 @@ export function buildArgs(provider: ProviderId, o: RunOptions): CliSpec {
   if (o.effort) args.push('--effort', o.effort)
   for (const dir of o.addDirs ?? []) args.push('--add-dir', dir)
   args.push('-p', fullPrompt)
-  return { bin: 'bwrap', args: jailArgs(o.jail, o.cwd, 'agy', args) }
+
+  if (o.jail) return wrapReadJail(o.jail, o.cwd, 'agy', args)
+
+  const policy = readSettings().sandboxPolicy
+  if (policy === 'relaxed') return { bin: 'agy', args }
+
+  throw new Error(say({
+    en: 'Antigravity only runs read-only inside a sandbox (bwrap or sandbox-exec), which is not available on this machine; choose Claude or Codex in Settings, or configure relaxed policy',
+    pt: 'o Antigravity só roda em modo leitura dentro de uma sandbox (bwrap ou sandbox-exec), que não está disponível nesta máquina; escolha Claude ou Codex em Configurações, ou configure a política relaxada',
+  }))
 }
 
 if (import.meta.main && process.argv.includes('--selfcheck')) {
@@ -107,7 +116,36 @@ if (import.meta.main && process.argv.includes('--selfcheck')) {
   const jailed = buildArgs('claude', { prompt: 'p', jail, cwd: '/proj' })
   assert.equal(jailed.bin, 'bwrap', 'com jail, claude roda dentro do bwrap')
   assert.equal(jailed.args[jailed.args.indexOf('--chdir') + 1], '/proj')
-  assert.equal(jailed.stdin, 'p', 'o prompt atravessa o bwrap pela entrada padrão')
   assert.equal(buildArgs('codex', { prompt: 'p', jail, cwd: '/proj' }).bin, 'bwrap')
+
+  // wrapReadJail com sandbox-exec
+  const execJail: ReadJail = { ...jail, driver: 'sandbox-exec' }
+  const claudeExec = buildArgs('claude', { prompt: 'p', jail: execJail, cwd: '/proj' })
+  assert.equal(claudeExec.bin, 'sandbox-exec')
+  assert.equal(claudeExec.args[0], '-p')
+  assert.equal(claudeExec.stdin, 'p')
+
+  const codexExec = buildArgs('codex', { prompt: 'p', jail: execJail, cwd: '/proj' })
+  assert.equal(codexExec.bin, 'sandbox-exec')
+  assert.equal(codexExec.args[0], '-p')
+  assert.equal(codexExec.stdin, 'p')
+
+  const agyExec = buildArgs('agy', { prompt: 'pergunta', systemPrompt: 'REGRAS', jail: execJail, cwd: '/proj' })
+  assert.equal(agyExec.bin, 'sandbox-exec')
+  assert.equal(agyExec.args[0], '-p')
+  assert.ok(agyExec.args[1].includes('(deny file-write*)'))
+  assert.equal(agyExec.args[2], 'agy')
+
+  // Política relaxada sem jail permite agy rodar direto
+  setSettingsOverride({ sandboxPolicy: 'relaxed' })
+  try {
+    const agyRelaxed = buildArgs('agy', { prompt: 'pergunta', systemPrompt: 'REGRAS', cwd: '/proj' })
+    assert.equal(agyRelaxed.bin, 'agy')
+    assert.ok(agyRelaxed.args.includes('-p'))
+    assert.ok(agyRelaxed.args.at(-1)!.endsWith('pergunta'))
+  } finally {
+    setSettingsOverride(null)
+  }
+
   console.log('ai args selfcheck: ok')
 }

@@ -15,6 +15,7 @@ import type { ProviderId } from '../aiProviders.ts'
 import { say } from '../i18n.ts'
 import { AGENT_HOME } from '../paths.ts'
 import { which } from '../run.ts'
+import { buildSeatbeltProfile, detectSandboxDriver, type SandboxDriver } from '../sandbox/sandbox.ts'
 
 export type ReadJail = {
   home: string
@@ -26,6 +27,7 @@ export type ReadJail = {
   /** Mounted writable: the config home (sessions, caches) and, for agy, its state folder. */
   writable: string[]
   env: Record<string, string>
+  driver?: SandboxDriver
 }
 
 const BIN: Record<ProviderId, string> = { claude: 'claude', codex: 'codex', agy: 'agy' }
@@ -83,18 +85,36 @@ async function binaryDirs(bin: string): Promise<string[]> {
   return [...new Set(dirs)]
 }
 
-// A jail for one run, removed by cleanup(). Null where bwrap is missing (macOS, Windows, or not installed).
+// A jail for one run, removed by cleanup(). Null where no sandbox driver is available (e.g. neither bwrap nor sandbox-exec).
 export async function prepareReadJail(provider: ProviderId, folders: string[], configHome?: string): Promise<{ jail: ReadJail; cleanup: () => void } | null> {
-  if (!(await which('bwrap'))) return null
+  const driver = await detectSandboxDriver()
+  if (!driver) return null
   const tmpDir = mkdtempSync(join(tmpdir(), 'workstuff-ai-'))
   const ownHome = configHome ?? join(tmpDir, 'config')
   const writable = provider === 'agy' ? [join(AGENT_HOME, '.gemini')] : [ownHome]
   const env = { ...jailEnv(process.env), ...seedConfigHome(provider, ownHome), HOME: homedir() }
   const binDirs = await binaryDirs(BIN[provider])
   return {
-    jail: { home: homedir(), tmpDir, visible: [...folders.filter(existsSync), ...binDirs], binDirs, writable: writable.filter(existsSync), env },
+    jail: { home: homedir(), tmpDir, visible: [...folders.filter(existsSync), ...binDirs], binDirs, writable: writable.filter(existsSync), env, driver },
     cleanup: () => rmSync(tmpDir, { recursive: true, force: true }),
   }
+}
+
+export function wrapReadJail(
+  jail: ReadJail,
+  cwd: string | undefined,
+  bin: string,
+  args: string[],
+): { bin: string; args: string[] } {
+  if (jail.driver === 'sandbox-exec') {
+    const profile = buildSeatbeltProfile({
+      writable: jail.writable,
+      tmpDir: jail.tmpDir,
+      cwd,
+    })
+    return { bin: 'sandbox-exec', args: ['-p', profile, bin, ...args] }
+  }
+  return { bin: 'bwrap', args: jailArgs(jail, cwd, bin, args) }
 }
 
 export function jailArgs(jail: ReadJail, cwd: string | undefined, bin: string, args: string[]): string[] {
@@ -129,6 +149,20 @@ if (import.meta.main && process.argv.includes('--selfcheck')) {
   assert.deepEqual(args.slice(-2), ['claude', '-p'])
   const path = args[args.indexOf('PATH') + 1]
   assert.ok(path.startsWith('/home/u/.local/bin') && !path.includes('/home/u/proj'), 'a pasta do projeto não entra no PATH')
+
+  // wrapReadJail tests
+  const bwrapWrapped = wrapReadJail(jail, '/home/u/proj', 'claude', ['-p'])
+  assert.equal(bwrapWrapped.bin, 'bwrap')
+  assert.deepEqual(bwrapWrapped.args, jailArgs(jail, '/home/u/proj', 'claude', ['-p']), 'wrapReadJail com bwrap usa jailArgs')
+
+  const execJail: ReadJail = { ...jail, driver: 'sandbox-exec' }
+  const execWrapped = wrapReadJail(execJail, '/home/u/proj', 'claude', ['-p'])
+  assert.equal(execWrapped.bin, 'sandbox-exec')
+  assert.equal(execWrapped.args[0], '-p')
+  assert.ok(execWrapped.args[1].includes('(deny file-write*)'), 'sandbox-exec nega escrita')
+  assert.ok(execWrapped.args[1].includes('/tmp/w/config'), 'sandbox-exec libera gravável')
+  assert.equal(execWrapped.args[2], 'claude')
+  assert.equal(execWrapped.args[3], '-p')
 
   const login = mkdtempSync(join(tmpdir(), 'ws-jail-'))
   try {

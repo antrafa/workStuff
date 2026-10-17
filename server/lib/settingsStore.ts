@@ -13,7 +13,10 @@ const FILE = dataFile('settings.json')
 // Claude primeiro: é o único provedor em que as guardas de comando existem de fato.
 const DEFAULTS: Settings = { provider: 'claude', model: 'opus', effort: 'medium', language: DEFAULT_LANG, sandboxPolicy: 'strict' }
 
-export const readSettings = (): Settings => ({ ...DEFAULTS, ...readJson<Partial<Settings>>(FILE, {}) })
+let settingsOverride: Partial<Settings> | null = null
+export const setSettingsOverride = (override: Partial<Settings> | null) => { settingsOverride = override }
+
+export const readSettings = (): Settings => ({ ...DEFAULTS, ...readJson<Partial<Settings>>(FILE, {}), ...(settingsOverride ?? {}) })
 
 const MODEL_ID = /^[\w.:/-]{1,200}$/
 const EFFORT = /^[a-z]{1,20}$/
@@ -71,6 +74,12 @@ if (import.meta.main && process.argv.includes('--selfcheck')) {
     () => parseSettings({ provider: 'claude', model: 'opus', effort: 'medium', language: 'en', sandboxPolicy: 123 }),
     /invalid sandbox policy: use strict or relaxed/
   )
+
+  // In-memory settings override
+  setSettingsOverride({ sandboxPolicy: 'relaxed' })
+  assert.equal(readSettings().sandboxPolicy, 'relaxed')
+  setSettingsOverride(null)
+  assert.equal(readSettings().sandboxPolicy, initial.sandboxPolicy ?? 'strict')
 
   console.log('settingsStore selfcheck: ok')
 }

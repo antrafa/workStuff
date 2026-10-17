@@ -15,6 +15,8 @@ export type SandboxOptions = {
 }
 
 let cachedDriver: SandboxDriver | undefined
+let driverOverride: SandboxDriver | undefined
+export const setDriverOverride = (driver: SandboxDriver | undefined) => { driverOverride = driver }
 
 /**
  * Detects the available sandbox driver:
@@ -23,6 +25,7 @@ let cachedDriver: SandboxDriver | undefined
  * 3. null if no supported sandbox driver is available
  */
 export async function detectSandboxDriver(forceRefresh = false): Promise<SandboxDriver> {
+  if (driverOverride !== undefined) return driverOverride
   if (cachedDriver !== undefined && !forceRefresh) return cachedDriver
   if (await which('bwrap')) {
     cachedDriver = 'bwrap'
@@ -281,6 +284,14 @@ if (import.meta.main && process.argv.includes('--selfcheck')) {
       rmSync(liveDir, { recursive: true, force: true })
     }
   }
+
+  // 5. Driver override test
+  setDriverOverride('bwrap')
+  assert.equal(await detectSandboxDriver(), 'bwrap')
+  setDriverOverride(null)
+  assert.equal(await detectSandboxDriver(), null)
+  setDriverOverride(undefined)
+  assert.equal(await detectSandboxDriver(), detected)
 
   console.log('sandbox selfcheck: ok')
 }

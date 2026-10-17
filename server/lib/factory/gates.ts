@@ -8,6 +8,7 @@ import { basename, join } from 'node:path'
 import { homedir, tmpdir } from 'node:os'
 import { spawn } from 'node:child_process'
 import { run } from '../run.ts'
+import { readSettings, setSettingsOverride } from '../settingsStore.ts'
 import { jail, withSandbox } from './runner.ts'
 import { GIT_NO_HOOKS, uncommittedFiles } from './worktree.ts'
 import { TEST_FILE, type BlastRadiusReport, type CriterionCoverage, type CriterionTests, type FileBlastRadius, type VerifyStep } from './types.ts'
@@ -102,8 +103,9 @@ export function gateArtifactsExist(worktreePath: string, claimedFiles: string[],
 }
 
 // 3. Gate: runs the project's verification (tests, or the task's own command) in code, not by an agent.
-// The suite executes code the agent just wrote, so it runs in the same bwrap jail as the agent:
-// only the worktree, a tmp dir and the build tool caches are writable. Without bwrap it does not run.
+// The suite executes code the agent just wrote, so it runs in the same sandbox as the agent:
+// only the worktree, a tmp dir and the build tool caches are writable. Without sandbox it does not run
+// unless sandboxPolicy is relaxed.
 // 10 min: `mvn test` in a real Java project rarely fits less, and a timeout reads as a failure.
 const MAX_OUTPUT = 30_000
 
@@ -184,7 +186,7 @@ export async function gateTestsPass(
 const clip = (output: string) => (output.length > MAX_OUTPUT ? `[...]\n${output.slice(-MAX_OUTPUT)}` : output)
 
 // Runs one program on the worktree inside the jail, with the build caches writable and a throwaway
-// HOME for tools that keep settings there. Without bwrap it does not run: it executes agent code.
+// HOME for tools that keep settings there. Without sandbox it does not run unless sandboxPolicy is relaxed: it executes agent code.
 export async function runJailed(
   worktreePath: string,
   bin: string,
@@ -195,12 +197,19 @@ export async function runJailed(
   const command = [bin, ...args].join(' ')
   return withSandbox([worktreePath, ...buildCacheDirs()], async sandbox => {
     if (!sandbox) {
-      const reason = say({ en: 'bwrap (bubblewrap) is not installed: the suite does not run outside the sandbox because it executes code the agent wrote.', pt: 'bwrap (bubblewrap) não está instalado: a suíte não roda fora do sandbox porque executa código escrito pelo agente.' })
+      const policy = readSettings().sandboxPolicy
+      if (policy === 'relaxed') {
+        return spawnVerify({ bin, args }, command, worktreePath, t0, opts)
+      }
+      const reason = say({
+        en: 'bwrap or sandbox-exec is not installed: the suite does not run outside the sandbox because it executes code the agent wrote.',
+        pt: 'bwrap ou sandbox-exec não está instalado: a suíte não roda fora do sandbox porque executa código escrito pelo agente.',
+      })
       return { passed: false, skipped: true, command, output: reason, exitCode: -1, durationMs: 0, reason }
     }
-    const env = { ...throwawayCaches(sandbox.tmpDir), ...opts.env }
+    const env = { ...throwawayCaches(sandbox.tmpDir), TMPDIR: sandbox.tmpDir, ...opts.env }
     const jailed = jail({ ...sandbox, env }, worktreePath, bin, args)
-    return spawnVerify(jailed, command, worktreePath, t0, opts)
+    return spawnVerify(jailed, command, worktreePath, t0, { ...opts, env })
   })
 }
 
@@ -209,7 +218,7 @@ function spawnVerify(
   command: string,
   worktreePath: string,
   t0: number,
-  { timeoutMs = 10 * 60_000, signal }: { timeoutMs?: number; signal?: AbortSignal },
+  { timeoutMs = 10 * 60_000, signal, env }: { timeoutMs?: number; signal?: AbortSignal; env?: Record<string, string> },
 ): Promise<TestsGateResult> {
   return new Promise(resolve => {
     let output = ''
@@ -218,7 +227,7 @@ function spawnVerify(
       cwd: worktreePath,
       // Own process group so we can stop the jail AND the test runner it spawns
       detached: process.platform !== 'win32',
-      env: { ...process.env, CI: 'true' },
+      env: { ...process.env, CI: 'true', ...env },
     })
 
     const killTree = () => {
@@ -545,6 +554,24 @@ if (import.meta.main && process.argv.includes('--selfcheck')) {
     if (!npmCache.skipped) assert.equal(npmCache.passed, true, 'cache do npm descartável, dentro do tmp do jail')
     const failing = await gateTestsPass(tmp, { command: 'exit 3' })
     if (!failing.skipped) assert.equal(failing.exitCode, 3)
+
+    // Testes de política sandbox (strict vs relaxed) quando não há driver disponível
+    const { setDriverOverride } = await import('../sandbox/sandbox.ts')
+    setDriverOverride(null)
+    setSettingsOverride({ sandboxPolicy: 'strict' })
+    try {
+      const strictSkipped = await gateTestsPass(tmp, { command: 'echo strict' })
+      assert.equal(strictSkipped.skipped, true)
+      assert.ok(strictSkipped.reason?.includes('sandbox-exec') || strictSkipped.reason?.includes('bwrap'))
+
+      setSettingsOverride({ sandboxPolicy: 'relaxed' })
+      const relaxedRun = await gateTestsPass(tmp, { command: 'echo relaxed' })
+      assert.equal(relaxedRun.passed, true)
+      assert.match(relaxedRun.output, /relaxed/)
+    } finally {
+      setDriverOverride(undefined)
+      setSettingsOverride(null)
+    }
 
     assert.deepEqual(nonDocFiles(['README.md', 'docs/api.yaml', 'src/a.ts', 'CHANGELOG']), ['src/a.ts'])
     assert.deepEqual(nonTestFiles(['src/a.test.ts', 'tests/x.py', 'pkg/a_test.go', 'src/FooTest.java', 'scripts/check-nav.ts', 'src/a.ts']), ['src/a.ts'])
