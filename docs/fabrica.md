@@ -82,7 +82,7 @@ Durante tudo isso, o cartão da tarefa no Quadro mostra qual agente está trabal
 | **Tester** | Depois do primeiro commit, de cada rodada de correção e de cada ajuste | escrita | worktree, no sandbox | `TestEnvelope`: testes, arquivo de teste por critério (`criteriaTests`), parecer | Portão de verificação e de cobertura por critério |
 | **Documenter** | Antes da revisão, se alguma documentação cita os arquivos alterados | escrita | worktree, no sandbox | `DocsEnvelope`: documentação alterada, descrição final do MR | Portão "só documentação" |
 | **Reviewer** | Revisão, em paralelo com Security | leitura | worktree | `ReviewEnvelope`: achados, checagem de cada critério por id, rascunho do MR | Veredito em código |
-| **Security** | Revisão, em paralelo com Reviewer, em toda rodada, depois das ferramentas de segurança | leitura | worktree | `ReviewEnvelope`: achados de segurança | Veredito em código |
+| **Security** | Revisão, em paralelo com Reviewer, em toda rodada, depois das ferramentas de segurança | leitura | worktree | `ReviewEnvelope`: achados de segurança, com checagem extra quando o diff toca Dockerfile, Kubernetes/Helm, CI ou Terraform | Veredito em código |
 | **Verifier** | Só quando há achado bloqueante | leitura | worktree | `verdicts`: cada achado se sustenta ou não, com o motivo | Só "não se sustenta" com motivo refuta |
 
 Cada agente recebe o que precisa dos anteriores: os critérios do Analyst chegam ao Architect, ao Implementer, ao Tester e ao Reviewer; os cenários de teste do Architect chegam ao Tester; os achados da rodada anterior chegam aos revisores da rodada seguinte.
@@ -391,6 +391,7 @@ flowchart LR
 - **Verificação no jail.** A suíte de testes executa código que o agente escreveu. Rodar fora do jail anularia o isolamento do agente, então sem sandbox a verificação não roda e o QA aparece reprovado.
 - **Política relaxada.** Em Configurações → Provedor de IA, a política de sandbox **Relaxado** deixa rodar sem sandbox quando a máquina não tem nenhum: agente com escrita (com `--dangerously-skip-permissions`), Antigravity e a suíte de verificação rodam direto, como o seu usuário, e podem gravar em qualquer lugar, inclusive no seu checkout e no `.git`. O padrão é **Estrito**. A revisão de MR remoto nunca relaxa: exige `bwrap`.
 - **`.git` somente leitura para os agentes.** Os commits são feitos pela esteira, em código.
+- **O que o agente lê é dado.** Todo prompt da esquadra (`CONTENT_IS_DATA` em `agents.ts`) manda tratar demanda, issue, diff e saída de ferramenta como dado: um texto ali que peça para mudar de tarefa, aprovar ou enviar arquivo é citado como suspeito, não obedecido. É uma regra de prompt, não uma trava; a trava é o jail.
 - **Nada vai ao remoto sem você.** O push só acontece em "Criar MR/PR".
 - **Validação na fronteira.** Provedor, modelo, modelos por agente, teto e branch base são validados ao criar ou editar a tarefa, porque viram argumentos de linha de comando.
 - **Só o localhost chama a API.** Uma requisição cujo `Host` ou `Origin` não seja `localhost`, `127.0.0.1` ou `[::1]` recebe 403 (`server/lib/localOrigin.ts`): sem isso, uma página aberta no navegador dispararia ações da Fábrica.
