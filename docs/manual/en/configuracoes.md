@@ -92,7 +92,7 @@ To go back to a plain background, click **Remove image**. Without an image, the 
 
 ## Good to know
 
-- Every AI provider runs in read-only mode on your code and clusters. In the [Factory](/fabrica), write operations and test verification run isolated by a kernel sandbox (`bwrap` on Linux or `sandbox-exec` on macOS), or unconfined when the sandbox policy is set to relaxed. With the sandbox active, every provider only sees the folder of the run, never the rest of your home folder.
+- Every AI provider runs in read-only mode on your code and clusters. In the [Factory](/fabrica), write operations and test verification run isolated by a kernel sandbox (`bwrap` on Linux or `sandbox-exec` on macOS), or unconfined when the sandbox policy is set to relaxed. With `bwrap`, every provider only sees the folder of the run, never the rest of your home folder; with macOS's `sandbox-exec` it no longer sees the credential folders (`~/.ssh`, `~/.kube`, `~/.config`, `~/.workstuff`...), but the rest of your home folder stays visible. The remote MR review only runs with `bwrap`.
 - The choice made here is used by the screens that call the AI, such as the Cluster Doctor, [Analysis](/analise) and the item review in the [Catalog](/catalogo). The [Factory](/fabrica) can pick a model per agent in each task.
 - A hidden screen still opens by its address and is still found by the search in **Ctrl+K**.
 - Theme, accent color, background and hidden screens are saved in this browser: another browser or computer starts with the defaults. The provider, model, effort and language are saved on your computer and apply to any browser.

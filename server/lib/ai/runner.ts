@@ -1,5 +1,7 @@
+import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
-import { readSettings } from '../settingsStore.ts'
+import { readSettings, setSettingsOverride } from '../settingsStore.ts'
+import { setDriverOverride } from '../sandbox/sandbox.ts'
 import type { ProviderId } from '../aiProviders.ts'
 import { buildArgs, type CliSpec, type RunOptions } from './args.ts'
 import { createParser, type AiEvent } from './events.ts'
@@ -12,18 +14,22 @@ export type RunRequest = Omit<RunOptions, 'model' | 'effort'> & {
   timeoutMs?: number
   // Sem nenhuma saída por esse tempo, o processo é encerrado e a resposta parcial é preservada.
   stallMs?: number
-  // The prompt carries text written by someone else (a remote MR): without the read jail it does not run
+  // The prompt carries text written by someone else (a remote MR): without bwrap it does not run
   thirdPartyText?: boolean
 }
 
 export type RunResult = { text: string; provider: ProviderId; model: string; durationMs: number; stopped: boolean; sessionId: string | null; usage: { inputTokens?: number; outputTokens?: number; costUsd?: number } | null }
 
 // Roda o CLI escolhido em Configurações (provedor, modelo e esforço), sempre em modo leitura e, onde
-// há bwrap, preso no jail de leitura (jail.ts): o agente só vê as pastas desta execução.
+// há sandbox, preso no jail de leitura (jail.ts): o agente só vê as pastas desta execução.
 export async function runAi(req: RunRequest): Promise<RunResult> {
   const { provider, model, effort } = readSettings()
   const prepared = await prepareReadJail(provider, [req.cwd, ...(req.addDirs ?? [])].filter((d): d is string => Boolean(d)))
-  if (!prepared && req.thirdPartyText) throw new Error(say({ en: 'reviewing text written by someone else needs bwrap (bubblewrap), which confines what the AI can read; install it to use this review', pt: 'revisar texto escrito por outra pessoa exige o bwrap (bubblewrap), que limita o que a IA pode ler; instale-o para usar esta revisão' }))
+  // Only bwrap empties the home: macOS's sandbox-exec hides a list of folders and leaves the rest readable
+  if (req.thirdPartyText && prepared?.jail.driver !== 'bwrap') {
+    prepared?.cleanup()
+    throw new Error(say({ en: 'reviewing text written by someone else needs bwrap (bubblewrap, Linux only), which confines what the AI can read; install it to use this review', pt: 'revisar texto escrito por outra pessoa exige o bwrap (bubblewrap, só no Linux), que limita o que a IA pode ler; instale-o para usar esta revisão' }))
+  }
   try {
     return await spawnCli(provider, model, buildArgs(provider, { ...req, model, effort, jail: prepared?.jail }), req)
   } finally {
@@ -117,4 +123,19 @@ export function spawnCli(provider: ProviderId, model: string, { bin, args, stdin
       resolve({ text, provider, model, durationMs: Date.now() - t0, stopped, sessionId: parser.sessionId(), usage: parser.usage() })
     })
   })
+}
+
+if (import.meta.main && process.argv.includes('--selfcheck')) {
+  // agy: its config home is not seeded, so no real login is copied by the test
+  setSettingsOverride({ provider: 'agy' })
+  try {
+    for (const driver of ['sandbox-exec', null] as const) {
+      setDriverOverride(driver)
+      await assert.rejects(runAi({ prompt: 'p', cwd: process.cwd(), onEvent: () => {}, thirdPartyText: true }), /bwrap/, `texto de terceiro não roda com driver ${driver}`)
+    }
+  } finally {
+    setDriverOverride(undefined)
+    setSettingsOverride(null)
+  }
+  console.log('ai runner selfcheck: ok')
 }

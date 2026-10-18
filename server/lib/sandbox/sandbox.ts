@@ -12,6 +12,9 @@ export type SandboxOptions = {
   cwd?: string
   env?: Record<string, string>
   protectGit?: boolean
+  /** sandbox-exec only: folders the process cannot read, except what readable and writable give back. */
+  denyRead?: string[]
+  readable?: string[]
 }
 
 let cachedDriver: SandboxDriver | undefined
@@ -52,53 +55,38 @@ function resolveRealPath(p: string): string {
   }
 }
 
+// An SBPL string literal: a quote or backslash in a path would otherwise end the string and
+// let the rest of the path be read as profile rules.
+const sbString = (s: string) => `"${s.replace(/[\\"]/g, '\\$&')}"`
+
+const withRealPaths = (dirs: string[]) => [...new Set(dirs.filter(Boolean).flatMap(d => [d, resolveRealPath(d)]))]
+
 /**
  * Builds a Seatbelt Scheme profile for macOS sandbox-exec.
  * Denies all writes by default, allows /dev/, and allows specified writable paths.
  * If protectGit is enabled, explicitly denies writes to .git directories.
+ * denyRead hides folders (secrets); readable, writable and tmpDir are allowed back on top of it,
+ * since in SBPL the last matching rule wins.
  */
-export function buildSeatbeltProfile(options: {
-  writable: string[]
-  tmpDir: string
-  cwd?: string
-  protectGit?: boolean
-}): string {
+export function buildSeatbeltProfile(options: Omit<SandboxOptions, 'env'>): string {
   const lines: string[] = [
     '(version 1)',
     '(allow default)',
     '(deny file-write*)',
     '(allow file-write* (regex #"^/dev/"))',
   ]
-
-  const allowPaths = new Set<string>()
-  const targets = [...options.writable, options.tmpDir]
-  for (const dir of targets) {
-    if (!dir) continue
-    allowPaths.add(dir)
-    const resolved = resolveRealPath(dir)
-    if (resolved) {
-      allowPaths.add(resolved)
-    }
-  }
-
-  for (const p of allowPaths) {
-    lines.push(`(allow file-write* (subpath "${p}"))`)
-  }
+  const writable = withRealPaths([...options.writable, options.tmpDir])
+  for (const p of writable) lines.push(`(allow file-write* (subpath ${sbString(p)}))`)
 
   if (options.protectGit) {
-    const denyPaths = new Set<string>()
-    for (const dir of options.writable) {
-      if (!dir) continue
-      const gitPath = join(dir, '.git')
-      denyPaths.add(gitPath)
-      const resolvedGit = resolveRealPath(gitPath)
-      if (resolvedGit) {
-        denyPaths.add(resolvedGit)
-      }
+    for (const p of withRealPaths(options.writable.filter(Boolean).map(dir => join(dir, '.git')))) {
+      lines.push(`(deny file-write* (subpath ${sbString(p)}))`)
     }
-    for (const p of denyPaths) {
-      lines.push(`(deny file-write* (subpath "${p}"))`)
-    }
+  }
+
+  if (options.denyRead?.length) {
+    for (const p of withRealPaths(options.denyRead)) lines.push(`(deny file-read* (subpath ${sbString(p)}))`)
+    for (const p of withRealPaths([...(options.readable ?? []), ...writable])) lines.push(`(allow file-read* (subpath ${sbString(p)}))`)
   }
 
   return lines.join('\n')
@@ -110,13 +98,7 @@ export function buildSeatbeltProfile(options: {
  */
 export function wrapCommand(
   driver: SandboxDriver,
-  options: {
-    writable: string[]
-    tmpDir: string
-    cwd?: string
-    env?: Record<string, string>
-    protectGit?: boolean
-  },
+  options: SandboxOptions,
   bin: string,
   args: string[],
 ): { bin: string; args: string[] } {
@@ -195,6 +177,16 @@ if (import.meta.main && process.argv.includes('--selfcheck')) {
   } finally {
     rmSync(tempDir, { recursive: true, force: true })
   }
+
+  // Read denial: secrets hidden, the run's folders given back after the deny (last match wins)
+  const readProfile = buildSeatbeltProfile({ writable: ['/tmp/w'], tmpDir: '/tmp/t', denyRead: ['/Users/u/.ssh', '/Users/u/.workstuff'], readable: ['/Users/u/.workstuff/worktrees/x'] })
+  const denyAt = readProfile.indexOf('(deny file-read* (subpath "/Users/u/.workstuff"))')
+  assert.ok(denyAt > 0, 'denies reading the data folder')
+  assert.ok(readProfile.includes('(deny file-read* (subpath "/Users/u/.ssh"))'))
+  assert.ok(readProfile.indexOf('(allow file-read* (subpath "/Users/u/.workstuff/worktrees/x"))') > denyAt, 'the run folder comes back after the deny')
+  assert.ok(readProfile.indexOf('(allow file-read* (subpath "/tmp/w"))') > denyAt, 'writable folders stay readable')
+  assert.ok(!basicProfile.includes('file-read*'), 'no read rules without denyRead')
+  assert.ok(buildSeatbeltProfile({ writable: ['/tmp/a"b\\c'], tmpDir: '/tmp/t' }).includes('(subpath "/tmp/a\\"b\\\\c")'), 'quotes and backslashes are escaped')
 
   // 2. wrapCommand tests
   // sandbox-exec driver

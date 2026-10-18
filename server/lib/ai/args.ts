@@ -134,7 +134,7 @@ if (import.meta.main && process.argv.includes('--selfcheck')) {
   assert.equal(agyExec.bin, 'sandbox-exec')
   assert.equal(agyExec.args[0], '-p')
   assert.ok(agyExec.args[1].includes('(deny file-write*)'))
-  assert.equal(agyExec.args[2], 'agy')
+  assert.ok(agyExec.args.includes('agy'))
 
   // Política relaxada sem jail permite agy rodar direto
   setSettingsOverride({ sandboxPolicy: 'relaxed' })

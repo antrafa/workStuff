@@ -4,6 +4,8 @@
 // the folders it was given and a private config home holding a copy of its login, nothing else.
 // Tested 2026-10-16 with Claude and Codex: both authenticate, read the folder, and a file in /tmp or
 // ~/.bashrc does not exist for them; Codex's own sandbox still cuts the network inside the jail.
+// On macOS (sandbox-exec) the jail is weaker: it can only deny reads by path, so the home stays
+// visible except the folders in SECRET_DIRS. Text written by someone else therefore needs bwrap.
 // Autoteste: node server/lib/ai/jail.ts --selfcheck
 
 import assert from 'node:assert/strict'
@@ -13,7 +15,8 @@ import { homedir, tmpdir } from 'node:os'
 import { basename, dirname, join } from 'node:path'
 import type { ProviderId } from '../aiProviders.ts'
 import { say } from '../i18n.ts'
-import { AGENT_HOME } from '../paths.ts'
+import { AGENT_HOME, DATA_DIR } from '../paths.ts'
+import { KUBE_DIR } from '../k8s/kubeconfigs.ts'
 import { which } from '../run.ts'
 import { buildSeatbeltProfile, detectSandboxDriver, type SandboxDriver } from '../sandbox/sandbox.ts'
 
@@ -100,6 +103,16 @@ export async function prepareReadJail(provider: ProviderId, folders: string[], c
   }
 }
 
+// What sandbox-exec hides, since it cannot empty the home the way bwrap does: credentials of other
+// tools, the real CLI logins (the jail gets a copy) and the panel's data, worktrees included; the
+// run's own folders are given back on top. The list is ~-based: a secret elsewhere stays readable.
+export function secretDirs(home: string): string[] {
+  const inHome = ['.ssh', '.aws', '.azure', '.gnupg', '.docker', '.config', '.netrc', '.git-credentials', '.npmrc', '.pypirc', '.m2/settings.xml', '.claude', '.claude.json', '.codex']
+  return [...inHome.map(name => join(home, name)), join(AGENT_HOME, '.claude'), join(AGENT_HOME, '.codex'), KUBE_DIR, DATA_DIR]
+}
+
+const jailPath = (jail: ReadJail) => [...new Set([...jail.binDirs, '/usr/local/bin', '/usr/bin', '/bin'])].join(':')
+
 export function wrapReadJail(
   jail: ReadJail,
   cwd: string | undefined,
@@ -110,16 +123,19 @@ export function wrapReadJail(
     const profile = buildSeatbeltProfile({
       writable: jail.writable,
       tmpDir: jail.tmpDir,
-      cwd,
+      denyRead: secretDirs(jail.home),
+      readable: jail.visible,
     })
-    return { bin: 'sandbox-exec', args: ['-p', profile, bin, ...args] }
+    // env -i is the --clearenv of bwrap: the server's tokens never reach the CLI's environment
+    const env = Object.entries({ ...jail.env, PATH: jailPath(jail), TMPDIR: jail.tmpDir }).map(([k, v]) => `${k}=${v}`)
+    return { bin: 'sandbox-exec', args: ['-p', profile, '/usr/bin/env', '-i', ...env, bin, ...args] }
   }
   return { bin: 'bwrap', args: jailArgs(jail, cwd, bin, args) }
 }
 
 export function jailArgs(jail: ReadJail, cwd: string | undefined, bin: string, args: string[]): string[] {
   const runUser = `/run/user/${process.getuid?.() ?? ''}`
-  const path = [...new Set([...jail.binDirs, '/usr/local/bin', '/usr/bin', '/bin'])].join(':')
+  const path = jailPath(jail)
   return [
     '--ro-bind', '/', '/', '--dev', '/dev', '--proc', '/proc',
     // Emptied first, then the allowed folders are mounted back on top
@@ -161,8 +177,12 @@ if (import.meta.main && process.argv.includes('--selfcheck')) {
   assert.equal(execWrapped.args[0], '-p')
   assert.ok(execWrapped.args[1].includes('(deny file-write*)'), 'sandbox-exec nega escrita')
   assert.ok(execWrapped.args[1].includes('/tmp/w/config'), 'sandbox-exec libera gravável')
-  assert.equal(execWrapped.args[2], 'claude')
-  assert.equal(execWrapped.args[3], '-p')
+  assert.equal(execWrapped.args[2], '/usr/bin/env')
+  assert.equal(execWrapped.args[3], '-i', 'sandbox-exec limpa o ambiente, como o --clearenv')
+  assert.ok(execWrapped.args.includes('HOME=/home/u') && execWrapped.args.includes('TMPDIR=/tmp/w'))
+  assert.deepEqual(execWrapped.args.slice(-2), ['claude', '-p'])
+  assert.ok(execWrapped.args[1].includes('(deny file-read* (subpath "/home/u/.ssh"))'), 'sandbox-exec esconde segredos da home')
+  assert.ok(execWrapped.args[1].includes('(allow file-read* (subpath "/home/u/proj"))'), 'a pasta da execução continua legível')
 
   const login = mkdtempSync(join(tmpdir(), 'ws-jail-'))
   try {

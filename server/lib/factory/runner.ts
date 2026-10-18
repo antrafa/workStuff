@@ -186,7 +186,7 @@ export async function runFactoryAgent(options: FactoryRunOptions): Promise<RunRe
   if (mode === 'read') {
     const prepared = await prepareReadJail(provider, [options.cwd], join(agentHomeOf(options.cwd), provider))
     try {
-      return await spawnCli(provider, model, argsFor({ readJail: prepared?.jail }), { ...spawnOptions, env: prepared?.jail.env })
+      return await spawnCli(provider, model, argsFor({ readJail: prepared?.jail }), spawnOptions)
     } finally {
       prepared?.cleanup()
     }

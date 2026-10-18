@@ -92,7 +92,7 @@ Para voltar a um fundo liso, clique em **Remover imagem**. Sem imagem, o fundo �
 
 ## Bom saber
 
-- Todo provedor de IA roda em modo leitura sobre o seu código e os seus clusters. Na [Fábrica](/fabrica), operações de escrita e verificação de testes rodam isoladas pelo sandbox do kernel (`bwrap` no Linux ou `sandbox-exec` no macOS), ou sem trava quando a política de sandbox estiver em modo relaxado. Com o sandbox ativo, qualquer provedor só enxerga a pasta da execução, nunca o resto da sua pasta pessoal.
+- Todo provedor de IA roda em modo leitura sobre o seu código e os seus clusters. Na [Fábrica](/fabrica), operações de escrita e verificação de testes rodam isoladas pelo sandbox do kernel (`bwrap` no Linux ou `sandbox-exec` no macOS), ou sem trava quando a política de sandbox estiver em modo relaxado. Com o `bwrap`, qualquer provedor só enxerga a pasta da execução, nunca o resto da sua pasta pessoal; com o `sandbox-exec` do macOS, ele deixa de ver as pastas de credenciais (`~/.ssh`, `~/.kube`, `~/.config`, `~/.workstuff`...), mas o resto da pasta pessoal continua visível. A revisão de MR remoto só roda com o `bwrap`.
 - A escolha feita aqui é usada pelas telas que chamam a IA, como o Cluster Doctor, a [Análise](/analise) e a revisão de itens do [Catálogo](/catalogo). A [Fábrica](/fabrica) pode escolher um modelo por agente em cada tarefa.
 - Uma tela escondida continua abrindo pelo endereço e continua aparecendo na busca do **Ctrl+K**.
 - Tema, cor de destaque, fundo e telas escondidas ficam salvos neste navegador: outro navegador ou computador começa com o padrão. Provedor, modelo, esforço e idioma ficam salvos no seu computador e valem para qualquer navegador.
