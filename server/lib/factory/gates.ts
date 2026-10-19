@@ -11,7 +11,7 @@ import { run } from '../run.ts'
 import { readSettings, setSettingsOverride } from '../settingsStore.ts'
 import { jail, withSandbox } from './runner.ts'
 import { GIT_NO_HOOKS, uncommittedFiles } from './worktree.ts'
-import { TEST_FILE, type BlastRadiusReport, type CriterionCoverage, type CriterionTests, type FileBlastRadius, type VerifyStep } from './types.ts'
+import { TEST_FILE, type BlastRadiusReport, type CriterionCoverage, type CriterionTests, type FileBlastRadius, type VerifyBaseline, type VerifyStep } from './types.ts'
 import { say } from '../i18n.ts'
 
 export type DiffGateResult = {
@@ -37,6 +37,9 @@ export type TestsGateResult = {
   durationMs: number
   skipped?: boolean
   reason?: string
+  // Failure lines of a failed run, normalized (failureLines); incomplete when there were too many
+  failures?: string[]
+  failuresComplete?: boolean
 }
 
 // 1. Gate: Valida se há de fato arquivos alterados na worktree
@@ -153,15 +156,67 @@ export function detectVerifyCommands(worktreePath: string): string[] {
   return []
 }
 
+type VerifyOptions = { command?: string; smokeCommand?: string; timeoutMs?: number; signal?: AbortSignal }
+
 // The task's own command replaces the detected ones; the smoke command always runs last.
+const verifyCommands = (worktreePath: string, opts: VerifyOptions) => {
+  const own = opts.command?.trim()
+  return [...(own ? [own] : detectVerifyCommands(worktreePath)), ...(opts.smokeCommand?.trim() ? [opts.smokeCommand.trim()] : [])]
+}
+
+// ── Failures that were already there ──
+// A client repository often has a red suite before the task touches it. Every failure line a step
+// prints is compared with the same step run on the commit the task started from: a step whose
+// failures all appear there (as many times) did not break because of the task.
+// ponytail: line heuristic, not a parser per test runner. Line numbers and counts are blanked so a
+// shifted line still matches; an identical failure repeated in a file already failing counts twice
+// and is caught, but a summary line like "Tests: 3 failed" matches "Tests: 4 failed" and only the
+// per-test lines catch it. Anything unparsed (no failure line, too many, a timeout) is a failure.
+const FAILURE_LINE = /\b(FAIL(ED|URES?)?|ERROR|[Ee]rror|[Ee]xception|not ok)\b|[✕✗×●]/
+const MAX_FAILURE_LINES = 2_000
+
+export function failureLines(output: string, root: string): { lines: string[]; complete: boolean } {
+  const lines = output
+    .replace(/\x1b\[[0-9;]*[A-Za-z]/g, '')
+    .split(/\r?\n/)
+    .filter(l => FAILURE_LINE.test(l))
+    .map(l => l.split(root).join('<repo>').replace(/\d+/g, '#').replace(/\s+/g, ' ').trim().slice(0, 300))
+    .filter(Boolean)
+  return { lines: lines.slice(0, MAX_FAILURE_LINES), complete: lines.length <= MAX_FAILURE_LINES }
+}
+
+// The failure lines of this run that the base run did not have; undefined when the two cannot be compared.
+export function newFailures(run: TestsGateResult, base: VerifyBaseline['steps'][number] | undefined): string[] | undefined {
+  if (!base || base.passed || !base.complete || run.exitCode <= 0 || !run.failuresComplete || !run.failures?.length) return undefined
+  const left = new Map<string, number>()
+  for (const l of base.failures) left.set(l, (left.get(l) ?? 0) + 1)
+  return run.failures.filter(l => {
+    const n = left.get(l) ?? 0
+    if (n > 0) left.set(l, n - 1)
+    return n === 0
+  })
+}
+
+// Every step on the base commit, none stopping the others: a later step's failures are needed even
+// when an earlier one failed. Runs in the same jail as the task's verification.
+export async function verifyBaseline(dir: string, baseCommit: string, opts: VerifyOptions = {}): Promise<VerifyBaseline> {
+  const steps: VerifyBaseline['steps'] = []
+  for (const command of verifyCommands(dir, opts)) {
+    const r = await runJailed(dir, 'sh', ['-c', command], opts)
+    steps.push({ command, passed: r.passed, failures: r.failures ?? [], complete: !r.skipped && (r.passed || (r.exitCode > 0 && r.failuresComplete === true)) })
+  }
+  return { baseCommit, steps }
+}
+
 // Nothing to run is "not verified", never a pass. Stops at the first failing step: its output is
-// what the Implementer needs, and the next steps would mostly repeat it.
+// what the Implementer needs, and the next steps would mostly repeat it. With a baseline, a step that
+// only repeats the base's failures is marked `preexisting` and the next one runs; the baseline is
+// asked for only when a step fails, so a green suite never pays for it.
 export async function gateTestsPass(
   worktreePath: string,
-  opts: { command?: string; smokeCommand?: string; timeoutMs?: number; signal?: AbortSignal } = {},
+  opts: VerifyOptions & { baseline?: () => Promise<VerifyBaseline | undefined> } = {},
 ): Promise<TestsGateResult> {
-  const own = opts.command?.trim()
-  const commands = [...(own ? [own] : detectVerifyCommands(worktreePath)), ...(opts.smokeCommand?.trim() ? [opts.smokeCommand.trim()] : [])]
+  const commands = verifyCommands(worktreePath, opts)
   if (commands.length === 0) {
     const reason = say({ en: 'No verification command detected in the repository: nothing was verified.', pt: 'Nenhum comando de verificação detectado no repositório: nada foi verificado.' })
     return { passed: false, skipped: true, output: reason, exitCode: -1, durationMs: 0, reason }
@@ -173,10 +228,22 @@ export async function gateTestsPass(
   for (const step of commands) {
     const result = await runJailed(worktreePath, 'sh', ['-c', step], opts)
     if (result.skipped) return { ...result, command }
-    steps.push({ command: step, passed: result.passed, exitCode: result.exitCode, durationMs: result.durationMs })
-    outputs.push(`$ ${step}\n${result.output}`)
+    const fresh = !result.passed && opts.baseline && result.exitCode > 0
+      ? newFailures(result, (await opts.baseline())?.steps.find(s => s.command === step))
+      : undefined
+    const preexisting = fresh?.length === 0
+    steps.push({ command: step, passed: result.passed, exitCode: result.exitCode, durationMs: result.durationMs, ...(preexisting ? { preexisting } : {}) })
+    if (preexisting) {
+      outputs.push(`$ ${step}\n${say({ en: '[failed only with failures that already existed on the base; continuing]', pt: '[falhou só com falhas que já existiam na base; seguindo]' })}\n${result.output}`)
+      continue
+    }
+    const freshNote = fresh?.length ? `${say({ en: 'New failures (the others already failed on the base):', pt: 'Falhas novas (as demais já falhavam na base):' })}\n${fresh.slice(0, 20).join('\n')}\n\n` : ''
+    outputs.push(`$ ${step}\n${freshNote}${result.output}`)
     if (!result.passed) {
-      return { ...result, command, steps, output: clip(outputs.join('\n\n')), durationMs: Date.now() - t0, reason: `${step}: ${result.reason}` }
+      const reason = fresh?.length
+        ? say({ en: `${step}: ${fresh.length} failure(s) that the base does not have`, pt: `${step}: ${fresh.length} falha(s) que a base não tem` })
+        : `${step}: ${result.reason}`
+      return { ...result, command, steps, output: clip(outputs.join('\n\n')), durationMs: Date.now() - t0, reason }
     }
   }
   return { passed: true, command, steps, output: clip(outputs.join('\n\n')), exitCode: 0, durationMs: Date.now() - t0 }
@@ -244,7 +311,9 @@ function spawnVerify(
       settled = true
       clearTimeout(timer)
       signal?.removeEventListener('abort', onAbort)
-      resolve({ ...result, output: clip(result.output) })
+      // Failure lines come from the whole output: the clipped tail could hide a failure the base had
+      const failures = result.passed ? undefined : failureLines(result.output, worktreePath)
+      resolve({ ...result, output: clip(result.output), failures: failures?.lines, failuresComplete: failures?.complete })
     }
     const fail = (reason: string, extra: string) =>
       finish({ passed: false, command, output: output + extra, exitCode: -1, durationMs: Date.now() - t0, reason })
@@ -554,6 +623,41 @@ if (import.meta.main && process.argv.includes('--selfcheck')) {
     if (!npmCache.skipped) assert.equal(npmCache.passed, true, 'cache do npm descartável, dentro do tmp do jail')
     const failing = await gateTestsPass(tmp, { command: 'exit 3' })
     if (!failing.skipped) assert.equal(failing.exitCode, 3)
+
+    // Failures that already existed on the base do not fail the task; a new one does
+    const fl = failureLines('\x1b[31mFAIL\x1b[0m /w/x/src/a.test.ts > soma\n  ok line\n/w/x/src/b.ts(12,5): error TS2322: tipo\n', '/w/x')
+    assert.deepEqual(fl, { lines: ['FAIL <repo>/src/a.test.ts > soma', '<repo>/src/b.ts(#,#): error TS#: tipo'], complete: true }, 'cor, caminho e números normalizados')
+    const baseStep = { command: 'npm test', passed: false, complete: true, failures: ['FAIL a', 'erro x Error'] }
+    const runOf = (failures: string[], extra: Partial<TestsGateResult> = {}): TestsGateResult => ({ passed: false, output: '', exitCode: 1, durationMs: 0, failures, failuresComplete: true, ...extra })
+    assert.deepEqual(newFailures(runOf(['FAIL a']), baseStep), [], 'só falha antiga')
+    assert.deepEqual(newFailures(runOf(['FAIL a', 'FAIL a']), baseStep), ['FAIL a'], 'a mesma falha repetida conta de novo')
+    assert.deepEqual(newFailures(runOf(['FAIL b']), baseStep), ['FAIL b'])
+    assert.equal(newFailures(runOf([]), baseStep), undefined, 'falhou sem linha de falha: não dá para comparar')
+    assert.equal(newFailures(runOf(['FAIL a'], { exitCode: -1 }), baseStep), undefined, 'timeout nunca é tolerado')
+    assert.equal(newFailures(runOf(['FAIL a'], { failuresComplete: false }), baseStep), undefined)
+    assert.equal(newFailures(runOf(['FAIL a']), { ...baseStep, passed: true }), undefined, 'a base passava: toda falha é nova')
+    assert.equal(newFailures(runOf(['FAIL a']), undefined), undefined)
+
+    // Same command on both sides, as in the pipeline; what it prints comes from a file the "task" changes
+    const red = 'cat failures.txt; exit 1'
+    writeFileSync(join(tmp, 'failures.txt'), 'FAIL legado\n')
+    const base = await verifyBaseline(tmp, 'abc', { command: red, smokeCommand: 'echo ok' })
+    if (!base.steps.some(st => !st.complete && !st.passed)) {
+      assert.deepEqual(base.steps.map(st => [st.command, st.passed, st.complete]), [[red, false, true], ['echo ok', true, true]], 'a base roda todas as etapas')
+      let asked = 0
+      const baseline = async () => (asked++, base)
+      const tolerated = await gateTestsPass(tmp, { command: red, smokeCommand: 'echo ok', baseline })
+      assert.equal(tolerated.passed, true, 'só a falha antiga: passa')
+      assert.deepEqual(tolerated.steps?.map(st => [st.passed, st.preexisting ?? false]), [[false, true], [true, false]], 'marcada como já existente e a etapa seguinte roda')
+      writeFileSync(join(tmp, 'failures.txt'), 'FAIL legado\nFAIL novo\n')
+      const worse = await gateTestsPass(tmp, { command: red, baseline })
+      assert.equal(worse.passed, false, 'falha nova reprova')
+      assert.match(worse.reason ?? '', /1 (failure|falha)/)
+      assert.match(worse.output, /FAIL novo/)
+      const green = await gateTestsPass(tmp, { command: 'echo ok', baseline: async () => assert.fail('suíte verde não roda a base') })
+      assert.equal(green.passed, true)
+      assert.equal(asked, 2, 'a base é consultada só quando uma etapa falha')
+    }
 
     // Testes de política sandbox (strict vs relaxed) quando não há driver disponível
     const { setDriverOverride } = await import('../sandbox/sandbox.ts')

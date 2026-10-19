@@ -250,6 +250,20 @@ try {
   assert.ok(refuted.built.readiness?.attention.some(a => /refuted/.test(a)), 'e pede um olhar humano')
   await removeWorktree(repo, refuted.built.worktreePath!, refuted.built.branchName)
 
+  // A suite already red on the base: the task passes as long as it adds no failure of its own.
+  // The first build attempt writes "bug", a failure the base does not have, so the correction still runs.
+  const legacyVerify = 'echo "FAIL legado"; if [ -e feature.txt ] && ! grep -q ok feature.txt; then echo "FAIL feature quebrada"; fi; exit 1'
+  const legacy = await runCase('fac-legado', 'Feature', { verifyCommand: legacyVerify })
+  const wtL = legacy.built.worktreePath!
+  assert.ok(legacy.built.spans!.some(s => s.name.startsWith('Fix 1')), 'falha nova ainda volta ao Implementer')
+  assert.equal(legacy.built.qaReport?.passed, true, 'só a falha antiga: verificação passa')
+  assert.equal(legacy.built.qaReport?.steps?.[0].preexisting, true)
+  assert.ok(legacy.built.readiness?.attention.some(a => /already existed on main/.test(a)), 'e pede um olhar humano')
+  assert.ok(legacy.built.verifyBaseline?.baseCommit, 'base guardada na tarefa')
+  assert.equal(legacy.built.spans!.filter(s => s.name.includes('failures that already existed')).length, 1, 'a base roda uma vez só')
+  assert.ok(!existsSync(`${wtL}.base`), 'checkout da base removido')
+  await removeWorktree(repo, wtL, legacy.built.branchName)
+
   const unverified = await runCase('fac-sem-verificacao', 'Feature', { verifyCommand: undefined })
   assert.equal(unverified.built.qaReport?.passed, false, 'sem comando de verificação não há aprovação')
   assert.match(unverified.built.readiness!.blockers[0], /Nothing was verified/)

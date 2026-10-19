@@ -215,6 +215,8 @@ Quando a tarefa chega em **aguardando aprovação**:
 
 A partir daqui roda sozinho: o Implementer escreve o código, os portões conferem e, se um reprovar (nada mudou, um arquivo declarado não existe, a verificação falhou), ele recebe a falha e corrige, em até 3 tentativas. Depois vêm o Tester, o Documenter, as ferramentas de segurança instaladas (gitleaks, semgrep, npm audit), o Reviewer e o Security. O Verifier tenta derrubar cada problema grave; o que resiste volta para o Implementer corrigir, em até 2 rodadas. No fim, a branch é atualizada com a versão mais recente da base (um **rebase**: reaplicar as mudanças da tarefa sobre a base atual) e verificada de novo.
 
+**Repositório com testes que já falhavam.** Quando uma etapa da verificação falha, a Fábrica roda a mesma verificação no commit de onde a tarefa saiu e compara as falhas. Se tudo o que falhou já falhava antes, a etapa fica marcada como **já falhava na base** e a esteira segue. Se apareceu uma falha nova, ela volta para o Implementer corrigir, com a lista do que é novo. Essa comparação só roda quando algo falha: uma suíte verde não paga nada a mais.
+
 ## Revisar a entrega
 
 Quando a tarefa chega em **aguardando revisão**, clique em **Revisar entrega**. O topo da janela mostra a branch, o repositório, o provedor, o estado e o custo (com o teto, se houver).
@@ -225,7 +227,7 @@ Na seção **Sua decisão: ajustes e entrega**:
 
 - **Tudo verificado: nada bloqueia e nada pede atenção.** Pode entregar.
 - **Bloqueia a entrega** (em vermelho): por exemplo, nenhum comando de verificação, verificação falhando, conflito com a base atual, achado grave que o Verifier não derrubou, critério de aceite não atendido ou revisão que não rodou.
-- **Pede o seu olhar** (em amarelo): por exemplo, critério sem teste automático, achado que o Verifier refutou, achado de severidade média, ferramenta de segurança não instalada, mudança com mais de 400 linhas ou alteração em caminhos sensíveis (CI, Docker, migração, autenticação).
+- **Pede o seu olhar** (em amarelo): por exemplo, critério sem teste automático, achado que o Verifier refutou, achado de severidade média, ferramenta de segurança não instalada, mudança com mais de 400 linhas, alteração em caminhos sensíveis (CI, Docker, migração, autenticação) ou verificação que só passou porque as falhas já existiam na base.
 
 Essa lista é calculada por código a partir dos relatórios, não pela opinião de um agente.
 

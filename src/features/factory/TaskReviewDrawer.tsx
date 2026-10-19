@@ -541,7 +541,9 @@ export function TaskReviewDrawer({ task, onClose, onUpdate }: Props) {
                     <span className="eyebrow">{tx({ en: 'Verification steps', pt: 'Etapas da verificação' })}</span>
                     {task.qaReport.steps.map(st => (
                       <div key={st.command} className="row" style={{ gap: 8, fontSize: 13 }}>
-                        <span className={`badge ${st.passed ? 'badge-ok' : 'badge-crit'}`}>{st.passed ? tx({ en: 'passed', pt: 'passou' }) : tx({ en: `exit ${st.exitCode}`, pt: `código ${st.exitCode}` })}</span>
+                        {st.preexisting
+                          ? <span className="badge badge-warn" title={tx({ en: 'Failed only with failures the base already had', pt: 'Falhou só com falhas que a base já tinha' })}>{tx({ en: 'already failing on the base', pt: 'já falhava na base' })}</span>
+                          : <span className={`badge ${st.passed ? 'badge-ok' : 'badge-crit'}`}>{st.passed ? tx({ en: 'passed', pt: 'passou' }) : tx({ en: `exit ${st.exitCode}`, pt: `código ${st.exitCode}` })}</span>}
                         <span className="mono">{st.command}</span>
                       </div>
                     ))}

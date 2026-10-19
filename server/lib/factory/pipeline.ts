@@ -3,9 +3,9 @@
 // HTTP concerns (SSE, state guards) stay in server/routes/factory.ts.
 
 import { defaultFactoryStore as store } from './store.ts'
-import { commitWorktree, createWorktree, discardFiles, fetchBase, getWorktreeDiff, headOf, resetWorktree, syncWithBase, uncommittedFiles, type BaseSync } from './worktree.ts'
+import { commitWorktree, createWorktree, discardFiles, fetchBase, getWorktreeDiff, headOf, mergeBaseOf, resetWorktree, syncWithBase, uncommittedFiles, withCommitCheckout, type BaseSync } from './worktree.ts'
 import { runFactoryAgent } from './runner.ts'
-import { checkCriteriaCoverage, computeBlastRadius, docsCiting, gateArtifactsExist, gateDiffNotEmpty, gateNoQualityDegradation, gateTestsPass, nonDocFiles, nonTestFiles, type TestsGateResult } from './gates.ts'
+import { checkCriteriaCoverage, computeBlastRadius, docsCiting, gateArtifactsExist, gateDiffNotEmpty, gateNoQualityDegradation, gateTestsPass, nonDocFiles, nonTestFiles, verifyBaseline, type TestsGateResult } from './gates.ts'
 import { runSecurityScans, scanFindings } from './scanners.ts'
 import { assessDelivery } from './readiness.ts'
 import { ExecutionCancelledError, throwIfCancelled } from './executions.ts'
@@ -35,7 +35,7 @@ import {
   parseTestEnvelope,
 } from './envelopes.ts'
 import { taskUsage } from './types.ts'
-import type { BuildEnvelope, ExecutionSpan, FactoryTask, PlanEnvelope, ReviewEnvelope, ScanToolResult, SecurityFinding, SpecEnvelope, SpecializedAgentId, TestEnvelope } from './types.ts'
+import type { BuildEnvelope, ExecutionSpan, FactoryTask, PlanEnvelope, ReviewEnvelope, ScanToolResult, SecurityFinding, SpecEnvelope, SpecializedAgentId, TestEnvelope, VerifyBaseline } from './types.ts'
 import type { RunResult } from '../ai/runner.ts'
 import { say } from '../i18n.ts'
 
@@ -140,15 +140,33 @@ async function codeStep<T>(
   return result
 }
 
-const runTests = (ctx: ExecContext, task: FactoryTask, worktreePath: string, name: string) =>
-  codeStep(
+const runTests = (ctx: ExecContext, task: FactoryTask, worktreePath: string, name: string) => {
+  let baseline: Promise<VerifyBaseline> | undefined
+  return codeStep(
     ctx,
     'gate',
     { name, phase: 'qa_security' },
-    () => gateTestsPass(worktreePath, { command: task.verifyCommand, smokeCommand: task.smokeCommand, signal: ctx.signal }),
+    () => gateTestsPass(worktreePath, { command: task.verifyCommand, smokeCommand: task.smokeCommand, signal: ctx.signal, baseline: () => (baseline ??= baselineOf(ctx, task, worktreePath)) }),
     r => (r.passed ? undefined : r.reason),
     r => ({ command: r.command, steps: r.steps, output: r.output, skipped: r.skipped }),
   )
+}
+
+// What the verification printed on the commit the task started from, asked for only when a step
+// fails. Kept on the task and run again only when that commit changes (a rebase moves it).
+async function baselineOf(ctx: ExecContext, task: FactoryTask, worktreePath: string): Promise<VerifyBaseline> {
+  const baseCommit = await mergeBaseOf(worktreePath, task.baseBranch)
+  const known = (await reload(task)).verifyBaseline
+  if (known?.baseCommit === baseCommit) return known
+  ctx.send({ type: 'status', message: say({ en: `Verification failed: running it on ${task.baseBranch} to tell old failures from new ones...`, pt: `A verificação falhou: rodando no ${task.baseBranch} para separar falha antiga de falha nova...` }) })
+  const baseline = await codeStep(ctx, 'gate', { name: say({ en: `Verification on ${task.baseBranch} (failures that already existed)`, pt: `Verificação no ${task.baseBranch} (falhas que já existiam)` }), phase: 'qa_security' },
+    () => withCommitCheckout(task.source.repoPath, `${worktreePath}.base`, baseCommit, dir =>
+      verifyBaseline(dir, baseCommit, { command: task.verifyCommand, smokeCommand: task.smokeCommand, signal: ctx.signal })),
+    undefined,
+    r => ({ baseCommit: r.baseCommit, steps: r.steps.map(st => `${st.command}: ${st.passed ? 'ok' : `${st.failures.length} linha(s) de falha`}`) }))
+  await saveState(task, { verifyBaseline: baseline })
+  return baseline
+}
 
 const commit = (ctx: ExecContext, worktreePath: string, message: string) =>
   codeStep(ctx, 'code', { name: `Commit: ${message.slice(0, 60)}`, phase: 'qa_security' }, () => commitWorktree(worktreePath, message))

@@ -146,6 +146,15 @@ export type VerifyStep = {
   passed: boolean
   exitCode: number
   durationMs: number
+  // Failed, but every failure it printed already failed the same way on the base: not the task's doing
+  preexisting?: boolean
+}
+
+// The verification run once on the commit the task started from, the first time a step fails, so a
+// repository whose suite was already red can still deliver as long as nothing new breaks.
+export type VerifyBaseline = {
+  baseCommit: string
+  steps: { command: string; passed: boolean; failures: string[]; complete: boolean }[]
 }
 
 export type QaReport = {
@@ -288,6 +297,7 @@ export type FactoryTask = {
   readiness?: Readiness
   // Base commit the last verification ran on: a newer base means rebase and verify again
   verifiedBase?: string
+  verifyBaseline?: VerifyBaseline
   // Why the developer finished with blockers on, and which ones
   finishOverride?: { reason: string; blockers: string[]; at: string }
   // Model per agent, overriding `model` (e.g. a frontier model to plan, a cheap one to build)

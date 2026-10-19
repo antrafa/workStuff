@@ -215,6 +215,8 @@ When the task reaches **waiting for approval**:
 
 From here it runs on its own: the Implementer writes the code, the gates check it and, if one fails (nothing changed, a declared file does not exist, verification failed), it gets the failure and fixes it, up to 3 attempts. Then come the Tester, the Documenter, the installed security tools (gitleaks, semgrep, npm audit), the Reviewer and Security. The Verifier tries to knock down each serious problem; what holds goes back to the Implementer for a fix, up to 2 rounds. At the end, the branch is brought up to date with the newest version of the base (a **rebase**: replaying the task's changes on top of the current base) and verified again.
 
+**A repository whose tests already failed.** When a verification step fails, the Factory runs the same verification on the commit the task started from and compares the failures. If everything that failed was already failing before, the step is marked **already failing on the base** and the pipeline moves on. If a new failure appeared, it goes back to the Implementer, with the list of what is new. This comparison only runs when something fails: a green suite costs nothing extra.
+
 ## Reviewing the delivery
 
 When the task reaches **waiting for review**, click **Review delivery**. The top of the window shows the branch, the repository, the provider, the state and the cost (with the cap, if there is one).
@@ -225,7 +227,7 @@ In the **Your call: adjustments and decision** section:
 
 - **Everything verified: nothing blocks and nothing needs a look.** You can deliver.
 - **Blocks the delivery** (in red): for example, no verification command, verification failing, a conflict with the current base, a serious finding the Verifier did not knock down, an unmet acceptance criterion or a review that did not run.
-- **Needs your look** (in yellow): for example, a criterion with no automated test, a finding the Verifier refuted, a medium-severity finding, a security tool not installed, a change of more than 400 lines or changes to sensitive paths (CI, Docker, migrations, authentication).
+- **Needs your look** (in yellow): for example, a criterion with no automated test, a finding the Verifier refuted, a medium-severity finding, a security tool not installed, a change of more than 400 lines, changes to sensitive paths (CI, Docker, migrations, authentication) or a verification that only passed because its failures already existed on the base.
 
 This list is computed by code from the reports, not taken from an agent's opinion.
 

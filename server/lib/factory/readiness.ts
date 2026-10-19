@@ -27,6 +27,10 @@ export function assessDelivery(task: FactoryTask): Readiness {
     const failed = qa.steps?.find(s => !s.passed)?.command ?? qa.testsRan
     blockers.push(say({ en: `The verification did not pass: ${failed}.`, pt: `A verificação não passou: ${failed}.` }))
   }
+  const tolerated = qa?.passed ? (qa.steps ?? []).filter(s => s.preexisting).map(s => s.command) : []
+  if (tolerated.length) {
+    attention.push(say({ en: `The verification passed over failures that already existed on ${task.baseBranch}: ${tolerated.join(', ')}.`, pt: `A verificação passou por cima de falhas que já existiam no ${task.baseBranch}: ${tolerated.join(', ')}.` }))
+  }
   if (qa?.qualityFloor) blockers.push(qa.qualityFloor)
   if (qa?.baseSync?.status === 'conflict') {
     blockers.push(say({ en: `The branch conflicts with the current ${task.baseBranch}; request an adjustment to resolve it.`, pt: `A branch conflita com o ${task.baseBranch} atual; peça um ajuste para resolver.` }))
@@ -113,6 +117,9 @@ if (import.meta.main && process.argv.includes('--selfcheck')) {
   assert.equal(r({ diffStat: { filesChanged: 2, insertions: 1, deletions: 0, files: ['.gitlab-ci.yml', 'src/auth/login.ts'] } }).attention.length, 1, 'caminho sensível')
   assert.equal(r({ blastRadius: { totalDependents: 4, files: [{ file: 'src/core.ts', dependents: ['a.ts', 'b.ts', 'c.ts', 'd.ts'], testFiles: [] }] } }).attention.length, 1, 'alto raio de impacto sem testes pede atenção')
   assert.equal(r({ qaReport: { ...green.qaReport!, qualityFloor: 'Piso de qualidade violado: a.test.ts:3' } }).blockers.length, 1, 'supressão em qualquer ponto da entrega bloqueia')
+  const old = r({ qaReport: { ...green.qaReport!, steps: [{ command: 'npm test', passed: false, exitCode: 1, durationMs: 1, preexisting: true }] } })
+  assert.deepEqual([old.blockers.length, old.attention.length], [0, 1], 'falha que já existia na base não bloqueia, mas segura o MR automático')
+  assert.match(old.attention[0], /npm test/)
   const touched = r({ qaReport: { ...green.qaReport!, testerTouched: ['src/a.ts'] } })
   assert.equal(canAutoMr(green, touched), false, 'qualquer ponto de atenção segura o MR automático')
 

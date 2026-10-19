@@ -196,6 +196,7 @@ O código da esteira está em `server/lib/factory/pipeline.ts`. As rotas (`serve
 | Achado bloqueante que resistiu ao Verifier | Ferramenta de segurança não instalada ou que não concluiu |
 | Critério de aceite não atendido | Tester alterou arquivo que não é de teste |
 | Revisão que não rodou ou ficou incompleta | Mais de 400 linhas alteradas |
+| | Verificação que passou por cima de falhas que já existiam na base (etapa `preexisting`) |
 | | Caminho sensível: CI, Docker, Helm, Terraform, migração, manifesto de dependências, nomes com auth, secret, token, crypt, permission |
 | Supressão ou teste pulado em qualquer ponto da entrega, inclusive nos testes do Tester | Alto raio de impacto: arquivo alterado é importado por três ou mais módulos fora do diff sem testes chamadores |
 
@@ -278,7 +279,7 @@ stateDiagram-v2
 | **Há alterações** | Algum arquivo mudou em relação à base (alterações não commitadas mais o diff da branch), ignorando os links de dependência. | Correção pelo Implementer; esgotado, interrompe. |
 | **Arquivos declarados existem** | Cada arquivo do `changedFiles` existe no disco ou está no diff (um arquivo apagado de propósito conta). | Correção; esgotado, interrompe. |
 | **Piso de qualidade (sem supressões)** | Rejeita diffs que adicionem supressões de tipo ou linter (`@ts-ignore`, `@ts-nocheck`, `eslint-disable`, `@SuppressWarnings`, `# type: ignore`) ou testes pulados (`.skip()`, `@Disabled`, `@Ignore`). Compara contra o ponto em que a tarefa saiu da base, não contra a ponta dela: o que a base mudou depois não é culpa do agente. Diretivas só contam em posição de comentário e chamadas de teste só no início da linha, para que texto citando-as (ou `model.fit(`) não reprove. | Correção pelo Implementer; esgotado, interrompe. |
-| **Verificação do projeto** | Cada etapa da verificação termina com código 0, dentro do sandbox, parando na primeira que falha. | Correção; esgotado, vai para as rodadas de revisão como bloqueio. |
+| **Verificação do projeto** | Cada etapa da verificação termina com código 0, dentro do sandbox, parando na primeira que falha. Uma etapa que só repete as falhas da base é marcada `preexisting` e a seguinte roda (abaixo). | Correção; esgotado, vai para as rodadas de revisão como bloqueio. |
 | **Cobertura por critério** | Cada critério tem um arquivo de teste que existe, ou uma explicação do Tester. | Pede o seu olhar; segura o MR automático. |
 | **Ferramentas de segurança** | gitleaks, semgrep e npm audit, quando instalados e aplicáveis. | Segredo vira achado `critical`; o resto é evidência para o Security. |
 | **Base atual** | A branch rebaseia sem conflito sobre a base mais nova e passa na verificação de novo. | Conflito bloqueia a entrega. |
@@ -295,6 +296,8 @@ stateDiagram-v2
 | `go.mod` | `go vet ./...`, `go test ./...` |
 
 O **comando de smoke** da tarefa (`smokeCommand`) roda por último, no mesmo jail: subir a aplicação, chamá-la e derrubá-la. O jail tem o próprio espaço de processos, então o que ficar rodando morre junto.
+
+**Falhas que já existiam na base.** Repositório de cliente costuma ter a suíte vermelha antes da tarefa. Quando uma etapa falha, `runTests` pede a linha de base (`baselineOf` em `pipeline.ts`): um checkout descartável do commit de onde a tarefa saiu (`mergeBaseOf`, `withCommitCheckout` em `<worktree>.base`), com os mesmos links de dependência, onde `verifyBaseline` roda todas as etapas no mesmo jail, sem parar na primeira. O resultado fica em `task.verifyBaseline` e só é refeito quando esse commit muda (um rebase). De cada saída saem as linhas de falha (`failureLines`: linhas com FAIL, ERROR, error, Exception, `not ok`, ✕, ×, ●; cor, caminho da worktree e números apagados). Se toda linha da tarefa aparece na base, pelo menos tantas vezes quanto, a etapa vira `preexisting` e conta como aprovada; se sobra alguma, a etapa reprova e o Implementer recebe só as linhas novas. Sem linha de falha, com mais de 2.000, com timeout, ou com a etapa passando na base, não há comparação: vale a falha. Suíte verde nunca roda a base.
 
 Sem nenhum comando, nada é verificado: o QA fica reprovado e a entrega bloqueada. Limite de 10 minutos por etapa; a saída guardada é a cauda (últimos 30.000 caracteres), que é onde a falha aparece.
 
@@ -423,6 +426,7 @@ Tudo fica fora do repositório, em `WORKSTUFF_HOME` (padrão `~/.workstuff`):
 | `factory/tasks.json` | Todas as tarefas. A gravação usa um arquivo temporário e `rename`, então uma queda no meio não deixa o arquivo pela metade. |
 | `factory/sessions/<id>.jsonl` | A sessão de cada tarefa, evento por evento (`.json` é o formato antigo, ainda lido). |
 | `worktrees/<repo>/<id>/` | As worktrees em andamento. |
+| `worktrees/<repo>/<id>.base/` | O checkout da base enquanto a verificação de base roda; apagado no fim. |
 | `factory/projects/<id>/project.json` | Um projeto: nome, pasta e padrões das tarefas. |
 | `factory/projects/<id>/ideas/<id>/idea.json`, `idea.md` | Uma ideia: fase, conversa, documento vivo, desafio, plano, tarefas e o que já foi enviado; o `.md` é o documento vivo, regravado a cada mudança. |
 
@@ -518,7 +522,7 @@ Todos entram no `npm run check`:
 | `node server/lib/factory/projects.ts --selfcheck` | Repositórios encontrados na pasta, criação com `git init`, adoção de tarefas. |
 | `node server/lib/ideation/guards.ts --selfcheck`, `store.ts`, `envelopes.ts` | Portões de cada fase, ciclos e cobertura de cenários, documento em Markdown, leitura das respostas dos agentes. |
 | `node scripts/check-ideation-flow.ts` | A ideação inteira com um `claude` falso: fases, desafio, plano recusado e refeito, quebra, envio sem duplicar, bloqueio por dependência, descarte, ideia encerrada e reaberta. |
-| `node scripts/check-factory-pipeline.ts` | A esteira inteira, com um `claude` falso no `PATH`: dúvida do Analyst, correção após portão, achado bloqueante corrigido na rodada automática, achado refutado pelo Verifier, Tester depois da correção, Documenter barrado, sem verificação bloqueia, rebase quando a base anda, modelo por agente, teto de custo. Não gasta tokens. |
+| `node scripts/check-factory-pipeline.ts` | A esteira inteira, com um `claude` falso no `PATH`: dúvida do Analyst, correção após portão, achado bloqueante corrigido na rodada automática, achado refutado pelo Verifier, Tester depois da correção, Documenter barrado, sem verificação bloqueia, rebase quando a base anda, modelo por agente, teto de custo, suíte que já falhava na base. Não gasta tokens. |
 
 ## 18. Como estender
 
@@ -543,6 +547,7 @@ O selfcheck de `agents.ts` falha se um agente da ordem ficar sem definição, e 
 - **Revisão de rodada 2 em diante** recebe o diff completo, não só o que mudou desde a rodada anterior.
 - **O Verifier só lê.** Ele refuta lendo o código, não executando; rodar um caso que prove a falha pediria uma worktree descartável.
 - **Cobertura por critério confere o arquivo, não o teste.** A esteira sabe que o arquivo citado existe e que a suíte passou, não que aquele teste exercita o critério; isso continua com o Reviewer.
+- **Falhas da base por linha, não por teste**: a comparação apaga números, então uma linha de resumo ("Tests: 3 failed" e "Tests: 4 failed") não distingue nada; quem pega a falha nova é a linha do teste. Mover um erro antigo para outro arquivo conta como novo. A verificação da base custa uma rodada inteira a mais, na primeira falha.
 - **Caminhos sensíveis por nome**: `auth` também pega `author`. Falso positivo só segura o MR automático.
 - **Nova verificação no finish** acontece dentro da requisição: se a base andou, o clique em MR ou merge pode levar minutos.
 - **Ferramentas de segurança** dependem do que está instalado; `semgrep --config p/default` e `npm audit` precisam de rede.
@@ -587,6 +592,7 @@ Os [runbooks de dev da Fábrica](../dev-runbooks/factory/) cobrem os procediment
 | Worktree isolada, sandbox `bwrap`, aprovação local antes do MR | Isolamento e segurança operacional na máquina local |
 | Piso de qualidade determinístico (sem `@ts-ignore` / `.skip()`) e regras anti-slop | Impede que o laço de correção "passe" suprimindo o erro ou pulando o teste (ideia de `pstack/unslop`) |
 | Cálculo de raio de impacto (blast radius) via `git grep` e bloqueio na prontidão | Um arquivo com 3 ou mais dependentes de produção sem teste retém o MR automático (ideia de `blast-radius`) |
+| Falha de verificação comparada com a base; só falha nova reprova | Repositório com suíte vermelha ainda entrega, sem o agente "consertar" o que não é dele (ideia do `ci-test-ratchet` do ruflo) |
 | Reorganização cognitiva do diff em 4 camadas e review canvas na gaveta | Lógica central primeiro, depois integração, testes e metadados (ideia de `pr-review-canvas`) |
 
 O que ficou de fora de propósito:

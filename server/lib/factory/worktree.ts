@@ -193,6 +193,22 @@ export async function commitWorktree(
 
 export const headOf = async (worktreePath: string) => (await git(worktreePath, ['rev-parse', 'HEAD'])).trim()
 
+// The commit the task branched from: "already broken before the task" is measured there
+export const mergeBaseOf = async (worktreePath: string, base: string) => (await git(worktreePath, ['merge-base', 'HEAD', '--end-of-options', base])).trim()
+
+// A throwaway detached checkout of one commit, removed whatever fn does. Same dependency links as the
+// task worktree, so the same commands run the same way.
+export async function withCommitCheckout<T>(repoPath: string, dir: string, commit: string, fn: (dir: string) => Promise<T>): Promise<T> {
+  if (existsSync(dir)) await removeWorktree(repoPath, dir)
+  await git(repoPath, ['worktree', 'add', '--detach', dir, commit], 120_000)
+  linkWorkspaceDependencies(repoPath, dir)
+  try {
+    return await fn(dir)
+  } finally {
+    await removeWorktree(repoPath, dir)
+  }
+}
+
 // Back to a known commit, dropping later commits and uncommitted files. Only for the factory's own
 // worktree, never the user's checkout. The dependency symlinks are untracked, so they are kept explicitly.
 export async function resetWorktree(worktreePath: string, sha: string): Promise<void> {
@@ -319,6 +335,15 @@ if (import.meta.main && process.argv.includes('--selfcheck')) {
     writeFileSync(join(worktreePath, 'app.ts'), 'console.log("hello world")\n')
     const commitHash = await commitWorktree(worktreePath, 'feat: adiciona app.ts')
     assert.ok(commitHash, 'commit gerado')
+
+    // Checkout descartável do commit de onde a tarefa saiu: sem o arquivo da tarefa, com as dependências, e some no fim
+    const start = await mergeBaseOf(worktreePath, 'main')
+    const baseDir = `${worktreePath}.base`
+    const seen = await withCommitCheckout(repoDir, baseDir, start, async dir => ({ app: existsSync(join(dir, 'app.ts')), deps: existsSync(join(dir, 'node_modules', 'fake-pkg')) }))
+    assert.deepEqual(seen, { app: false, deps: true })
+    assert.ok(!existsSync(baseDir), 'checkout da base removido')
+    await assert.rejects(withCommitCheckout(repoDir, baseDir, start, async () => { throw new Error('boom') }), /boom/)
+    assert.ok(!existsSync(baseDir), 'removido mesmo quando a execução falha')
     assert.equal(await commitWorktree(worktreePath, 'nada novo'), commitHash, 'sem mudança staged, não tenta commit vazio')
 
     // Descarte seletivo (portão do Documenter)
