@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { ArrowLeft, Check, CheckCircle2, Download, RotateCcw, Send, Square, Trash2, Undo2 } from 'lucide-react'
+import { ArrowLeft, Check, CheckCircle2, Download, RotateCcw, Send, Square, Trash2, Undo2, Zap } from 'lucide-react'
 import { Async, ConfirmModal, Markdown, SkeletonRows } from '@/ui'
 import { api } from '@/lib/api'
 import { useAsync } from '@/lib/useAsync'
@@ -33,6 +33,7 @@ function IdeaBody({ project, idea, tasks, onIdea, onBack, onTasksChanged }: Omit
   const busy = agent.running || idea.executing
   const canAdvance = ['explore', 'challenge', 'refine', 'plan'].includes(idea.phase)
   const canGoBack = ['challenge', 'refine', 'plan', 'split', 'dropped'].includes(idea.phase)
+  const canAutopilot = canAdvance || idea.phase === 'split'
 
   const act = async (action: 'advance' | 'back') => {
     setActionError(null)
@@ -95,11 +96,17 @@ function IdeaBody({ project, idea, tasks, onIdea, onBack, onTasksChanged }: Omit
         <span style={{ fontSize: 13 }}><b>{tx({ en: 'What to do now: ', pt: 'O que fazer agora: ' })}</b>{PHASE_UI[idea.phase].guide}</span>
       </div>
 
-      {(canAdvance || canGoBack) && (
+      {(canAdvance || canGoBack || canAutopilot) && (
         <div className="card card-pad stack" style={{ gap: 8 }}>
           <div className="row" style={{ gap: 8 }}>
             <span className="eyebrow" title={tx({ en: 'The panel checks in code what the phase needs before letting you go on', pt: 'O painel confere em código o que a fase pede antes de deixar você seguir' })}>{tx({ en: 'To move on', pt: 'Para seguir' })}</span>
             <div className="spacer" />
+            {canAutopilot && (
+              <button type="button" className="btn btn-sm" disabled={busy} onClick={() => agent.run('autopilot')}
+                title={tx({ en: 'Runs every phase up to the split, accepting the agents\' recommendations. It stops for you at a high-severity attack the blue team could not answer, at a pivot or stop, and before sending anything to the factory.', pt: 'Roda todas as fases até a quebra, aceitando as recomendações dos agentes. Para e chama você num ataque de gravidade alta que o blue team não rebateu, num pivot ou stop, e antes de enviar qualquer coisa à fábrica.' })}>
+                <Zap size={14} /> {tx({ en: 'Autopilot', pt: 'Piloto automático' })}
+              </button>
+            )}
             {canGoBack && <button type="button" className="btn btn-sm" disabled={busy} onClick={() => act('back')}><Undo2 size={14} /> {idea.phase === 'dropped' ? tx({ en: 'Reopen', pt: 'Reabrir' }) : tx({ en: 'Back one phase', pt: 'Voltar uma fase' })}</button>}
             {canAdvance && <button type="button" className="btn btn-sm btn-primary" disabled={busy || idea.gate.length > 0} onClick={() => act('advance')}><Check size={14} /> {advanceLabel}</button>}
           </div>
@@ -111,6 +118,9 @@ function IdeaBody({ project, idea, tasks, onIdea, onBack, onTasksChanged }: Omit
             <span style={{ fontSize: 13, color: 'var(--ok)' }}><CheckCircle2 size={13} /> {tx({ en: 'Everything this phase needs is there. Read the document on the right and, if it says what you mean, approve.', pt: 'Tudo o que a fase pede está lá. Leia o documento ao lado e, se ele diz o que você quer, aprove.' })}</span>
           ))}
         </div>
+      )}
+      {idea.phase !== 'plan' && idea.phase !== 'split' && agent.errors.length > 0 && (
+        <div className="callout callout-warn">{agent.errors.join(' ')}</div>
       )}
       {actionError && <div className="callout callout-crit">{actionError}</div>}
 

@@ -346,6 +346,23 @@ O **facilitador** é o agente que conduz a conversa. Em cada rodada, ele reescre
 
 Enquanto um agente roda, **Parar** interrompe. Só um agente roda por ideia de cada vez.
 
+### Piloto automático
+
+Para uma ideia que você não precisa discutir pergunta a pergunta, clique em **Piloto automático**, na caixa **Para seguir**. Ele roda as fases sozinho, da fase atual até a quebra em tarefas, aceitando as recomendações dos agentes:
+
+- Em Explorar e Refinar, o facilitador preenche o que falta com as respostas que ele recomenda, marcadas como premissas a confirmar depois.
+- Em Desafiar, roda uma rodada e decide cada ataque pela resposta do blue team: **Defende** vira descartar, **Mitiga** vira mitigar e **Concorda** vira risco aceito. Na conversa, cada decisão leva a nota "decidido pelo piloto automático".
+- O plano e a quebra rodam em seguida.
+
+O piloto para e chama você quando:
+
+- um ataque de gravidade alta não foi rebatido pelo blue team: decida esse ataque no cartão e rode o piloto de novo;
+- o facilitador recomenda mudar o rumo (pivot) ou parar (stop);
+- uma fase não fecha mesmo depois de o agente tentar;
+- a quebra fica pronta. Ele **nunca envia à fábrica**: revise as premissas no documento vivo, os ataques decididos e as tarefas, e clique em **Enviar à fábrica**.
+
+O motivo da parada aparece na conversa e numa caixa amarela abaixo de **Para seguir**. **Parar** interrompe o piloto, e **Voltar uma fase** desfaz o que ele assumiu numa fase.
+
 ### Explorar
 
 Descobre o problema real, quem o tem e o que essa pessoa faz hoje para contorná-lo. O portão pede as seções de problema, público, "job to be done" (a tarefa que a pessoa quer cumprir) e contorno atual preenchidas.

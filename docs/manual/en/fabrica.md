@@ -346,6 +346,23 @@ The **facilitator** is the agent that leads the conversation. In each round, it 
 
 While an agent runs, **Stop** interrupts it. Only one agent runs per idea at a time.
 
+### Autopilot
+
+For an idea you do not need to discuss question by question, click **Autopilot**, in the **To move on** box. It runs the phases by itself, from the current one up to the split into tasks, accepting the agents' recommendations:
+
+- In Explore and Refine, the facilitator fills in what is missing with the answers it recommends, marked as assumptions to confirm later.
+- In Challenge, it runs one round and decides each attack by the blue team's answer: **Defends** becomes discard, **Mitigates** becomes mitigate and **Concedes** becomes accepted risk. Each decision carries the note "decided by the autopilot".
+- The plan and the split run next.
+
+The autopilot stops and calls you when:
+
+- a high-severity attack was not answered by the blue team: decide it in the attack card and run the autopilot again;
+- the facilitator recommends changing course (pivot) or stopping (stop);
+- a phase does not close even after the agent tried;
+- the split is ready. It **never sends anything to the factory**: review the assumptions in the living document, the decided attacks and the tasks, then click **Send to the factory**.
+
+The reason for the stop shows in the conversation and in a yellow box below **To move on**. **Stop** interrupts the autopilot, and **Back one phase** undoes what it assumed in a phase.
+
 ### Explore
 
 Finds the real problem, who has it and what that person does today to work around it. The gate asks for the problem, audience, "job to be done" (the job the person wants to get done) and current workaround sections to be filled in.

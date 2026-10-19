@@ -8,6 +8,7 @@ import { defaultIdeaStore } from '../lib/ideation/store.ts'
 import { normalizeMasters, normalizeTasks } from '../lib/ideation/envelopes.ts'
 import {
   advance,
+  autopilot,
   back,
   beginRun,
   challenge,
@@ -119,6 +120,9 @@ ideationRouter.post('/:id/stop', json(req => ({ stopped: stopRun(load(req).idea.
 
 ideationRouter.post('/:id/message', (req: Request<Params>, res) =>
   stream(req, res, async (ctx, project, idea) => ({ idea: await converse(ctx, project, idea, String(req.body?.message ?? '').trim()) })))
+
+ideationRouter.post('/:id/autopilot', (req: Request<Params>, res) =>
+  stream(req, res, autopilot))
 
 ideationRouter.post('/:id/challenge', (req: Request<Params>, res) =>
   stream(req, res, async (ctx, project, idea) => ({ idea: await challenge(ctx, project, idea) })))

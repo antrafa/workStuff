@@ -1,7 +1,7 @@
 // End-to-end check of the ideation flow with a fake `claude` on PATH: no tokens, no real data.
 // Covers: phase gates, red × blue with decisions, planner retry after a refused plan, split with
 // a dependency on a whole master, dispatch (dependencies, given criteria, idempotency), the
-// dependency block, a killed idea and going back a phase.
+// dependency block, the autopilot and where it stops, a killed idea and going back a phase.
 // Run: node scripts/check-ideation-flow.ts
 import assert from 'node:assert/strict'
 import { execFileSync } from 'node:child_process'
@@ -129,6 +129,34 @@ try {
   await discardTask(first.id)
   assert.equal((await defaultFactoryStore.getTasks()).length, 1)
   assert.equal(pendingDependencies(second, await defaultFactoryStore.getTasks()).length, 0, 'dependência descartada não segura mais')
+
+  // Autopilot: from the raw idea to a finished split, never dispatching
+  const auto = await flow.autopilot(ctx, project, defaultIdeaStore.create(project.id, 'Piloto', 'quero ver o custo de cada cliente'))
+  assert.deepEqual(auto.errors, [])
+  assert.equal(auto.idea.phase, 'split', 'o piloto para antes de enviar')
+  assert.equal(auto.idea.dispatched, undefined)
+  assert.deepEqual(auto.idea.tasks?.map(t => t.key).sort(), ['M1.T1', 'M2.T1'])
+  const autoAttacks = auto.idea.challenge?.[0].attacks ?? []
+  assert.equal(autoAttacks.find(a => a.id === 'A1')?.decision, 'mitigate', 'ataque alto mitigado pelo blue team')
+  assert.equal(autoAttacks.find(a => a.id === 'A2')?.decision, 'accept', 'ataque baixo sem resposta vira risco aceito')
+
+  // Autopilot stops at a high-severity attack the blue team conceded, deciding nothing
+  let conceded = defaultIdeaStore.create(project.id, 'Concedida', 'x')
+  conceded = defaultIdeaStore.save({ ...conceded, phase: 'challenge', challenge: [{ round: 1, at: '', attacks: [
+    { id: 'A1', target: 't', attack: 'derruba a ideia', severity: 'alta', evidence: 'fraca', stance: 'concede' },
+    { id: 'A2', target: 't', attack: 'incomoda', severity: 'baixa', evidence: 'fraca', stance: 'defende' },
+  ] }] })
+  const halted = await flow.autopilot(ctx, project, conceded)
+  assert.match(halted.errors[0], /A1/)
+  assert.equal(halted.idea.phase, 'challenge')
+  assert.ok(halted.idea.challenge?.[0].attacks.every(a => !a.decision), 'nenhuma decisão tomada por você')
+
+  // Autopilot stops at a pivot instead of going back to Explore
+  let pivoted = defaultIdeaStore.create(project.id, 'Pivot', 'x')
+  pivoted = defaultIdeaStore.save({ ...pivoted, phase: 'refine', recommendation: 'pivot', doc: { ...pivoted.doc, refined: 'r', outOfV1: 'o', recommendation: 'pivot' } })
+  const atPivot = await flow.autopilot(ctx, project, pivoted)
+  assert.match(atPivot.errors[0], /pivot/)
+  assert.equal(atPivot.idea.phase, 'refine')
 
   // A killed idea, then reopened
   let other = defaultIdeaStore.create(project.id, 'Outra', 'x')

@@ -455,7 +455,7 @@ Prefixo `/api/factory`, em `server/routes/factory.ts`. As ações longas respond
 | `GET`, `PATCH`, `DELETE /projects/:id` | Um projeto; edita nome e padrões; exclui (`?tasks=discard` descarta também as tarefas; sem ele, elas viram avulsas). A pasta nunca é tocada. |
 | `POST /projects/:id/adopt-tasks` | Traz para o projeto as tarefas avulsas cujo repositório fica dentro da pasta dele. |
 | `GET`, `POST /projects/:pid/ideas`, `GET`, `DELETE .../ideas/:id` | Lista, cria, lê e exclui ideias. |
-| `POST .../ideas/:id/message`, `/challenge`, `/plan`, `/split` | Uma operação de agente (SSE): conversa com o facilitador, rodada do desafio, plano e quebra em tarefas. Uma por ideia de cada vez (409). |
+| `POST .../ideas/:id/message`, `/challenge`, `/plan`, `/split`, `/autopilot` | Uma operação de agente (SSE): conversa com o facilitador, rodada do desafio, plano, quebra em tarefas e o piloto automático, que encadeia as anteriores. Uma por ideia de cada vez (409). |
 | `POST .../ideas/:id/decisions`, `/advance`, `/back`, `/stop`, `/dispatch`; `PUT .../masters`, `.../tasks`; `GET .../markdown` | Decisões dos ataques, seguir ou voltar de fase, parar o agente, enviar as tarefas à esteira, editar plano e tarefas à mão, exportar o documento. |
 
 Uma ação pedida num estado que não a permite (botão velho, clique duplo) responde 409, assim como iniciar uma execução numa tarefa que já tem outra rodando.
@@ -617,6 +617,7 @@ Antes da esteira, a Fábrica pode amadurecer uma ideia até ela virar tarefas. O
 - O desafio tem no máximo 2 rodadas, e a segunda só roda com todos os ataques da primeira decididos. "Encerra a ideia" (`kill`) leva a ideia a `dropped`.
 - Plano e quebra rodam até passar no portão, no máximo 3 vezes, reenviando os erros ao agente; o que sobrar fica na tela para correção manual.
 - Voltar de fase não apaga o que veio depois: as fases seguintes ficam marcadas como `stale`.
+- O piloto automático (`autopilot`, `POST .../ideas/:id/autopilot`) encadeia as operações acima da fase atual até a quebra: manda "avançar" ao facilitador quando o portão está fechado, roda uma rodada do desafio e decide cada ataque pela postura do blue team (`defende` → `discard`, `mitiga` → `mitigate`, sem resposta ou `concede` → `accept` se a severidade não for `alta`). Para num ataque `alta` que o blue team não rebateu, numa recomendação pivot ou stop, num portão que continua fechado e, sempre, antes do `dispatch`.
 
 **Envio à esteira (`dispatch`).** Cada tarefa da quebra vira uma `FactoryTask` com `source.type: 'idea'`, `origin` (`ideaId`, `masterKey`, `taskKey`), `givenCriteria` (os cenários Gherkin, que o Analyst recebe como CA1..n, primeiro e sem reescrever, via `withGivenCriteria`) e `dependsOn` (ids das tarefas de que depende, com as dependências entre masters expandidas). As tarefas são criadas em ordem topológica; o envio é idempotente (o que já foi enviado não se repete) e pula a tarefa cujo repositório ainda não existe, junto com as que dependem dela.
 

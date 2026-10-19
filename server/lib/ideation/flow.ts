@@ -26,7 +26,7 @@ import {
 } from './envelopes.ts'
 import { expandDependencies, gateBlockers, planErrors, splitErrors, topoOrder } from './guards.ts'
 import { defaultIdeaStore as store } from './store.ts'
-import { PHASE_ORDER, type AttackDecision, type ExecutableTask, type Idea, type IdeaPhase, type IdeaRun, type IdeationAgentId, type MasterTask } from './types.ts'
+import { PHASE_ORDER, type AttackDecision, type ChallengeAttack, type ExecutableTask, type Idea, type IdeaPhase, type IdeaRun, type IdeationAgentId, type MasterTask } from './types.ts'
 
 export type FlowContext = { signal: AbortSignal; send: (event: object) => void }
 
@@ -277,6 +277,75 @@ export async function split(ctx: FlowContext, project: FactoryProjectView, idea:
 export function setTasks(idea: Idea, tasks: ExecutableTask[]): Idea {
   refusePhase(idea, ['split'])
   return store.save({ ...idea, tasks })
+}
+
+// ── Autopilot ────────────────────────────────────────────────────────────────
+
+const ADVANCE_MESSAGE = 'avançar'
+
+// What the blue team's stance means as a decision. A high-severity attack the blue team concedes
+// (or did not answer) could kill the idea, so that one is left to the developer.
+function autoDecision(a: ChallengeAttack): AttackDecision | null {
+  if (a.stance === 'defende') return 'discard'
+  if (a.stance === 'mitiga') return 'mitigate'
+  if (a.severity === 'alta') return null
+  return 'accept'
+}
+
+export type AutopilotResult = { idea: Idea; errors: string[] }
+
+// Walks the idea from its current phase up to a finished split, using the operations above and
+// accepting the agents' recommendations. Stops for the developer at a high-severity attack the blue
+// team conceded, at a pivot or stop, at a gate the agents could not close, and always before dispatch.
+export async function autopilot(ctx: FlowContext, project: FactoryProjectView, start: Idea): Promise<AutopilotResult> {
+  refusePhase(start, ['explore', 'challenge', 'refine', 'plan', 'split'])
+  let idea = start
+  const record = (text: string) => persist(idea, f => ({ turns: [...f.turns, { role: 'system', text, at: now() }] }))
+  const halt = (reason: string): AutopilotResult => ({
+    idea: record(say({ en: `Autopilot stopped: ${reason}`, pt: `Piloto automático parou: ${reason}` })),
+    errors: [reason],
+  })
+  const blockers = () => gateBlockers(idea, repoNames(project))
+  const fillPhase = async () => {
+    if (blockers().length) idea = await converse(ctx, project, idea, ADVANCE_MESSAGE)
+  }
+
+  while (idea.phase !== 'split') {
+    ctx.send({ type: 'status', message: say({ en: `Autopilot: ${PHASE_NAME[idea.phase].en}`, pt: `Piloto automático: ${PHASE_NAME[idea.phase].pt}` }) })
+    if (idea.phase === 'challenge') {
+      if (!idea.challenge?.length) idea = await challenge(ctx, project, idea)
+      const pending = (idea.challenge ?? []).flatMap(r => r.attacks.filter(a => !a.decision).map(a => ({ round: r.round, attack: a })))
+      const open = pending.filter(p => !autoDecision(p.attack))
+      if (open.length) {
+        return halt(say({
+          en: `${open.length} high-severity attack(s) the blue team could not answer (${open.map(p => p.attack.id).join(', ')}). Decide them in the attack card and run the autopilot again.`,
+          pt: `${open.length} ataque(s) de gravidade alta que o blue team não conseguiu rebater (${open.map(p => p.attack.id).join(', ')}). Decida no cartão do ataque e rode o piloto de novo.`,
+        }))
+      }
+      idea = decide(idea, pending.map(p => ({ round: p.round, id: p.attack.id, decision: autoDecision(p.attack)!, note: say({ en: 'decided by the autopilot', pt: 'decidido pelo piloto automático' }) })))
+    }
+    if (idea.phase === 'plan' && (!idea.masters?.length || idea.stale?.includes('plan') || blockers().length)) {
+      idea = (await plan(ctx, project, idea, '')).idea
+    }
+    if (idea.phase === 'explore' || idea.phase === 'challenge' || idea.phase === 'refine') await fillPhase()
+    if (idea.phase === 'refine' && idea.recommendation && idea.recommendation !== 'go') {
+      return halt(say({
+        en: `the facilitator recommends ${idea.recommendation}. Read the recommendation and decide.`,
+        pt: `o facilitador recomenda ${idea.recommendation === 'pivot' ? 'mudar o rumo (pivot)' : 'parar (stop)'}. Leia a recomendação e decida.`,
+      }))
+    }
+    const left = blockers()
+    if (left.length) return halt(left.join('; '))
+    idea = advance(idea, project)
+  }
+
+  if (!idea.tasks?.length || idea.stale?.includes('split') || blockers().length) {
+    ctx.send({ type: 'status', message: say({ en: `Autopilot: ${PHASE_NAME.split.en}`, pt: `Piloto automático: ${PHASE_NAME.split.pt}` }) })
+    idea = (await split(ctx, project, idea, '')).idea
+  }
+  const left = blockers()
+  if (left.length) return halt(left.join('; '))
+  return { idea: record(say({ en: 'Autopilot done. Review the document, the decided attacks and the tasks, then send them to the factory.', pt: 'Piloto automático concluído. Revise o documento, os ataques decididos e as tarefas, e então envie à fábrica.' })), errors: [] }
 }
 
 // ── Dispatch to the factory ──────────────────────────────────────────────────
