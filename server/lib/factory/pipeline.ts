@@ -8,6 +8,7 @@ import { runFactoryAgent } from './runner.ts'
 import { checkCriteriaCoverage, computeBlastRadius, docsCiting, gateArtifactsExist, gateDiffNotEmpty, gateNoQualityDegradation, gateTestsPass, nonDocFiles, nonTestFiles, verifyBaseline, type TestsGateResult } from './gates.ts'
 import { runSecurityScans, scanFindings } from './scanners.ts'
 import { assessDelivery } from './readiness.ts'
+import { adjustedLesson, confirmedLesson, recallLessons, recordLessons, refutedLesson, uniqueLessons, type Lesson } from './learnings.ts'
 import { ExecutionCancelledError, throwIfCancelled } from './executions.ts'
 import {
   applyVerifierEnvelope,
@@ -267,7 +268,8 @@ async function testStep(ctx: ExecContext, task: FactoryTask, worktreePath: strin
 
 // ── Review squad ─────────────────────────────────────────────────────────────
 
-type ReviewOutcome = { review: ReviewEnvelope; security: ReviewEnvelope; tools: ScanToolResult[]; findings: SecurityFinding[]; passed: boolean; fixRounds: number; qa: QaState }
+// lessons: every blocking finding that held and every one the Verifier refuted, across all rounds
+type ReviewOutcome = { review: ReviewEnvelope; security: ReviewEnvelope; tools: ScanToolResult[]; findings: SecurityFinding[]; passed: boolean; fixRounds: number; qa: QaState; lessons: Lesson[] }
 
 // The security tools run first (their output is evidence for the Security agent), then Reviewer and
 // Security in parallel. allSettled: when one fails, the other is still awaited, so
@@ -319,16 +321,18 @@ const incompleteFinding = (description: string): SecurityFinding => ({ severity:
 // the most likely thing still wrong, and the next round's tests must describe the fixed code.
 async function reviewAndFix(ctx: ExecContext, task: FactoryTask, worktreePath: string, qa: QaState, spec?: SpecEnvelope, plan?: PlanEnvelope): Promise<ReviewOutcome> {
   let previous: SecurityFinding[] = []
+  const lessons: Lesson[] = []
   for (let round = 0; ; round++) {
     const { review, security, tools } = await reviewSquad(ctx, task, worktreePath, round, previous, qa.tests, spec)
     let findings = mergeFindings(review.findings, security.findings)
     const outcome = (passed: boolean, extra: SecurityFinding[] = []) =>
-      ({ review, security, tools, findings: [...extra, ...findings], passed, fixRounds: round, qa })
+      ({ review, security, tools, findings: [...extra, ...findings], passed, fixRounds: round, qa, lessons })
 
     const incomplete = incompleteReview(review, security, criteriaIds(spec))
     if (incomplete.length) return outcome(false, incomplete.map(incompleteFinding))
     findings = await verifyFindings(ctx, task, worktreePath, findings, round, spec)
     const verdict = computeVerdict(findings, review.criteria)
+    lessons.push(...verdict.blocking.map(confirmedLesson), ...findings.filter(f => f.refuted).map(refutedLesson))
     const testsFail = !qa.tests.passed && !qa.tests.skipped
     if ((verdict.passed && !testsFail) || round >= MAX_FIX_ROUNDS) return outcome(verdict.passed)
 
@@ -373,6 +377,18 @@ async function document(ctx: ExecContext, task: FactoryTask, worktreePath: strin
   return docs
 }
 
+// ── Memory ───────────────────────────────────────────────────────────────────
+
+// Memory is a by-product of the review: failing to write it shows in the trace and never fails the task
+async function rememberLessons(ctx: ExecContext, task: FactoryTask, lessons: Lesson[]) {
+  const count = uniqueLessons(lessons).length
+  if (count === 0) return
+  await codeStep(ctx, 'code', { name: say({ en: 'Lessons for the next tasks', pt: 'Lições para as próximas tarefas' }), phase: 'qa_security' },
+    () => recordLessons(task, lessons).catch((e: Error) => ({ stored: undefined, error: e.message })),
+    r => r?.error,
+    r => ({ memory: r?.stored, lessons: count }))
+}
+
 // ── Base sync ────────────────────────────────────────────────────────────────
 
 // The last verification runs on top of the newest base, so a merge carries code verified on what
@@ -410,7 +426,10 @@ export async function reverifyOnNewBase(ctx: ExecContext, task: FactoryTask): Pr
 
 // Analyst then Architect. Open questions stop here: guessing a business rule costs a whole build.
 export async function planTask(ctx: ExecContext, task: FactoryTask): Promise<FactoryTask> {
-  const base = await startPhase(task, { state: 'planning' })
+  let base = await startPhase(task, { state: 'planning' })
+  const recalled = await codeStep(ctx, 'code', { name: say({ en: 'Lessons from earlier tasks', pt: 'Lições de tarefas anteriores' }), phase: 'planning' },
+    () => recallLessons(base), undefined, r => ({ memory: r.from, lessons: r.text || undefined }))
+  base = await saveState(base, { lessons: recalled.text || undefined })
   ctx.send({ type: 'status', message: say({ en: 'Analyst: writing the acceptance criteria...', pt: 'Analyst: especificando critérios de aceite...' }) })
   const { envelope: spec } = await agentStep(ctx, base, 'analyst', { name: say({ en: 'Specification and acceptance criteria', pt: 'Especificação e critérios de aceite' }), phase: 'planning' },
     { prompt: formatSpecPrompt(base), cwd: base.source.repoPath }, text => withGivenCriteria(parseSpecEnvelope(text), base.givenCriteria))
@@ -442,6 +461,7 @@ export async function buildTask(ctx: ExecContext, task: FactoryTask): Promise<Fa
   const docs = await document(ctx, current, worktreePath, built.build.summary, spec)
   const outcome = await reviewAndFix(ctx, current, worktreePath, qa, spec, plan)
   const { tests, sync } = await syncAndVerify(ctx, current, worktreePath, outcome.qa.tests)
+  await rememberLessons(ctx, current, outcome.lessons)
 
   return finishReview(current, worktreePath, outcome, { ...outcome.qa, tests }, sync, outcome.qa.testerSummary ?? '', { spec, plan, build: built.build, test: outcome.qa.testEnv, docs })
 }
@@ -473,6 +493,7 @@ async function adjustReviewedWork(ctx: ExecContext, task: FactoryTask, worktreeP
     say({ en: `adjustment "${asked}"`, pt: `ajuste "${asked}"` }))
   const outcome = await reviewAndFix(ctx, current, worktreePath, qa, spec, plan)
   const { tests, sync } = await syncAndVerify(ctx, current, worktreePath, outcome.qa.tests)
+  await rememberLessons(ctx, current, [adjustedLesson(feedback), ...outcome.lessons])
   const summary = tests.passed
     ? say({ en: `Verification passed after the adjustment "${asked}".`, pt: `Verificação passou após o ajuste "${asked}".` })
     : say({ en: `Verification failed after the adjustment "${asked}".`, pt: `Verificação falhou após o ajuste "${asked}".` })

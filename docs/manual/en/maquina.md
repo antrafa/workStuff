@@ -68,7 +68,7 @@ The panel does not know which private repositories, internal addresses or versio
 
 ## Good to know
 
-- In the **workStuff** group, **Audit trails** checks the Cluster Doctor and runbook logs: a warning there means someone deleted or edited a line after it was written.
+- In the **workStuff** group, **Factory memory** says where the Factory keeps the lessons from its tasks: in the Mentat vault, if it is installed, or in a local file. Both work; Mentat only shares the lessons with your other agents. **Audit trails** checks the Cluster Doctor and runbook logs: a warning there means someone deleted or edited a line after it was written.
 - The check only reads. Nothing is installed until you click **Run** and confirm.
 - The **Run** button exists only for what installs into your home folder without an administrator password: SDKMAN, NVM (the Node version installer), Java, Maven and Node versions, and the panel's own dependencies (`npm install`). On Windows, only `npm install` runs from the panel.
 - The panel does not show the contents of `settings.xml` or `.npmrc`, because these files often hold passwords. It only checks whether the registered text is there.

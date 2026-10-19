@@ -217,6 +217,8 @@ From here it runs on its own: the Implementer writes the code, the gates check i
 
 **A repository whose tests already failed.** When a verification step fails, the Factory runs the same verification on the commit the task started from and compares the failures. If everything that failed was already failing before, the step is marked **already failing on the base** and the pipeline moves on. If a new failure appeared, it goes back to the Implementer, with the list of what is new. This comparison only runs when something fails: a green suite costs nothing extra.
 
+**Lessons from earlier tasks.** When a task reaches review, the Factory keeps what it learned: the problems the review confirmed, the false alarms the Verifier knocked down and the adjustments you had to ask for. On the next task in the same repository, those lessons go to the Architect, the Implementer and the Reviewer, so they do not repeat the same mistake. If you use Mentat (a memory vault shared across agents, in `~/.mentat`), they go there; without it, they stay in `~/.workstuff/factory/learnings.jsonl`. The [Machine](/maquina) screen shows which one is in use, and the task's timeline shows what was recalled and recorded.
+
 ## Reviewing the delivery
 
 When the task reaches **waiting for review**, click **Review delivery**. The top of the window shows the branch, the repository, the provider, the state and the cost (with the cap, if there is one).

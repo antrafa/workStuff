@@ -221,6 +221,7 @@ All state lives in `WORKSTUFF_HOME` (default `~/.workstuff`), outside the reposi
 | `resources-namespace-links.json` | Stack ↔ namespace links for Requests & Limits |
 | `http-requests.json` | Saved HTTP requests and environments (mode `600`: headers and variables may hold tokens) |
 | `doctor-audit.log`, `runbook-audit.log`, `dev-runbook-audit.log` | Every command the Cluster Doctor agent tried and every runbook step run, hash-chained |
+| `factory/learnings.jsonl` | Lessons from the Factory's reviews, when the Mentat vault (`~/.mentat`) is not installed |
 | `analysis/` | Architecture report history |
 | `performance/` | Observations, samples (`.jsonl`) and reports |
 

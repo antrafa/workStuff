@@ -14,6 +14,9 @@ process.env.WORKSTUFF_HOME = join(tmp, 'home')
 // Fake user home with a Claude login: the jailed agents get a copy, never the real ~/.claude
 const agentHome = join(tmp, 'agent-home')
 process.env.WORKSTUFF_AGENT_HOME = agentHome
+// Lessons go to the temporary home, never to the developer's Mentat vault
+delete process.env.MENTAT_VAULT
+delete process.env.WORKSTUFF_MENTAT_SCRIPT
 mkdirSync(join(agentHome, '.claude'), { recursive: true })
 writeFileSync(join(agentHome, '.claude', '.credentials.json'), JSON.stringify({ claudeAiOauth: { accessToken: 'a', refreshToken: 'r' } }))
 
@@ -238,7 +241,11 @@ try {
     const c = { ...ctx, taskId: id }
     return { c, built: await buildTask(c, await planTask(c, t)) }
   }
+  // The first task's confirmed finding became a lesson, recalled by the next task in the same repo
+  const learned = readFileSync(join(tmp, 'home', 'factory', 'learnings.jsonl'), 'utf-8')
+  assert.match(learned, /"kind":"confirmed","text":"feature.txt:1 falta X"/, 'achado confirmado vira lição local, sem Mentat')
   const prose = await runCase('fac-prose', 'Feature PROSA')
+  assert.match(prose.built.lessons ?? '', /Achado confirmado pela revisão: feature.txt:1 falta X/, 'a tarefa seguinte recebe a lição')
   assert.equal(prose.built.securityReport?.passed, false, 'Reviewer sem envelope não aprova')
   assert.match(prose.built.securityReport!.findings[0].description, /Reviewer did not finish/)
   await removeWorktree(repo, prose.built.worktreePath!, prose.built.branchName)

@@ -18,6 +18,7 @@ import { verifyAudit } from '../auditLog.ts'
 import { DOCTOR_AUDIT } from '../doctorAi/run.ts'
 import { AUDIT as RUNBOOK_AUDIT } from '../runbooks/runbooks.ts'
 import { AUDIT as DEV_RUNBOOK_AUDIT } from '../devRunbooks/devRunbooks.ts'
+import { memoryBackend } from '../factory/learnings.ts'
 import { say } from '../i18n.ts'
 
 const exec = promisify(execFile)
@@ -277,6 +278,15 @@ async function bubblewrap(p: Platform, fix: ReturnType<typeof fixesFor>): Promis
   return pending('workStuff', item, 'aviso', say({ en: `bubblewrap only exists on Linux: on ${p.label} Antigravity does not run on the AI screens`, pt: `bubblewrap só existe no Linux: no ${p.label} o Antigravity não roda nas telas de IA` }), fix.noBwrap)
 }
 
+// Both are fine: Mentat only shares the lessons with the developer's other agents
+function factoryMemory(): CheckResult {
+  const item = say({ en: 'Factory memory', pt: 'Memória da Fábrica' })
+  const backend = memoryBackend()
+  return backend.kind === 'mentat'
+    ? ok('workStuff', item, say({ en: `Mentat vault at ${backend.vault}`, pt: `cofre do Mentat em ${backend.vault}` }))
+    : ok('workStuff', item, say({ en: `local, in ${backend.file} (install Mentat to share the lessons with your agents)`, pt: `local, em ${backend.file} (instale o Mentat para dividir as lições com os seus agentes)` }))
+}
+
 // A broken chain means a line was removed or edited by hand after it was written
 function auditTrails(): CheckResult {
   const item = say({ en: 'Audit trails', pt: 'Trilhas de auditoria' })
@@ -300,6 +310,7 @@ async function workstuff(p: Platform, fix: ReturnType<typeof fixesFor>): Promise
       : pending('workStuff', say({ en: 'Panel dependencies', pt: 'Dependências do painel' }), 'falta', say({ en: 'node_modules missing', pt: 'node_modules ausente' }), fix.npmInstall),
     await picker(p, fix),
     await bubblewrap(p, fix),
+    factoryMemory(),
     auditTrails(),
     catalogCount > 0
       ? ok('workStuff', say({ en: 'AI catalog', pt: 'Catálogo de IA' }), say({ en: `${catalogCount} item(s) active in Claude`, pt: `${catalogCount} item(ns) ativo(s) no Claude` }))

@@ -298,6 +298,9 @@ export type FactoryTask = {
   // Base commit the last verification ran on: a newer base means rebase and verify again
   verifiedBase?: string
   verifyBaseline?: VerifyBaseline
+  // Lessons of earlier tasks in the same repository, recalled at planning (learnings.ts) and given
+  // to the Architect, the Implementer and the Reviewer
+  lessons?: string
   // Why the developer finished with blockers on, and which ones
   finishOverride?: { reason: string; blockers: string[]; at: string }
   // Model per agent, overriding `model` (e.g. a frontier model to plan, a cheap one to build)

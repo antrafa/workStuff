@@ -217,6 +217,8 @@ A partir daqui roda sozinho: o Implementer escreve o código, os portões confer
 
 **Repositório com testes que já falhavam.** Quando uma etapa da verificação falha, a Fábrica roda a mesma verificação no commit de onde a tarefa saiu e compara as falhas. Se tudo o que falhou já falhava antes, a etapa fica marcada como **já falhava na base** e a esteira segue. Se apareceu uma falha nova, ela volta para o Implementer corrigir, com a lista do que é novo. Essa comparação só roda quando algo falha: uma suíte verde não paga nada a mais.
 
+**Lições de tarefas anteriores.** Quando uma tarefa chega à revisão, a Fábrica guarda o que aprendeu: os problemas que a revisão confirmou, os falsos alarmes que o Verifier derrubou e os ajustes que você precisou pedir. Na próxima tarefa do mesmo repositório, essas lições vão para o Architect, o Implementer e o Reviewer, para não repetirem o mesmo erro. Se você usa o Mentat (um cofre de memória compartilhado entre agentes, em `~/.mentat`), elas vão para lá; sem ele, ficam em `~/.workstuff/factory/learnings.jsonl`. A tela [Máquina](/maquina) mostra qual dos dois está em uso, e a linha do tempo da tarefa mostra o que foi lembrado e gravado.
+
 ## Revisar a entrega
 
 Quando a tarefa chega em **aguardando revisão**, clique em **Revisar entrega**. O topo da janela mostra a branch, o repositório, o provedor, o estado e o custo (com o teto, se houver).

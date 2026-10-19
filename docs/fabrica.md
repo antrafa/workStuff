@@ -135,7 +135,7 @@ O código da esteira está em `server/lib/factory/pipeline.ts`. As rotas (`serve
 
 ### 5.1 Planejamento (`planTask`)
 
-1. A tarefa vai para `planning`.
+1. A tarefa vai para `planning`. A esteira lembra as lições de tarefas anteriores no mesmo repositório (`recallLessons`, ver [Lições de tarefas anteriores](#lições-de-tarefas-anteriores)) e as guarda em `task.lessons`.
 2. O **Analyst** recebe a demanda (título, descrição, issue, respostas anteriores) e devolve o `SpecEnvelope`.
 3. Se houver `openQuestions`, a tarefa para em `waiting_clarification`. Você responde na gaveta; as respostas entram em `task.clarifications` junto com as perguntas, e o planejamento roda de novo do início.
 4. Sem dúvidas, o **Architect** recebe a demanda e a especificação e devolve o `PlanEnvelope`. O plano completo que ele escreveu em markdown é guardado em `task.plan`; o campo `plan` do JSON é só um resumo e é descartado de propósito, porque entregar o resumo ao Implementer jogaria o plano real fora.
@@ -301,6 +301,17 @@ O **comando de smoke** da tarefa (`smokeCommand`) roda por último, no mesmo jai
 
 Sem nenhum comando, nada é verificado: o QA fica reprovado e a entrega bloqueada. Limite de 10 minutos por etapa; a saída guardada é a cauda (últimos 30.000 caracteres), que é onde a falha aparece.
 
+### Lições de tarefas anteriores
+
+`server/lib/factory/learnings.ts`. Ao fim de cada revisão (construção ou ajuste), `rememberLessons` grava o que a esteira aprendeu: cada achado bloqueante que resistiu ao Verifier (`confirmed`), cada achado refutado com o motivo (`refuted`) e o pedido de ajuste do desenvolvedor (`adjusted`), sem repetir o mesmo achado de rodadas diferentes, até 12 por revisão. No planejamento seguinte do mesmo repositório, `recallLessons` traz as de até 5 tarefas, as que mais compartilham palavras com a demanda primeiro, e o bloco entra nos prompts do Architect, do Implementer e do Reviewer, marcado como dado, não instrução.
+
+Onde ficam (`memoryBackend`):
+
+- **Mentat**, quando há `~/.mentat/entries` (ou `$MENTAT_VAULT`) e o script da skill em `~/.claude`, `~/.agents` ou `~/.codex` (`skills/mentat/scripts/vault.py`, ou `$WORKSTUFF_MENTAT_SCRIPT`): uma entrada `learning` por revisão, com `--project` igual ao nome da pasta do repositório e a tag `factory/review`; a busca usa `vault.py search --type learning --json` e lê só a seção Insight de arquivos dentro do cofre. Se o Mentat falhar ao gravar, as lições vão para o arquivo local e o span diz por quê.
+- **Local**, nos outros casos: `factory/learnings.jsonl`, uma linha por revisão.
+
+Gravar a memória nunca derruba a tarefa: uma falha aparece como span com erro. A tela Máquina mostra qual das duas está em uso.
+
 ## 8. Envelopes de handoff
 
 Cada agente termina a resposta com um bloco ```` ```json ```` no formato pedido. A esteira usa o **último** bloco JSON válido, porque o texto antes dele pode trazer seus próprios exemplos de código. Campos ausentes ou inválidos recebem valores seguros (por exemplo, uma severidade desconhecida vira `low`), e um agente que não devolve envelope não derruba a esteira: o texto livre vira o conteúdo.
@@ -426,6 +437,7 @@ Tudo fica fora do repositório, em `WORKSTUFF_HOME` (padrão `~/.workstuff`):
 | `factory/tasks.json` | Todas as tarefas. A gravação usa um arquivo temporário e `rename`, então uma queda no meio não deixa o arquivo pela metade. |
 | `factory/sessions/<id>.jsonl` | A sessão de cada tarefa, evento por evento (`.json` é o formato antigo, ainda lido). |
 | `worktrees/<repo>/<id>/` | As worktrees em andamento. |
+| `factory/learnings.jsonl` | As lições das revisões, quando o Mentat não está instalado. |
 | `worktrees/<repo>/<id>.base/` | O checkout da base enquanto a verificação de base roda; apagado no fim. |
 | `factory/projects/<id>/project.json` | Um projeto: nome, pasta e padrões das tarefas. |
 | `factory/projects/<id>/ideas/<id>/idea.json`, `idea.md` | Uma ideia: fase, conversa, documento vivo, desafio, plano, tarefas e o que já foi enviado; o `.md` é o documento vivo, regravado a cada mudança. |
@@ -493,6 +505,7 @@ Tudo em `src/features/factory/`.
 | `server/lib/factory/envelopes.ts` | Prompts de cada passo, leitura dos envelopes, `computeVerdict`, `mergeFindings`. |
 | `server/lib/factory/gates.ts` | Portões, detecção das etapas de verificação, execução no jail (`runJailed`), cobertura por critério. |
 | `server/lib/factory/scanners.ts` | gitleaks, semgrep e npm audit no jail; segredo encontrado vira achado. |
+| `server/lib/factory/learnings.ts` | Lições das revisões: onde ficam (Mentat ou local), gravar e lembrar. |
 | `server/lib/factory/readiness.ts` | `assessDelivery`: o que bloqueia e o que pede atenção; `canAutoMr`. |
 | `server/lib/factory/runner.ts` | Argumentos de cada CLI por modo, jail `bwrap` (`jail`, `withSandbox`), `--resume`. |
 | `server/lib/factory/worktree.ts` | Criar, commitar, comparar, descartar arquivos, rebasear sobre a base (`syncWithBase`), publicar, mesclar e remover worktrees. |
@@ -516,13 +529,14 @@ Todos entram no `npm run check`:
 | `node server/lib/factory/runner.ts --selfcheck` | Argumentos por provedor e modo; escrita só no jail; `--resume`. |
 | `node server/lib/factory/gates.ts --selfcheck` | Portões, detecção das etapas, etapas em sequência com smoke por último, "nada para rodar" reprova, jail de verdade (escrita fora da worktree barrada), cobertura por critério. |
 | `node server/lib/factory/scanners.ts --selfcheck` | Ferramenta ausente sugerida e não instalada, códigos de saída, segredo vira achado. |
+| `node server/lib/factory/learnings.ts --selfcheck` | Lições locais por repositório e por relevância, repetidas viram uma, Mentat com um `vault.py` falso (gravar, buscar, ler só dentro do cofre). |
 | `node server/lib/factory/readiness.ts --selfcheck` | Cada bloqueio e cada ponto de atenção; MR automático só com tudo limpo. |
 | `node server/lib/factory/envelopes.ts --selfcheck` | Leitura dos envelopes, veredito, refutação do Verifier, critérios por id, fusão de achados, conteúdo dos prompts. |
 | `node server/lib/factory/executions.ts --selfcheck` | Registro, cancelamento, limpeza atrasada. |
 | `node server/lib/factory/projects.ts --selfcheck` | Repositórios encontrados na pasta, criação com `git init`, adoção de tarefas. |
 | `node server/lib/ideation/guards.ts --selfcheck`, `store.ts`, `envelopes.ts` | Portões de cada fase, ciclos e cobertura de cenários, documento em Markdown, leitura das respostas dos agentes. |
 | `node scripts/check-ideation-flow.ts` | A ideação inteira com um `claude` falso: fases, desafio, plano recusado e refeito, quebra, envio sem duplicar, bloqueio por dependência, descarte, ideia encerrada e reaberta. |
-| `node scripts/check-factory-pipeline.ts` | A esteira inteira, com um `claude` falso no `PATH`: dúvida do Analyst, correção após portão, achado bloqueante corrigido na rodada automática, achado refutado pelo Verifier, Tester depois da correção, Documenter barrado, sem verificação bloqueia, rebase quando a base anda, modelo por agente, teto de custo, suíte que já falhava na base. Não gasta tokens. |
+| `node scripts/check-factory-pipeline.ts` | A esteira inteira, com um `claude` falso no `PATH`: dúvida do Analyst, correção após portão, achado bloqueante corrigido na rodada automática, achado refutado pelo Verifier, Tester depois da correção, Documenter barrado, sem verificação bloqueia, rebase quando a base anda, modelo por agente, teto de custo, lição gravada e lembrada na tarefa seguinte, suíte que já falhava na base. Não gasta tokens. |
 
 ## 18. Como estender
 
@@ -548,6 +562,7 @@ O selfcheck de `agents.ts` falha se um agente da ordem ficar sem definição, e 
 - **O Verifier só lê.** Ele refuta lendo o código, não executando; rodar um caso que prove a falha pediria uma worktree descartável.
 - **Cobertura por critério confere o arquivo, não o teste.** A esteira sabe que o arquivo citado existe e que a suíte passou, não que aquele teste exercita o critério; isso continua com o Reviewer.
 - **Falhas da base por linha, não por teste**: a comparação apaga números, então uma linha de resumo ("Tests: 3 failed" e "Tests: 4 failed") não distingue nada; quem pega a falha nova é a linha do teste. Mover um erro antigo para outro arquivo conta como novo. A verificação da base custa uma rodada inteira a mais, na primeira falha.
+- **Lições sem curadoria**: tudo que a revisão confirmou ou refutou vira lição, inclusive um achado que só valia para aquela tarefa. O Mentat apaga com o tempo o que nunca é usado; o arquivo local só cresce.
 - **Caminhos sensíveis por nome**: `auth` também pega `author`. Falso positivo só segura o MR automático.
 - **Nova verificação no finish** acontece dentro da requisição: se a base andou, o clique em MR ou merge pode levar minutos.
 - **Ferramentas de segurança** dependem do que está instalado; `semgrep --config p/default` e `npm audit` precisam de rede.
@@ -593,6 +608,7 @@ Os [runbooks de dev da Fábrica](../dev-runbooks/factory/) cobrem os procediment
 | Piso de qualidade determinístico (sem `@ts-ignore` / `.skip()`) e regras anti-slop | Impede que o laço de correção "passe" suprimindo o erro ou pulando o teste (ideia de `pstack/unslop`) |
 | Cálculo de raio de impacto (blast radius) via `git grep` e bloqueio na prontidão | Um arquivo com 3 ou mais dependentes de produção sem teste retém o MR automático (ideia de `blast-radius`) |
 | Falha de verificação comparada com a base; só falha nova reprova | Repositório com suíte vermelha ainda entrega, sem o agente "consertar" o que não é dele (ideia do `ci-test-ratchet` do ruflo) |
+| Lições das revisões gravadas e lembradas por repositório, no Mentat quando houver | A esquadra não repete um erro já apontado nem um falso positivo já refutado (ideia do laço de aprendizado do ruflo) |
 | Reorganização cognitiva do diff em 4 camadas e review canvas na gaveta | Lógica central primeiro, depois integração, testes e metadados (ideia de `pr-review-canvas`) |
 
 O que ficou de fora de propósito:
