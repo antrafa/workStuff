@@ -69,7 +69,7 @@ Toda linha também tem o ícone de copiar, para levar o comando ao seu terminal.
 - Os valores dos parâmetros usados dentro dos comandos aceitam só letras, números e `. _ - / @ : =`. Isso impede que um valor digitado vire outro comando.
 - Na dúvida, o painel trata o comando como **escrita** e pede confirmação. No Git, só rodam direto as consultas conhecidas, como `status`, `log`, `diff` e `branch` sem opção de apagar ou renomear.
 - Comandos do Git têm até 1 minuto para terminar; os demais (build, testes, instalação) têm até 10 minutos.
-- Toda execução, de leitura ou de escrita, fica registrada no arquivo `~/.workstuff/dev-runbook-audit.log`, com data, comando, pasta e se deu certo.
+- Toda execução, de leitura ou de escrita, fica registrada no arquivo `~/.workstuff/dev-runbook-audit.log`, com data, comando, pasta e se deu certo. Cada linha leva a impressão digital da anterior: se alguém apagar ou editar uma linha, o item **Trilhas de auditoria** da tela [Máquina](/maquina) avisa.
 - A lista lê até três níveis de subpastas e ignora pastas ocultas, `node_modules` e arquivos com mais de 512 KB.
 
 ## Problemas comuns

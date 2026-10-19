@@ -4,12 +4,13 @@
 
 import assert from 'node:assert/strict'
 import { execFile } from 'node:child_process'
-import { appendFileSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, relative, resolve, sep } from 'node:path'
 import { promisify } from 'node:util'
 import { DEFAULT_DEV_RUNBOOKS_DIR, dataFile, expandHome } from '../paths.ts'
 import { readJson, writeJson } from '../jsonFile.ts'
+import { appendAudit } from '../auditLog.ts'
 import { say } from '../i18n.ts'
 
 const execFileAsync = promisify(execFile)
@@ -19,7 +20,7 @@ export type Segment =
   | { type: 'step'; id: number; line: string; vars: string[] }
 
 const CONFIG = dataFile('dev-runbooks.json')
-const AUDIT = dataFile('dev-runbook-audit.log')
+export const AUDIT = dataFile('dev-runbook-audit.log')
 export const DEFAULT_ROOT = DEFAULT_DEV_RUNBOOKS_DIR
 
 export const readRoot = (): string => {
@@ -269,8 +270,7 @@ export async function execDevCommand(bin: string, args: string[], cwd?: string, 
 }
 
 export function audit(entry: { file: string; step: number; command: string; cwd?: string; kind: string; ok: boolean }) {
-  mkdirSync(join(AUDIT, '..'), { recursive: true })
-  appendFileSync(AUDIT, JSON.stringify({ at: new Date().toISOString(), ...entry }) + '\n')
+  appendAudit(AUDIT, entry)
 }
 
 if (import.meta.main && process.argv.includes('--selfcheck')) {

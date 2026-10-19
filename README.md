@@ -106,7 +106,7 @@ workStuff runs commands on your machine and against real clusters, so its defaul
   - **Command check.** A `PreToolUse` hook checks every command before it runs. The command must be exactly one `kubectl` call with no pipes, chaining, redirection or substitution. Flags that change the target (`--kubeconfig`, `--context`, `--server`, `--token`, `--as`, ...) are rejected.
   - **Blocked operations.** Secrets, `exec`, `cp`, `port-forward`, `create` and `run` are always refused.
   - **Writes.** The agent cannot write on its own. It proposes the command, and you approve or reject it. On approval the server checks the command against the policy again and runs it itself.
-  - **Audit.** Every attempt is logged to `~/.workstuff/doctor-audit.log`.
+  - **Audit.** Every attempt is logged to `~/.workstuff/doctor-audit.log`, each line chained to the previous one by hash (`server/lib/auditLog.ts`), as are the runbook logs; the Machine page warns when a chain is broken.
 - **HTTP requests go out from the server.** The HTTP requests screen sends what you typed, to any `http://` or `https://` address the machine reaches, including `127.0.0.1`. Only the local API can ask for it (see *Local only*). Invalid TLS certificates are never skipped.
 - **Credentials.** Tokens typed in the UI are stored with mode `600`. Git receives them through a temporary askpass helper, never in the clone URL.
 
@@ -220,7 +220,7 @@ All state lives in `WORKSTUFF_HOME` (default `~/.workstuff`), outside the reposi
 | `cluster-session.json`, `cluster-environments.json` | Selected kubeconfig/context and environment classes |
 | `resources-namespace-links.json` | Stack ↔ namespace links for Requests & Limits |
 | `http-requests.json` | Saved HTTP requests and environments (mode `600`: headers and variables may hold tokens) |
-| `doctor-audit.log` | Every command the Cluster Doctor agent tried |
+| `doctor-audit.log`, `runbook-audit.log`, `dev-runbook-audit.log` | Every command the Cluster Doctor agent tried and every runbook step run, hash-chained |
 | `analysis/` | Architecture report history |
 | `performance/` | Observations, samples (`.jsonl`) and reports |
 

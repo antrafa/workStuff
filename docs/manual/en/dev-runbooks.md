@@ -71,7 +71,7 @@ Every line also has the copy icon, to take the command to your own terminal.
 - Parameter values used inside commands accept only letters, numbers and `. _ - / @ : =`. This keeps a typed value from turning into another command.
 - When in doubt, the panel treats a command as **write** and asks for confirmation. For Git, only known lookups run directly, such as `status`, `log`, `diff`, and `branch` without an option to delete or rename.
 - Git commands get up to 1 minute to finish; the others (build, tests, installs) get up to 10 minutes.
-- Every run, read or write, is recorded in the file `~/.workstuff/dev-runbook-audit.log`, with the date, command, folder and whether it worked.
+- Every run, read or write, is recorded in the file `~/.workstuff/dev-runbook-audit.log`, with the date, command, folder and whether it worked. Each line carries the fingerprint of the one before it: if someone deletes or edits a line, the **Audit trails** item on the [Machine](/maquina) screen warns you.
 - The list reads up to three levels of subfolders and skips hidden folders, `node_modules` and files larger than 512 KB.
 
 ## Common problems

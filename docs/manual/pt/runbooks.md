@@ -92,7 +92,7 @@ kubectl rollout restart deployment/{{app}} -n {{namespace}}
 - O valor de uma variável só aceita letras, números, ponto, hífen, sublinhado, barra e `=`. Isso impede que um valor digitado vire outro comando.
 - Mesmo depois da confirmação, o servidor relê o comando do arquivo e confere de novo as regras antes de executar.
 - Cada comando tem até 60 segundos para terminar.
-- Toda execução, de leitura ou de escrita, fica registrada em `~/.workstuff/runbook-audit.log`, com o arquivo, o passo, o comando, o cluster, o ambiente e o resultado.
+- Toda execução, de leitura ou de escrita, fica registrada em `~/.workstuff/runbook-audit.log`, com o arquivo, o passo, o comando, o cluster, o ambiente e o resultado. Cada linha leva a impressão digital da anterior: se alguém apagar ou editar uma linha, o item **Trilhas de auditoria** da tela [Máquina](/maquina) avisa.
 
 ## Problemas comuns
 

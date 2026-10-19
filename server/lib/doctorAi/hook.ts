@@ -5,9 +5,9 @@
 
 import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
-import { appendFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { decide } from './command.ts'
+import { appendAudit } from '../auditLog.ts'
 
 type HookInput = { tool_name?: string; tool_input?: { command?: unknown } }
 
@@ -55,7 +55,7 @@ if (import.meta.main && process.argv.includes('--selfcheck')) {
   const audit = process.env.WORKSTUFF_DOCTOR_AUDIT
   if (audit) {
     try {
-      appendFileSync(audit, JSON.stringify({ at: new Date().toISOString(), context: process.env.WORKSTUFF_DOCTOR_SCOPE, command: input.tool_input?.command ?? null, decision, reason }) + '\n')
+      appendAudit(audit, { context: process.env.WORKSTUFF_DOCTOR_SCOPE, command: input.tool_input?.command ?? null, decision, reason })
     } catch {
       // auditoria indisponível não pode liberar nem travar o comando: a decisão acima já está tomada
     }

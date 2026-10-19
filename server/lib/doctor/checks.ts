@@ -14,6 +14,10 @@ import { FOREIGN, PLATFORM, SIMULATED, foreignKey, installFix, type Fix, type Pl
 import { which } from '../run.ts'
 import { listSources, resolveToken } from '../repos/sources.ts'
 import { readDoctorConfig, type DoctorConfig } from './config.ts'
+import { verifyAudit } from '../auditLog.ts'
+import { DOCTOR_AUDIT } from '../doctorAi/run.ts'
+import { AUDIT as RUNBOOK_AUDIT } from '../runbooks/runbooks.ts'
+import { AUDIT as DEV_RUNBOOK_AUDIT } from '../devRunbooks/devRunbooks.ts'
 import { say } from '../i18n.ts'
 
 const exec = promisify(execFile)
@@ -273,6 +277,21 @@ async function bubblewrap(p: Platform, fix: ReturnType<typeof fixesFor>): Promis
   return pending('workStuff', item, 'aviso', say({ en: `bubblewrap only exists on Linux: on ${p.label} Antigravity does not run on the AI screens`, pt: `bubblewrap só existe no Linux: no ${p.label} o Antigravity não roda nas telas de IA` }), fix.noBwrap)
 }
 
+// A broken chain means a line was removed or edited by hand after it was written
+function auditTrails(): CheckResult {
+  const item = say({ en: 'Audit trails', pt: 'Trilhas de auditoria' })
+  const checks = [DOCTOR_AUDIT, RUNBOOK_AUDIT, DEV_RUNBOOK_AUDIT].map(file => ({ file, r: verifyAudit(file) }))
+  const broken = checks.flatMap(({ file, r }) => {
+    return r.ok ? [] : [say({ en: `${file} line ${r.brokenAt} (${r.reason})`, pt: `${file} linha ${r.brokenAt} (${r.reason})` })]
+  })
+  if (broken.length) {
+    return pending('workStuff', item, 'aviso', say({ en: `chain broken: ${broken.join('; ')}`, pt: `corrente quebrada: ${broken.join('; ')}` }),
+      instrucao(say({ en: 'find out who changed the log; keep a copy before rotating it, since the chain restarts in a new file', pt: 'descubra quem alterou o log; guarde uma cópia antes de rotacioná-lo, pois a corrente recomeça num arquivo novo' })))
+  }
+  const entries = checks.reduce((n, { r }) => n + r.entries, 0)
+  return ok('workStuff', item, say({ en: `${entries} chained entry(ies), intact`, pt: `${entries} registro(s) encadeado(s), íntegros` }))
+}
+
 async function workstuff(p: Platform, fix: ReturnType<typeof fixesFor>): Promise<CheckResult[]> {
   const catalogCount = (read(join(HOME, '.claude', 'CLAUDE.md')).match(/<!-- workstuff:item:/g) ?? []).length
   return [
@@ -281,6 +300,7 @@ async function workstuff(p: Platform, fix: ReturnType<typeof fixesFor>): Promise
       : pending('workStuff', say({ en: 'Panel dependencies', pt: 'Dependências do painel' }), 'falta', say({ en: 'node_modules missing', pt: 'node_modules ausente' }), fix.npmInstall),
     await picker(p, fix),
     await bubblewrap(p, fix),
+    auditTrails(),
     catalogCount > 0
       ? ok('workStuff', say({ en: 'AI catalog', pt: 'Catálogo de IA' }), say({ en: `${catalogCount} item(s) active in Claude`, pt: `${catalogCount} item(ns) ativo(s) no Claude` }))
       : pending('workStuff', say({ en: 'AI catalog', pt: 'Catálogo de IA' }), 'aviso', say({ en: 'no rule/persona activated in Claude by workStuff', pt: 'nenhuma rule/persona ativada no Claude pelo workStuff' }), instrucao(say({ en: 'activate items on the Catalog screen', pt: 'ative itens pela tela Catálogo' }))),

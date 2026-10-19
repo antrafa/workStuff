@@ -5,11 +5,12 @@
 // Autoteste: node server/lib/runbooks/runbooks.ts --selfcheck
 
 import assert from 'node:assert/strict'
-import { appendFileSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, relative, resolve, sep } from 'node:path'
 import { DEFAULT_RUNBOOKS_DIR, dataFile, expandHome } from '../paths.ts'
 import { readJson, writeJson } from '../jsonFile.ts'
+import { appendAudit } from '../auditLog.ts'
 import { decide } from '../doctorAi/command.ts'
 import { authorizeMutation, type Environment } from '../k8s/policy.ts'
 import { say } from '../i18n.ts'
@@ -17,7 +18,7 @@ import { say } from '../i18n.ts'
 export type Segment = { type: 'text'; md: string } | { type: 'step'; id: number; line: string; vars: string[] }
 
 const CONFIG = dataFile('runbooks.json')
-const AUDIT = dataFile('runbook-audit.log')
+export const AUDIT = dataFile('runbook-audit.log')
 
 export const DEFAULT_ROOT = DEFAULT_RUNBOOKS_DIR
 
@@ -119,8 +120,7 @@ export function classify(line: string, values: Record<string, string>, env: Envi
 
 // Toda execução fica registrada: quem rodou o quê, em qual cluster, com qual resultado.
 export function audit(entry: { file: string; step: number; command: string; context: string; environment: Environment | null; kind: string; ok: boolean }) {
-  mkdirSync(join(AUDIT, '..'), { recursive: true })
-  appendFileSync(AUDIT, JSON.stringify({ at: new Date().toISOString(), ...entry }) + '\n')
+  appendAudit(AUDIT, entry)
 }
 
 if (import.meta.main && process.argv.includes('--selfcheck')) {

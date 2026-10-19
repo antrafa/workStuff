@@ -21,6 +21,7 @@ const exec = promisify(execFile)
 // Linhas de log interno do kubectl (klog, ex.: E0930 12:00:00.000 memcache.go) escondem a mensagem que importa.
 const clean = (s: string) => s.split('\n').filter(l => !/^[EIWF]\d{4} \d{2}:\d{2}:\d{2}/.test(l) && !l.startsWith('Warning:')).join('\n').trim()
 const HOOK = fileURLToPath(new URL('./hook.ts', import.meta.url))
+export const DOCTOR_AUDIT = dataFile('doctor-audit.log')
 
 // Lista estreita de leitura, como segunda barreira: mesmo se o gancho não carregar, só isto é pré-aprovado.
 const READ_PATTERNS = ['get', 'describe', 'logs', 'top', 'events', 'explain', 'api-resources', 'version', 'rollout status', 'rollout history', 'auth can-i'].map(v => `Bash(kubectl ${v}:*)`)
@@ -90,7 +91,7 @@ export async function runDoctor(scope: Scope, prompt: string, resume: string | n
   const tmp = await scopedKubeconfig(scope)
   try {
     return await spawnCli('claude', model, doctorArgs(scope, prompt, tmp.settings, resume), {
-      prompt, cwd: tmp.dir, signal, onEvent, timeoutMs: 15 * 60_000, stallMs: 5 * 60_000, env: { KUBECONFIG: tmp.kubeconfig, WORKSTUFF_DOCTOR_AUDIT: dataFile('doctor-audit.log'), WORKSTUFF_DOCTOR_SCOPE: `${scope.kubeconfigId}/${scope.context} (${scope.environment ?? 'sem ambiente'})` },
+      prompt, cwd: tmp.dir, signal, onEvent, timeoutMs: 15 * 60_000, stallMs: 5 * 60_000, env: { KUBECONFIG: tmp.kubeconfig, WORKSTUFF_DOCTOR_AUDIT: DOCTOR_AUDIT, WORKSTUFF_DOCTOR_SCOPE: `${scope.kubeconfigId}/${scope.context} (${scope.environment ?? 'sem ambiente'})` },
     })
   } finally {
     tmp.cleanup()

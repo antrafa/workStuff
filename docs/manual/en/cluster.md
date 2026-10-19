@@ -122,7 +122,7 @@ In PRO or unclassified, the same button opens a **read-only · nothing will run*
 - In Cluster Doctor, the AI cannot write: it only proposes. When you confirm, the panel itself checks the command against the environment rules again and runs it. The AI gets access restricted to the chosen cluster and context, and every command goes through a lock before it runs.
 - If the proposal is not allowed in that environment (for example, deleting something in DES or any write in PRO), the card becomes **Action blocked**, with the reason and a **Copy command** button: if you are sure, you run it yourself.
 - Some operations the AI never performs, in any environment: reading Secrets (where passwords live), getting into a container (`exec`), copying files, opening ports or creating resources.
-- Every Cluster Doctor attempt is logged to `~/.workstuff/doctor-audit.log`.
+- Every Cluster Doctor attempt is logged to `~/.workstuff/doctor-audit.log`. Each line carries the fingerprint of the one before it: if someone deletes or edits a line, the **Audit trails** item on the [Machine](/maquina) screen warns you.
 
 ## Good to know
 

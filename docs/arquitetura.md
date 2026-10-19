@@ -196,7 +196,7 @@ sequenceDiagram
 - **Acesso restrito**: uma pasta temporária (modo 700) com um kubeconfig que só tem o contexto escolhido (`kubectl config view --minify --flatten`, modo 600) e um `settings.json` que instala o gancho.
 - **Gancho** (`hook.ts`): confere cada comando antes de rodar. Exatamente uma chamada `kubectl`, sem pipe, encadeamento, redirecionamento ou substituição; flags que trocam o alvo (`--kubeconfig`, `--context`, `--server`, `--token`, `--as`...) recusadas; secrets, `exec`, `cp`, `port-forward`, `create` e `run` sempre recusados.
 - **Escrita**: o agente não escreve. Ele propõe o comando num bloco; você aprova ou recusa; na aprovação o servidor confere a política outra vez e executa ele mesmo, sem shell, e devolve o resultado ao agente.
-- **Auditoria**: cada tentativa vai para `~/.workstuff/doctor-audit.log`.
+- **Auditoria**: cada tentativa vai para `~/.workstuff/doctor-audit.log`. Cada linha leva o hash da anterior (`server/lib/auditLog.ts`, o mesmo dos dois logs de runbooks), e a tela Máquina avisa quando a corrente quebra: uma linha apagada, editada ou o começo do arquivo cortado. Sem chave secreta: pega edição à mão, não quem reescreve o arquivo inteiro.
 
 ## 7. Módulos por funcionalidade
 

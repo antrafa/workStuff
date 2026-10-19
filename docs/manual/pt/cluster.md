@@ -122,7 +122,7 @@ Em PRO ou sem ambiente, o mesmo botão abre uma janela **somente leitura · nada
 - No Cluster Doctor, a IA não consegue escrever: ela só propõe. Quando você confirma, o próprio painel confere o comando de novo contra as regras do ambiente e o executa. A IA recebe um acesso restrito ao cluster e ao contexto escolhidos, e cada comando passa por uma trava antes de rodar.
 - Se a proposta não for permitida no ambiente (por exemplo, apagar algo em DES ou qualquer escrita em PRO), o cartão vira **Ação bloqueada**, com o motivo e o botão **Copiar comando**: se tiver certeza, você roda por conta própria.
 - Algumas operações a IA nunca faz, em nenhum ambiente: ler Secrets (onde ficam senhas), entrar num container (`exec`), copiar arquivos, abrir portas ou criar recursos.
-- Cada tentativa do Cluster Doctor fica registrada em `~/.workstuff/doctor-audit.log`.
+- Cada tentativa do Cluster Doctor fica registrada em `~/.workstuff/doctor-audit.log`. Cada linha leva a impressão digital da anterior: se alguém apagar ou editar uma linha, o item **Trilhas de auditoria** da tela [Máquina](/maquina) avisa.
 
 ## Bom saber
 

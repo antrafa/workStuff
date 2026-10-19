@@ -68,6 +68,7 @@ O painel não sabe quais repositórios privados, endereços internos ou versões
 
 ## Bom saber
 
+- No grupo **workStuff**, **Trilhas de auditoria** confere os registros do Cluster Doctor e dos runbooks: um aviso ali quer dizer que alguém apagou ou editou uma linha depois de gravada.
 - A verificação só lê. Nada é instalado sem você clicar em **Executar** e confirmar.
 - O botão **Executar** existe só para o que instala na sua pasta pessoal sem senha de administrador: SDKMAN, NVM (o instalador de versões do Node), versões de Java, Maven e Node, e as dependências do próprio painel (`npm install`). No Windows, só o `npm install` roda pelo painel.
 - O painel não mostra o conteúdo do `settings.xml` nem do `.npmrc`, porque esses arquivos costumam guardar senhas. Ele só confere se o texto cadastrado está lá.
